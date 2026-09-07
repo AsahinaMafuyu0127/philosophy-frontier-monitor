@@ -1,0 +1,79 @@
+schema_version: "0.5"
+
+# This example is safe to commit. Copy it to config/watchlist.yaml for a real
+# private profile; that filename is ignored by Git.
+timezone: "Asia/Shanghai"
+report_weekday: "monday"
+
+# Record the first-dialogue choices only in the private watchlist.yaml. Account
+# access is optional and never includes passwords, cookies, or private pages.
+onboarding:
+  completed_at: "2026-09-05T12:30:00+08:00"
+  philpapers_account:
+    # allowed values: declined, deferred, authorized_public_only
+    decision: "deferred"
+    decision_recorded_at: "2026-09-05T12:30:00+08:00"
+    public_profile_url: null
+    authorized_scopes: []
+
+schedule:
+  local_time: "08:00"
+  catch_up_missed_windows: true
+  defer_for_explicit_high_priority_work: true
+  failure_notification: "codex"
+
+interest:
+  profile_id: "pfm:interest:example"
+  version: 1
+  # Record when this confirmed version became active. Catch-up uses this to
+  # avoid applying a new profile retroactively to an already-due missed week.
+  effective_from: "2026-09-05T12:30:00+08:00"
+  original_text: "虚构示例：一位研究者关注《泰阿泰德》中知识与信念的关系。"
+  inference:
+    # adaptive proposes broader relations when the description is under-specified;
+    # proposals remain inactive until the user confirms them.
+    mode: "adaptive"
+  # This is the user-reviewed result of natural-language mapping. Weekly runs
+  # use these stable IDs and never silently reinterpret original_text.
+  confirmed_categories:
+    - category_id: "74924"
+      category_name: "Plato: Theaetetus"
+      include_descendants: false
+    - category_id: "74844"
+      category_name: "Plato: Knowledge and Belief"
+      include_descendants: false
+  proposed_categories: []
+  excluded_category_ids: []
+
+taxonomy:
+  # The bundled file is only a development fixture. A live weekly run must use
+  # a complete, independently fetched PhilPapers taxonomy snapshot.
+  path: "tests/fixtures/philpapers_categories_small.json"
+  allow_fixture_for_dry_run: true
+
+sources:
+  philpapers_category_pages:
+    - category_id: "74924"
+      category_name: "Plato: Theaetetus"
+      url: "https://philpapers.org/browse/plato-theaetetus"
+    - category_id: "74844"
+      category_name: "Plato: Knowledge and Belief"
+      url: "https://philpapers.org/browse/plato-knowledge-and-belief"
+  crossref:
+    # Optional. Crossref recommends a contact address for its polite pool.
+    # Put a real address only in the private watchlist.yaml, never in Git.
+    mailto: null
+  openalex:
+    mailto: null
+
+retry:
+  max_unresolved_attempts: 8
+  unresolved_retry_days: 7
+
+storage:
+  state_database: "var/state.sqlite3"
+  report_directory: "reports"
+
+privacy:
+  retain_full_text: false
+  log_original_research_text: false

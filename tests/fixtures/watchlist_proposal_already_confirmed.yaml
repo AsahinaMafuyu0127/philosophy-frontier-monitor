@@ -1,0 +1,47 @@
+schema_version: "0.3"
+timezone: "Asia/Shanghai"
+report_weekday: "monday"
+
+interest:
+  profile_id: "pfm:interest:test"
+  version: 3
+  original_text: "我研究《泰阿泰德》中的知识问题。"
+  confirmed_categories:
+    - category_id: "74924"
+      category_name: "Plato: Theaetetus"
+      include_descendants: false
+  proposed_categories:
+    - category_id: "74924"
+      category_name: "Plato: Theaetetus"
+      relation: "primary_text"
+      rationale: "Already explicit."
+      evidence_sources: ["user_text"]
+      breadth_note: "Narrow."
+      status: "pending"
+  excluded_category_ids: []
+
+taxonomy:
+  path: "philpapers_categories_small.json"
+  allow_fixture_for_dry_run: true
+
+sources:
+  philpapers_category_pages:
+    - category_id: "74924"
+      category_name: "Plato: Theaetetus"
+      url: "https://philpapers.org/browse/plato-theaetetus"
+  crossref:
+    mailto: null
+  openalex:
+    mailto: null
+
+retry:
+  max_unresolved_attempts: 4
+  unresolved_retry_days: 7
+
+storage:
+  state_database: "state.sqlite3"
+  report_directory: "reports"
+
+privacy:
+  retain_full_text: false
+  log_original_research_text: false

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"
+         xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/"
+         xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <responseDate>2026-09-05T00:00:01Z</responseDate>
+  <request verb="ListRecords">https://philarchive.org/oai.pl</request>
+  <ListRecords>
+    <record>
+      <header>
+        <identifier>oai:philarchive:EXAMPLE-2</identifier>
+        <datestamp>2026-09-05</datestamp>
+      </header>
+      <metadata>
+        <oai_dc:dc>
+          <dc:title>A Second Record</dc:title>
+          <dc:subject>Philosophy</dc:subject>
+        </oai_dc:dc>
+      </metadata>
+    </record>
+    <resumptionToken />
+  </ListRecords>
+</OAI-PMH>

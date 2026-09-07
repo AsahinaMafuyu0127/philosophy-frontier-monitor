@@ -1,0 +1,76 @@
+{
+  "schema_version": "0.1",
+  "snapshot_id": "philpapers-fixture:2026-09-05",
+  "source": "philpapers",
+  "retrieved_at": "2026-09-05T00:00:00Z",
+  "source_url": "https://philpapers.org/browse/all",
+  "complete": false,
+  "fixture": true,
+  "parser_version": "0.1.0",
+  "notes": "Names, public page URLs, and numeric cId values were checked against live PhilPapers category pages on 2026-09-05. This is still an incomplete offline fixture and cannot represent the full taxonomy.",
+  "categories": [
+    {
+      "category_id": "52",
+      "category_name": "Ancient Greek and Roman Philosophy",
+      "parent_ids": [],
+      "primary_parent_id": null,
+      "source_url": "https://philpapers.org/browse/ancient-greek-and-roman-philosophy"
+    },
+    {
+      "category_id": "11",
+      "category_name": "Epistemology",
+      "parent_ids": [],
+      "primary_parent_id": null,
+      "source_url": "https://philpapers.org/browse/epistemology"
+    },
+    {
+      "category_id": "6266",
+      "category_name": "Plato",
+      "parent_ids": ["52"],
+      "primary_parent_id": "52",
+      "source_url": "https://philpapers.org/browse/plato"
+    },
+    {
+      "category_id": "74810",
+      "category_name": "Plato: Epistemology",
+      "parent_ids": ["6266", "11"],
+      "primary_parent_id": "6266",
+      "source_url": "https://philpapers.org/browse/plato-epistemology"
+    },
+    {
+      "category_id": "74844",
+      "category_name": "Plato: Knowledge and Belief",
+      "parent_ids": ["74810"],
+      "primary_parent_id": "74810",
+      "source_url": "https://philpapers.org/browse/plato-knowledge-and-belief"
+    },
+    {
+      "category_id": "74818",
+      "category_name": "Plato's Works",
+      "parent_ids": ["6266"],
+      "primary_parent_id": "6266",
+      "source_url": "https://philpapers.org/browse/platos-works"
+    },
+    {
+      "category_id": "74924",
+      "category_name": "Plato: Theaetetus",
+      "parent_ids": ["74818"],
+      "primary_parent_id": "74818",
+      "source_url": "https://philpapers.org/browse/plato-theaetetus"
+    },
+    {
+      "category_id": "74915",
+      "category_name": "Plato: Parmenides",
+      "parent_ids": ["74818"],
+      "primary_parent_id": "74818",
+      "source_url": "https://philpapers.org/browse/plato-parmenides"
+    },
+    {
+      "category_id": "60928",
+      "category_name": "Parmenides",
+      "parent_ids": ["52"],
+      "primary_parent_id": "52",
+      "source_url": "https://philpapers.org/browse/parmenides"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>PhilPapers test category</title>
+    <item>
+      <title>A New Interpretation of the Theaetetus</title>
+      <link>https://philpapers.org/rec/EXAMPLE</link>
+      <guid>https://philpapers.org/rec/EXAMPLE</guid>
+      <description>Fixture description.</description>
+      <pubDate>Sat, 05 Sep 2026 00:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

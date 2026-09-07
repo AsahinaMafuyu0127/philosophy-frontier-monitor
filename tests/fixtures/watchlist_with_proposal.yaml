@@ -1,0 +1,56 @@
+schema_version: "0.3"
+timezone: "Asia/Shanghai"
+report_weekday: "sunday"
+
+schedule:
+  local_time: "20:30"
+  catch_up_after_login: true
+  defer_for_explicit_high_priority_work: true
+  failure_notification: "codex"
+
+interest:
+  profile_id: "pfm:interest:test"
+  version: 3
+  effective_from: "2026-09-05T12:30:00+08:00"
+  original_text: "我研究《泰阿泰德》中的知识问题。"
+  inference:
+    mode: "exploratory"
+  confirmed_categories:
+    - category_id: "74924"
+      category_name: "Plato: Theaetetus"
+      include_descendants: false
+  proposed_categories:
+    - category_id: "74844"
+      category_name: "Plato: Knowledge and Belief"
+      relation: "conceptual_adjacency"
+      rationale: "A related distinction inside Plato's epistemology."
+      evidence_sources: ["user_text_inference"]
+      breadth_note: "Adds Plato scholarship about knowledge and belief."
+      status: "pending"
+  excluded_category_ids: []
+
+taxonomy:
+  path: "philpapers_categories_small.json"
+  allow_fixture_for_dry_run: true
+
+sources:
+  philpapers_category_pages:
+    - category_id: "74924"
+      category_name: "Plato: Theaetetus"
+      url: "https://philpapers.org/browse/plato-theaetetus"
+  crossref:
+    mailto: null
+  openalex:
+    mailto: null
+
+retry:
+  max_unresolved_attempts: 4
+  unresolved_retry_days: 7
+
+storage:
+  state_database: "state.sqlite3"
+  report_directory: "reports"
+
+privacy:
+  retain_full_text: false
+  log_original_research_text: false

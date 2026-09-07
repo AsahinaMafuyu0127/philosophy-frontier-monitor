@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "philosophy-frontier-monitor"
+version = "0.1.0"
+description = "Category-based monitoring for newly published philosophy papers"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+authors = [
+  { name = "Asahina Mafuyu", email = "junxuanxie@stu.xjtu.edu.cn" },
+]
+dependencies = [
+  "httpx>=0.28,<0.29",
+  "PyYAML>=6.0.2,<7",
+  "tzdata>=2025.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor"
+Repository = "https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor"
+Issues = "https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor/issues"
+
+[project.scripts]
+pfm = "philosophy_frontier_monitor.cli:main"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4,<9",
+  "pytest-cov>=6.2,<7",
+  "ruff>=0.12,<0.14",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/philosophy_frontier_monitor"]
+
+[tool.pytest.ini_options]
+addopts = "-ra -p no:cacheprovider"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["RUF001"] # Chinese user-facing strings intentionally use Chinese punctuation.
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

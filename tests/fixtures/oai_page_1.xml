@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"
+         xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/"
+         xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <responseDate>2026-09-05T00:00:00Z</responseDate>
+  <request verb="ListRecords">https://philarchive.org/oai.pl</request>
+  <ListRecords>
+    <record>
+      <header>
+        <identifier>oai:philarchive:EXAMPLE-1</identifier>
+        <datestamp>2026-09-04</datestamp>
+      </header>
+      <metadata>
+        <oai_dc:dc>
+          <dc:title>An Old Paper Newly Updated</dc:title>
+          <dc:date>2018</dc:date>
+          <dc:subject>Philosophy</dc:subject>
+        </oai_dc:dc>
+      </metadata>
+    </record>
+    <resumptionToken>token-page-2</resumptionToken>
+  </ListRecords>
+</OAI-PMH>
