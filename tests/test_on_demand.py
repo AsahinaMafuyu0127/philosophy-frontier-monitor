@@ -387,6 +387,35 @@ def test_on_demand_uses_feed_dates_only_as_candidate_gate_and_has_no_baseline():
     assert "再次出现在周报中属于正常现象" in result.report_markdown
 
 
+def test_on_demand_filters_explicit_reviews_before_external_batches_and_fallbacks():
+    calls: list[str] = []
+    review = FeedEntry(
+        source_id="https://philpapers.org/rec/REVIEW",
+        title='Reviewer, Ada: Review of "A Book about Plato"',
+        link="https://philpapers.org/rec/REVIEW",
+        description="2026 https://doi.org/10.1234/review",
+        published_text=None,
+    )
+    result = run_on_demand(
+        CONFIG,
+        now=REQUEST_TIME,
+        feed_loader=loader_with(
+            review,
+            entry("ARTICLE", published_text=None, description="2026"),
+        ),
+        resolver=resolver_for({"ARTICLE": date(2026, 9, 8)}, calls),
+        batch_title_resolver=no_title_batch,
+        allow_development_fixture=True,
+    )
+
+    assert calls == ["ARTICLE"]
+    assert result.stats["explicit_unsupported_candidates"] == 1
+    assert result.stats["doi_hints"] == 0
+    assert result.stats["title_batch_queries"] == 1
+    assert result.stats["matched"] == 1
+    assert "A Book about Plato" not in result.report_markdown
+
+
 def test_on_demand_rechecks_old_reclassification_and_does_not_emit_it():
     calls: list[str] = []
     result = run_on_demand(
@@ -511,6 +540,42 @@ def test_on_demand_resolves_description_doi_hints_in_one_batch():
     assert result.stats["fallback_candidates"] == 0
     assert result.stats["matched"] == 1
     assert "Paper BATCH" in result.report_markdown
+
+
+def test_conflicting_doi_hints_do_not_expand_the_doi_batch_budget():
+    batch_calls: list[tuple[str, ...]] = []
+    fallback_calls: list[str] = []
+
+    def doi_batch(dois, _config, _attempted_at):
+        batch_calls.append(dois)
+        return {}
+
+    result = run_on_demand(
+        CONFIG,
+        now=REQUEST_TIME,
+        feed_loader=loader_with(
+            entry(
+                "DOI-CONFLICT",
+                published_text=None,
+                description=("_Test Journal_ 2 (1):1-10. 2026 https://doi.org/10.1234/one"),
+            ),
+            entry(
+                "DOI-CONFLICT",
+                published_text=None,
+                description=("_Test Journal_ 2 (1):1-10. 2026 https://doi.org/10.1234/two"),
+            ),
+        ),
+        resolver=resolver_for({"DOI-CONFLICT": date(2026, 9, 8)}, fallback_calls),
+        batch_doi_resolver=doi_batch,
+        batch_title_resolver=no_title_batch,
+        allow_development_fixture=True,
+    )
+
+    assert batch_calls == []
+    assert fallback_calls == ["DOI-CONFLICT"]
+    assert result.stats["doi_hints"] == 0
+    assert result.stats["candidate_records_with_conflicting_doi_hints"] == 1
+    assert result.stats["doi_batch_request_upper_bound"] == 0
 
 
 def test_repeated_pull_uses_per_doi_batch_cache_without_suppressing_paper():
@@ -701,6 +766,105 @@ def test_on_demand_fallback_budget_prioritizes_recent_and_early_work_evidence():
     assert result.stats["fallback_deferred"] == 1
 
 
+def test_cached_fallbacks_do_not_consume_the_remote_candidate_budget(monkeypatch):
+    remote_titles: list[str] = []
+
+    def crossref_lookup(title, **_kwargs):
+        remote_titles.append(title)
+        return CrossrefWork(
+            doi="10.1234/remote",
+            title=title,
+            authors=("Ada Scholar",),
+            container_title="Journal of Remote Tests",
+            work_type="journal-article",
+            stable_url="https://doi.org/10.1234/remote",
+            publication_date=DateValue(date(2026, 9, 8), DatePrecision.DAY, "crossref"),
+            publication_event="recently_published_online",
+            raw={},
+        )
+
+    monkeypatch.setattr(pipeline, "find_crossref_work", crossref_lookup)
+    with BibliographicCache(":memory:") as bibliography_cache:
+        bibliography_cache.store_crossref(
+            "Paper ONE",
+            "Scholar, Ada",
+            CrossrefWork(
+                doi="10.1234/cached",
+                title="Paper ONE",
+                authors=("Ada Scholar",),
+                container_title="Journal of Cache Tests",
+                work_type="journal-article",
+                stable_url="https://doi.org/10.1234/cached",
+                publication_date=DateValue(date(2026, 9, 8), DatePrecision.DAY, "crossref"),
+                publication_event="recently_published_online",
+                raw={},
+            ),
+            now=REQUEST_TIME,
+        )
+        result = run_on_demand(
+            CONFIG,
+            now=REQUEST_TIME,
+            max_fallback_candidates=1,
+            feed_loader=loader_with(
+                entry("ONE", published_text=None),
+                entry("TWO", published_text=None),
+            ),
+            batch_title_resolver=no_title_batch,
+            bibliography_cache=bibliography_cache,
+            allow_development_fixture=True,
+        )
+
+    assert remote_titles == ["Paper TWO"]
+    assert result.stats["fallback_cache_ready"] == 1
+    assert result.stats["fallback_processed"] == 2
+    assert result.stats["fallback_queried"] == 1
+    assert result.stats["fallback_deferred"] == 0
+    assert result.stats["matched"] == 2
+    assert result.stats["openalex_logical_request_upper_bound"] == 4
+    assert result.stats["crossref_logical_request_upper_bound"] == 1
+
+
+def test_expired_negative_cache_rotates_cold_start_to_untried_candidates(monkeypatch):
+    crossref_titles: list[str] = []
+    openalex_titles: list[str] = []
+
+    def no_crossref(title, **_kwargs):
+        crossref_titles.append(title)
+        return None
+
+    def no_openalex(title, **_kwargs):
+        openalex_titles.append(title)
+        return None
+
+    monkeypatch.setattr(pipeline, "find_crossref_work", no_crossref)
+    monkeypatch.setattr(pipeline, "find_openalex_work", no_openalex)
+    with BibliographicCache(":memory:") as bibliography_cache:
+        kwargs = {
+            "max_fallback_candidates": 1,
+            "feed_loader": loader_with(
+                entry("ONE", published_text=None),
+                entry("TWO", published_text=None),
+                entry("THREE", published_text=None),
+            ),
+            "batch_title_resolver": no_title_batch,
+            "bibliography_cache": bibliography_cache,
+            "allow_development_fixture": True,
+        }
+        first = run_on_demand(CONFIG, now=REQUEST_TIME, **kwargs)
+        second = run_on_demand(
+            CONFIG,
+            now=REQUEST_TIME.replace(minute=REQUEST_TIME.minute + 16),
+            **kwargs,
+        )
+
+    assert crossref_titles == ["Paper ONE", "Paper THREE"]
+    assert openalex_titles == ["Paper ONE", "Paper THREE"]
+    assert first.stats["fallback_queried"] == 1
+    assert second.stats["fallback_queried"] == 1
+    assert first.stats["fallback_deferred"] == 2
+    assert second.stats["fallback_deferred"] == 2
+
+
 def test_on_demand_resolves_candidates_with_batched_title_and_author_match():
     title_calls: list[tuple[str, ...]] = []
 
@@ -790,7 +954,7 @@ def test_repeated_pull_uses_positive_per_title_batch_cache():
     assert first.stats["matched"] == second.stats["matched"] == 1
 
 
-def test_title_batch_transport_failure_and_empty_result_are_not_cached():
+def test_title_batch_failure_is_not_cached_but_successful_attempt_is_short_lived():
     calls: list[tuple[str, ...]] = []
     fallback_calls: list[str] = []
 
@@ -813,11 +977,7 @@ def test_title_batch_transport_failure_and_empty_result_are_not_cached():
         run_on_demand(CONFIG, **kwargs)
         run_on_demand(CONFIG, **kwargs)
 
-    assert calls == [
-        ("Paper TITLE-FAIL",),
-        ("Paper TITLE-FAIL",),
-        ("Paper TITLE-FAIL",),
-    ]
+    assert calls == [("Paper TITLE-FAIL",), ("Paper TITLE-FAIL",)]
     assert fallback_calls == ["TITLE-FAIL", "TITLE-FAIL", "TITLE-FAIL"]
     assert first.stats["openalex_batch_failures"] == 1
 

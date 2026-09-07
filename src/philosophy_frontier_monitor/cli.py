@@ -607,7 +607,10 @@ def _pull_now(args: argparse.Namespace) -> int:
                 None if args.no_bibliography_cache else str(cache_path.resolve())
             ),
             "bibliography_cache_is_weekly_state": False,
-            "bibliography_cache_updated": result.stats["bibliography_cache_writes"] > 0,
+            "bibliography_cache_updated": (
+                result.stats["bibliography_cache_writes"] > 0
+                or result.stats["bibliography_cache_scheduling_writes"] > 0
+            ),
         }
     )
     return 0
@@ -882,8 +885,9 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=50,
         help=(
-            "maximum individual old-work lookups after DOI/title batches; excess weak-evidence "
-            "candidates are reported as deferred instead of failing the whole pull"
+            "maximum candidates that may require remote individual old-work lookups after "
+            "DOI/title batches; fresh-cache candidates do not consume slots, and excess "
+            "candidates are reported as deferred"
         ),
     )
     pull_now.add_argument(

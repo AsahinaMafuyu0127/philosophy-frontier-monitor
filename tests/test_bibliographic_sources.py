@@ -348,6 +348,100 @@ def test_openalex_searches_multiple_titles_with_one_or_filter_request():
     }
 
 
+def test_openalex_title_overflow_requeries_only_titles_missing_from_first_page():
+    requests = []
+
+    def item(identifier: str, title: str):
+        return {
+            "id": f"https://openalex.org/{identifier}",
+            "doi": None,
+            "title": title,
+            "publication_date": "2026-09-04",
+            "authorships": [],
+            "primary_location": {"landing_page_url": f"https://example.test/{identifier}"},
+        }
+
+    def handler(request):
+        requests.append(request)
+        query = request.url.params["filter"]
+        if query == "title.search.exact:first paper|second paper":
+            payload = {"meta": {"count": 101}, "results": [item("W1", "First Paper")]}
+        elif query == "title.search.exact:second paper":
+            payload = {"meta": {"count": 1}, "results": [item("W2", "Second Paper")]}
+        else:
+            raise AssertionError(f"unexpected query: {query}")
+        return httpx.Response(200, json=payload, request=request)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        result = find_openalex_by_titles(("First Paper", "Second Paper"), client=client)
+
+    assert [request.url.params["filter"] for request in requests] == [
+        "title.search.exact:first paper|second paper",
+        "title.search.exact:second paper",
+    ]
+    assert all(request.url.params["per_page"] == "100" for request in requests)
+    assert {work.openalex_id for work in result} == {
+        "https://openalex.org/W1",
+        "https://openalex.org/W2",
+    }
+
+
+def test_openalex_title_overflow_does_not_split_when_every_title_is_represented():
+    payload = {
+        "meta": {"count": 101},
+        "results": [
+            {
+                "id": "https://openalex.org/W1",
+                "doi": None,
+                "title": "First Paper",
+                "publication_date": "2026-09-03",
+                "authorships": [],
+                "primary_location": {},
+            },
+            {
+                "id": "https://openalex.org/W2",
+                "doi": None,
+                "title": "Second Paper",
+                "publication_date": "2026-09-04",
+                "authorships": [],
+                "primary_location": {},
+            },
+        ],
+    }
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json=payload, request=request)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        result = find_openalex_by_titles(("First Paper", "Second Paper"), client=client)
+
+    assert len(requests) == 1
+    assert len(result) == 2
+
+
+def test_openalex_title_overflow_split_depth_is_bounded():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={"meta": {"count": 101}, "results": []},
+            request=request,
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        result = find_openalex_by_titles(
+            ("First Paper", "Second Paper", "Third Paper", "Fourth Paper"),
+            client=client,
+        )
+
+    assert result == ()
+    assert len(requests) == 3
+
+
 def test_openalex_rate_limit_error_does_not_reveal_api_key(monkeypatch):
     def handler(request):
         return httpx.Response(429, json={"error": "rate limit"}, request=request)

@@ -550,6 +550,91 @@ def test_missing_external_record_uses_philpapers_arrival_without_inventing_publi
     assert result.work.availability_date.source == "philpapers-rss-current-alert-observation"
 
 
+@pytest.mark.parametrize(
+    "title",
+    [
+        'Reviewer, Ada: Review of "A Book about Plato"',
+        "Reviewer, Ada: Book Review: Plato and Knowledge",
+        "Kritiker, Ada: Rezension zu Platons Erkenntnislehre",
+        "Critique, Ada: Compte rendu de Platon et la connaissance",
+        "Crítica, Ada: Reseña de Platón y el conocimiento",
+        "Critica, Ada: Recensione di Platone e la conoscenza",
+        "Crítica, Ada: Resenha de Platão e o conhecimento",
+        "评论者, 甲: 书评：《柏拉图知识论》",
+    ],
+)
+def test_explicit_review_labels_are_resolved_locally_as_unsupported(monkeypatch, title):
+    review_entry = FeedEntry(
+        source_id="https://philpapers.org/rec/REVIEW",
+        title=title,
+        link="https://philpapers.org/rec/REVIEW",
+        description="2026",
+        published_text=None,
+    )
+    candidate = merge_feed_snapshots((snapshot((review_entry,), RUN_TIME),))[0]
+    monkeypatch.setattr(
+        pipeline,
+        "find_crossref_work",
+        lambda *args, **kwargs: pytest.fail("explicit review must not query Crossref"),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "find_openalex_work",
+        lambda *args, **kwargs: pytest.fail("explicit review must not query OpenAlex"),
+    )
+    taxonomy = pipeline.load_taxonomy(CONFIG.taxonomy_path)
+
+    result = resolve_bibliography(
+        candidate,
+        taxonomy,
+        CONFIG,
+        WINDOW_START,
+        WINDOW_END,
+        RUN_TIME,
+    )
+
+    assert result.work is not None
+    assert result.work.work_type == "review"
+    assert result.work.freshness_status is FreshnessStatus.UNCERTAIN
+    assert result.work.freshness_event == "explicit_unsupported_bibliographic_form"
+
+
+def test_reviewing_as_an_article_topic_is_not_treated_as_a_review(monkeypatch):
+    article_entry = FeedEntry(
+        source_id="https://philpapers.org/rec/ARTICLE",
+        title="Author, Ada: Reviewing Plato's Account of Knowledge",
+        link="https://philpapers.org/rec/ARTICLE",
+        description="2026",
+        published_text=None,
+    )
+    candidate = merge_feed_snapshots((snapshot((article_entry,), RUN_TIME),))[0]
+    calls: list[str] = []
+    monkeypatch.setattr(
+        pipeline,
+        "find_crossref_work",
+        lambda *args, **kwargs: calls.append("crossref") or None,
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "find_openalex_work",
+        lambda *args, **kwargs: calls.append("openalex") or None,
+    )
+    taxonomy = pipeline.load_taxonomy(CONFIG.taxonomy_path)
+
+    result = resolve_bibliography(
+        candidate,
+        taxonomy,
+        CONFIG,
+        WINDOW_START,
+        WINDOW_END,
+        RUN_TIME,
+    )
+
+    assert calls == ["crossref", "openalex"]
+    assert result.work is not None
+    assert result.work.work_type == "article"
+
+
 def test_external_service_failure_does_not_masquerade_as_database_absence(monkeypatch):
     candidate = merge_feed_snapshots((snapshot((NEW_ENTRY,), RUN_TIME),))[0]
 
@@ -650,7 +735,7 @@ def test_weekly_pipeline_resolves_only_records_new_since_baseline(monkeypatch):
     assert run_context["taxonomy_snapshot_id"] == "philpapers-fixture:2026-09-05"
     assert run_context["interest_profile_id"] == "pfm:interest:test"
     assert run_context["interest_profile_version"] == 3
-    assert run_context["pipeline_version"] == "0.2.0"
+    assert run_context["pipeline_version"] == "0.2.2"
     assert run_context["matching_rule_version"] == "set_intersection_v1"
 
 

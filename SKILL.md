@@ -118,7 +118,14 @@ Do not require the user to know PhilPapers category names in advance.
    taxonomy and configured feeds, but does not require a weekly baseline or
    state database. Read every configured feed, use feed timestamps or an
    in-memory bibliography-year and early-work-status hints to bound and
-   prioritize candidates. Treat Crossref and OpenAlex as optional bibliographic
+   prioritize candidates. Before any OpenAlex/Crossref batch or fallback,
+   recognize only explicit bibliographic-form labels for unsupported reviews
+   (`Review of`, `Book Review`, `Rezension`, `Compte rendu`, `Reseña`,
+   `Recensione`, `Resenha`, or `书评：`) at the start of the actual title. Mark
+   them locally as `review` and let the shared supported-work-type gate reject
+   them without a retry; do not infer unsupported type from topic, venue,
+   writing style, author reputation, or a merely critical argument. Treat
+   Crossref and OpenAlex as optional bibliographic
    evidence and old-work detectors, not mandatory gatekeepers. If neither has
    indexed a candidate, a new PhilPapers alert entry may still be emitted as
    `confirmed_source_arrival` after the old-work check completes; preserve its
@@ -134,10 +141,17 @@ Do not require the user to know PhilPapers category names in advance.
    title or surname equality. A cross-language title pair without a shared
    identifier remains `review_required`; Codex may reason about its meaning and
    ask the user to confirm an alias, but deterministic code must not silently
-   merge it. When the fallback count exceeds the configured maximum, prioritize
-   candidates with recent dates or explicit early-work status and report the
-   remainder as deferred instead of failing the complete pull or pretending it
-   was checked. Anonymous OpenAlex access is suitable for casual use; if repeated
+   merge it. When the fallback count exceeds the configured maximum, treat that
+   maximum as a budget for candidates that really require remote individual
+   lookups: resolve every fresh-cache hit without spending a slot, then
+   prioritize never-attempted candidates before rotating older completed
+   attempts. Keep only a hash of the PhilPapers record ID and the last completed
+   attempt time for 31 days; transport failures and circuit-skipped candidates
+   must not be marked completed. Within each initial OpenAlex title batch,
+   inspect the first page before re-querying and retry only titles not represented
+   there. Permit only one split level, so one initial title batch produces at
+   most three logical requests. Report the remainder as deferred instead of
+   pretending it was checked. Anonymous OpenAlex access is suitable for casual use; if repeated
    requests exhaust its daily budget, accept `OPENALEX_API_KEY` from the local
    process environment without printing or persisting it.
    Never read or write weekly notification history, retry state, run history,
@@ -166,6 +180,11 @@ Do not require the user to know PhilPapers category names in advance.
    and circuit-skipped work. If a broad pull has an explicit request estimate,
    compare it with a server-reported OpenAlex remainder and warn when the
    remainder is insufficient or unavailable rather than promising completion.
+   Report both conservative logical-request upper bounds and post-run network
+   telemetry; do not describe either as an exact bill because retries and
+   provider pricing remain external. With the default 1000-candidate and
+   50-fallback limits, the current DOI/title/fallback plan permits at most 220
+   OpenAlex and 50 Crossref logical requests before bounded retry attempts.
    By default, use the separate private bibliographic cache for per-DOI
    OpenAlex batch results, positive per-title OpenAlex batch candidates, and
    individual Crossref/OpenAlex fallbacks. DOI and individual positive metadata
@@ -176,7 +195,15 @@ Do not require the user to know PhilPapers category names in advance.
    semantic-review outcomes. Every cache hit must still pass the current
    freshness, identity, and category gates. The cache must not read, write, or
    suppress weekly notifications; honor `--no-bibliography-cache` when the user
-   declines local caching.
+   declines local caching. The separate hashed fallback-attempt log only orders
+   which deferred candidate receives the next remote slot; it is not a negative
+   bibliographic result and must never suppress a candidate or a notification.
+   After any successful title-batch call, a separate hashed per-title attempt
+   marker may live for one hour. It says only "this title was just included in
+   a batch"—never "OpenAlex has no such work". A repeated pull skips the same
+   batch request and sends the still-unresolved candidate through the bounded,
+   rotating individual queue instead. Do not write this marker after a failed
+   or circuit-skipped batch.
    Full inline Markdown can itself consume substantial model context. When the
    measured candidate count, a previous report, or a deliberately raised safety
    limit indicates a long result, explain `--report-delivery file` before the

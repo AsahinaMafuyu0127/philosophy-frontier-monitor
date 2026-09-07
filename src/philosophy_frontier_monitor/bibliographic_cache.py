@@ -22,6 +22,8 @@ from .sources.openalex import OpenAlexWork
 POSITIVE_CACHE_TTL = timedelta(hours=24)
 NEGATIVE_CACHE_TTL = timedelta(minutes=15)
 TITLE_BATCH_POSITIVE_CACHE_TTL = timedelta(hours=1)
+TITLE_BATCH_ATTEMPT_CACHE_TTL = timedelta(hours=1)
+FALLBACK_ATTEMPT_RETENTION = timedelta(days=31)
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +38,7 @@ class BibliographicCacheStats:
     misses: int
     writes: int
     expired: int
+    scheduling_writes: int = 0
 
 
 class BibliographicCache:
@@ -63,11 +66,20 @@ class BibliographicCache:
             )
             """
         )
+        self.connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS fallback_attempt_log (
+                source_id_hash TEXT PRIMARY KEY,
+                attempted_at TEXT NOT NULL
+            )
+            """
+        )
         self.connection.commit()
         self._hits = 0
         self._misses = 0
         self._writes = 0
         self._expired = 0
+        self._scheduling_writes = 0
 
     def __enter__(self) -> BibliographicCache:
         return self
@@ -85,6 +97,7 @@ class BibliographicCache:
             misses=self._misses,
             writes=self._writes,
             expired=self._expired,
+            scheduling_writes=self._scheduling_writes,
         )
 
     def lookup_crossref(
@@ -234,6 +247,196 @@ class BibliographicCache:
             now=now,
             positive_ttl=TITLE_BATCH_POSITIVE_CACHE_TTL,
         )
+
+    def was_openalex_title_batch_attempted(
+        self,
+        title: str,
+        *,
+        now: datetime,
+    ) -> bool:
+        """Return whether this title recently participated in a successful batch call.
+
+        The marker is scheduling metadata, not evidence that OpenAlex lacks the
+        work. It therefore does not return or cache a negative bibliographic result.
+        """
+
+        return self._peek_key(
+            "openalex-title-batch-attempt",
+            _query_hash(title, None),
+            now=now,
+        ).hit
+
+    def record_openalex_title_batch_attempts(
+        self,
+        titles: tuple[str, ...],
+        *,
+        now: datetime,
+    ) -> None:
+        """Record a successful batch attempt for one hour using hashed title keys."""
+
+        _require_aware(now)
+        normalized_titles = tuple(
+            sorted({normalize_title(title) for title in titles if normalize_title(title)})
+        )
+        if not normalized_titles:
+            return
+        cached_at = now.astimezone(UTC)
+        expires_at = cached_at + TITLE_BATCH_ATTEMPT_CACHE_TTL
+        payload_json = json.dumps({"attempted": True}, sort_keys=True)
+        self.connection.executemany(
+            """
+            INSERT INTO exact_lookup_cache (
+                source, query_hash, status, payload_json, cached_at, expires_at
+            ) VALUES (?, ?, 'found', ?, ?, ?)
+            ON CONFLICT(source, query_hash) DO UPDATE SET
+                status = excluded.status,
+                payload_json = excluded.payload_json,
+                cached_at = excluded.cached_at,
+                expires_at = excluded.expires_at
+            """,
+            (
+                (
+                    "openalex-title-batch-attempt",
+                    _query_hash(title, None),
+                    payload_json,
+                    cached_at.isoformat(),
+                    expires_at.isoformat(),
+                )
+                for title in normalized_titles
+            ),
+        )
+        self.connection.execute(
+            """
+            DELETE FROM exact_lookup_cache
+            WHERE source = 'openalex-title-batch-attempt' AND expires_at <= ?
+            """,
+            (cached_at.isoformat(),),
+        )
+        self.connection.commit()
+        self._scheduling_writes += len(normalized_titles)
+
+    def can_resolve_fallback_without_remote(
+        self,
+        title: str,
+        first_author: str | None,
+        *,
+        now: datetime,
+    ) -> bool:
+        """Return whether the individual fallback is complete in fresh cache entries.
+
+        This planning lookup deliberately does not change cache hit/miss counters.
+        The normal resolver performs and accounts for the actual cache reads later.
+        """
+
+        crossref = self._peek_key(
+            "crossref",
+            _query_hash(title, first_author),
+            now=now,
+        )
+        if not crossref.hit:
+            return False
+        crossref_work = None
+        if crossref.value is not None:
+            if not isinstance(crossref.value, dict):
+                raise ValueError("cached Crossref payload is not an object")
+            crossref_work = _crossref_from_payload(crossref.value)
+        needs_openalex = (
+            crossref_work is None
+            or crossref_work.publication_date is None
+            or crossref_work.publication_event is None
+            or crossref_work.publication_date.precision
+            not in {DatePrecision.DAY, DatePrecision.SECOND}
+        )
+        if not needs_openalex:
+            return True
+        openalex = self._peek_key(
+            "openalex",
+            _query_hash(title, first_author),
+            now=now,
+        )
+        return openalex.hit
+
+    def fallback_last_attempt(
+        self,
+        source_id: str,
+        *,
+        now: datetime,
+    ) -> datetime | None:
+        """Read private rotation metadata without exposing the source identifier."""
+
+        _require_aware(now)
+        row = self.connection.execute(
+            """
+            SELECT attempted_at
+            FROM fallback_attempt_log
+            WHERE source_id_hash = ?
+            """,
+            (_identifier_hash("philpapers-record", source_id),),
+        ).fetchone()
+        if row is None:
+            return None
+        attempted_at = datetime.fromisoformat(row["attempted_at"])
+        if attempted_at < now.astimezone(UTC) - FALLBACK_ATTEMPT_RETENTION:
+            return None
+        return attempted_at
+
+    def record_fallback_attempts(
+        self,
+        source_ids: tuple[str, ...],
+        *,
+        now: datetime,
+    ) -> None:
+        """Remember completed remote-fallback slots so later pulls advance fairly."""
+
+        _require_aware(now)
+        if not source_ids:
+            return
+        attempted_at = now.astimezone(UTC)
+        self.connection.executemany(
+            """
+            INSERT INTO fallback_attempt_log (source_id_hash, attempted_at)
+            VALUES (?, ?)
+            ON CONFLICT(source_id_hash) DO UPDATE SET
+                attempted_at = excluded.attempted_at
+            """,
+            (
+                (
+                    _identifier_hash("philpapers-record", source_id),
+                    attempted_at.isoformat(),
+                )
+                for source_id in source_ids
+            ),
+        )
+        self.connection.execute(
+            "DELETE FROM fallback_attempt_log WHERE attempted_at < ?",
+            ((attempted_at - FALLBACK_ATTEMPT_RETENTION).isoformat(),),
+        )
+        self.connection.commit()
+        self._scheduling_writes += len(source_ids)
+
+    def _peek_key(
+        self,
+        source: str,
+        query_hash: str,
+        *,
+        now: datetime,
+    ) -> CacheLookup[Any]:
+        """Inspect a cache key for request planning without changing cache statistics."""
+
+        _require_aware(now)
+        row = self.connection.execute(
+            """
+            SELECT status, payload_json, expires_at
+            FROM exact_lookup_cache
+            WHERE source = ? AND query_hash = ?
+            """,
+            (source, query_hash),
+        ).fetchone()
+        if row is None or datetime.fromisoformat(row["expires_at"]) <= now.astimezone(UTC):
+            return CacheLookup(False, None)
+        if row["status"] == "not_found":
+            return CacheLookup(True, None)
+        return CacheLookup(True, json.loads(row["payload_json"]))
 
     def _lookup_key(
         self,

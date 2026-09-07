@@ -127,7 +127,7 @@ def _probe_philpapers(category_url: str) -> str:
 def _probe_openalex() -> str:
     params = {
         "filter": "openalex:W2741809807",
-        "per-page": "1",
+        "per_page": "1",
         "select": "id",
     }
     api_key = os.environ.get("OPENALEX_API_KEY")

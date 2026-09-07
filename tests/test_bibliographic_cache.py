@@ -135,3 +135,58 @@ def test_title_batch_cache_is_positive_only_and_expires_after_one_hour(workspace
         assert found.value is not None
         assert found.value[0].raw == {}
         assert expired.hit is False
+
+
+def test_title_batch_attempt_marker_is_hashed_and_is_not_a_negative_result(
+    workspace_tmp_path,
+):
+    with BibliographicCache(workspace_tmp_path / "bibliography-cache.sqlite3") as cache:
+        cache.record_openalex_title_batch_attempts(("A Missing Paper",), now=NOW)
+        row = cache.connection.execute(
+            """
+            SELECT query_hash, payload_json
+            FROM exact_lookup_cache
+            WHERE source = 'openalex-title-batch-attempt'
+            """
+        ).fetchone()
+
+        assert cache.was_openalex_title_batch_attempted("A Missing Paper", now=NOW)
+        assert not cache.was_openalex_title_batch_attempted(
+            "A Missing Paper",
+            now=NOW + timedelta(hours=1),
+        )
+        assert row["query_hash"] != "A Missing Paper"
+        assert "A Missing Paper" not in row["payload_json"]
+
+
+def test_fallback_planning_detects_complete_cache_without_changing_stats(
+    workspace_tmp_path,
+):
+    with BibliographicCache(workspace_tmp_path / "bibliography-cache.sqlite3") as cache:
+        cache.store_crossref("A Cached Paper", "Ada Scholar", crossref_work(), now=NOW)
+        stats_before = cache.stats
+
+        ready = cache.can_resolve_fallback_without_remote(
+            "A Cached Paper",
+            "Ada Scholar",
+            now=NOW,
+        )
+
+        assert ready is True
+        assert cache.stats == stats_before
+
+
+def test_fallback_attempt_history_is_hashed_and_expires_from_priority(
+    workspace_tmp_path,
+):
+    source_id = "https://philpapers.org/rec/PRIVATE-ID"
+    with BibliographicCache(workspace_tmp_path / "bibliography-cache.sqlite3") as cache:
+        cache.record_fallback_attempts((source_id,), now=NOW)
+        row = cache.connection.execute(
+            "SELECT source_id_hash, attempted_at FROM fallback_attempt_log"
+        ).fetchone()
+
+        assert cache.fallback_last_attempt(source_id, now=NOW) == NOW
+        assert row["source_id_hash"] != source_id
+        assert "PRIVATE-ID" not in row["source_id_hash"]
+        assert cache.fallback_last_attempt(source_id, now=NOW + timedelta(days=32)) is None

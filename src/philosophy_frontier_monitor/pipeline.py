@@ -53,8 +53,16 @@ from .report import SourceCoverage, render_on_demand_report, render_weekly_repor
 from .sources.crossref import DEFAULT_USER_AGENT as CROSSREF_USER_AGENT
 from .sources.crossref import CrossrefError, CrossrefWork
 from .sources.crossref import find_exact_work as find_crossref_work
-from .sources.openalex import DEFAULT_USER_AGENT as OPENALEX_USER_AGENT
-from .sources.openalex import OpenAlexError, OpenAlexWork
+from .sources.openalex import (
+    DEFAULT_USER_AGENT as OPENALEX_USER_AGENT,
+)
+from .sources.openalex import (
+    MAX_DOI_BATCH_SIZE,
+    MAX_TITLE_BATCH_SIZE,
+    MAX_TITLE_SPLIT_DEPTH,
+    OpenAlexError,
+    OpenAlexWork,
+)
 from .sources.openalex import find_exact_work as find_openalex_work
 from .sources.openalex import find_works_by_dois as find_openalex_works_by_dois
 from .sources.openalex import find_works_by_titles as find_openalex_works_by_titles
@@ -82,7 +90,7 @@ from .taxonomy import expand_selected_categories, load_taxonomy, require_product
 
 SOURCE_NAME = "philpapers-rss"
 NOTIFICATION_TYPE = "weekly_new_papers"
-PIPELINE_VERSION = "0.2.0"
+PIPELINE_VERSION = "0.2.2"
 MATCHING_RULE_VERSION = "set_intersection_v1"
 RECORD_PATH = re.compile(r"/rec/(?!\.{1,2}/?$)[A-Za-z0-9._~-]+/?")
 FEED_YEAR_HINT = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
@@ -94,6 +102,25 @@ FEED_WORK_TYPE_HINTS = (
     ("preprint", re.compile(r"\bpre[ -]?print\b", re.I)),
     ("manuscript", re.compile(r"\bmanuscript\b", re.I)),
     ("forthcoming-article", re.compile(r"\b(?:forthcoming|to appear)\b", re.I)),
+)
+EXPLICIT_UNSUPPORTED_TITLE_HINTS = (
+    (
+        "review",
+        re.compile(
+            r"""
+            ^\s*[\[(]?\s*(?:
+                (?:book\s+)?reviews?(?:\s+essay)?(?:\s+of\b|\s*:)
+                |rezension(?:\s+(?:zu|von)\b|\s*:)
+                |compte\s+rendu(?:\s+de\b|\s*:)
+                |reseña(?:\s+de\b|\s*:)
+                |recensione(?:\s+di\b|\s*:)
+                |resenha(?:\s+de\b|\s*:)
+                |书评\s*[:：]
+            )
+            """,
+            re.I | re.X,
+        ),
+    ),
 )
 MAX_ON_DEMAND_CANDIDATES = 1000
 MAX_ON_DEMAND_FALLBACK_CANDIDATES = 50
@@ -875,6 +902,52 @@ def _resolve_philpapers_arrival(
     )
 
 
+def _resolve_explicit_unsupported_work(
+    candidate: MergedCandidate,
+    snapshot: TaxonomySnapshot,
+    attempted_at: datetime,
+) -> ResolutionResult | None:
+    """Resolve an explicitly labelled unsupported bibliographic form locally."""
+
+    display = split_display_bibliography(candidate.display_title)
+    work_type = next(
+        (
+            candidate_type
+            for candidate_type, pattern in EXPLICIT_UNSUPPORTED_TITLE_HINTS
+            if pattern.search(display.title)
+        ),
+        None,
+    )
+    if work_type is None:
+        return None
+    availability_date = DateValue(
+        min(candidate.feed_dates) if candidate.feed_dates else candidate.observed_at,
+        DatePrecision.SECOND,
+        "philpapers-rss-entry-date"
+        if candidate.feed_dates
+        else "philpapers-rss-current-alert-observation",
+        source_record_id=candidate.source_id,
+        retrieved_at=attempted_at,
+    )
+    return ResolutionResult(
+        candidate,
+        WorkRecord(
+            work_id=_source_work_id(candidate),
+            title=display.title,
+            authors=(display.author_text,) if display.author_text else (),
+            observed_at=candidate.observed_at,
+            freshness_status=FreshnessStatus.UNCERTAIN,
+            category_status=CategoryStatus.AVAILABLE,
+            category_assignments=_assignments(candidate, snapshot, attempted_at),
+            source_ids=((candidate.source, candidate.source_id),),
+            work_type=work_type,
+            availability_date=availability_date,
+            freshness_event="explicit_unsupported_bibliographic_form",
+            stable_url=candidate.stable_url,
+        ),
+    )
+
+
 def _enrich_native_arrival(
     native: ResolutionResult,
     candidate: MergedCandidate,
@@ -952,6 +1025,14 @@ def resolve_bibliography(
     circuit_skip_counts: dict[str, int] | None = None,
 ) -> ResolutionResult:
     """Resolve exact bibliography and obtain independent publication evidence."""
+
+    explicit_unsupported = _resolve_explicit_unsupported_work(
+        candidate,
+        snapshot,
+        attempted_at,
+    )
+    if explicit_unsupported is not None:
+        return explicit_unsupported
 
     display = split_display_bibliography(candidate.display_title)
     crossref: CrossrefWork | None = None
@@ -1675,7 +1756,28 @@ def run_on_demand(
             f"{max_candidates}; narrow the lookback window or explicitly raise the limit"
         )
 
-    doi_values = tuple(sorted({doi for item in candidates for doi in item.doi_hints}))
+    explicit_unsupported_results = tuple(
+        result
+        for item in candidates
+        if (
+            result := _resolve_explicit_unsupported_work(
+                item,
+                snapshot,
+                requested_at,
+            )
+        )
+        is not None
+    )
+    explicit_unsupported_source_ids = {
+        result.candidate.source_id for result in explicit_unsupported_results
+    }
+    bibliographic_candidates = tuple(
+        item for item in candidates if item.source_id not in explicit_unsupported_source_ids
+    )
+
+    doi_values = tuple(
+        sorted({item.doi_hints[0] for item in bibliographic_candidates if len(item.doi_hints) == 1})
+    )
     cached_doi_works: dict[str, OpenAlexWork] = {}
     doi_values_to_query: list[str] = []
     doi_batch_cache_hits = 0
@@ -1717,10 +1819,13 @@ def run_on_demand(
     batched_works = {**cached_doi_works, **fresh_doi_works}
     if progress is not None:
         progress("doi_batch", len(doi_values), len(doi_values))
-    resolution_results: list[ResolutionResult] = []
+    doi_batch_request_upper_bound = (
+        len(doi_values_to_query) + MAX_DOI_BATCH_SIZE - 1
+    ) // MAX_DOI_BATCH_SIZE
+    resolution_results: list[ResolutionResult] = list(explicit_unsupported_results)
     title_candidates: list[MergedCandidate] = []
     doi_batch_resolved_count = 0
-    for candidate in sorted(candidates, key=lambda item: item.source_id):
+    for candidate in sorted(bibliographic_candidates, key=lambda item: item.source_id):
         batched_matches = [
             resolved
             for doi in candidate.doi_hints
@@ -1750,6 +1855,7 @@ def run_on_demand(
     cached_title_works: dict[str, OpenAlexWork] = {}
     title_queries_to_query: list[str] = []
     title_batch_cache_hits = 0
+    title_batch_attempt_cache_hits = 0
     for title in title_queries:
         cached = (
             bibliography_cache.lookup_openalex_title_candidates(title, now=requested_at)
@@ -1760,12 +1866,21 @@ def run_on_demand(
             title_batch_cache_hits += 1
             for work in cached.value or ():
                 cached_title_works[work.openalex_id] = work
+        elif (
+            bibliography_cache is not None
+            and bibliography_cache.was_openalex_title_batch_attempted(
+                title,
+                now=requested_at,
+            )
+        ):
+            title_batch_attempt_cache_hits += 1
         else:
             title_queries_to_query.append(title)
     if progress is not None:
         progress("title_batch", 0, len(title_queries))
     fresh_title_works: tuple[OpenAlexWork, ...] = ()
     title_batch_api_values = 0
+    title_batch_succeeded = not title_queries_to_query
     if title_queries_to_query and "openalex" not in bibliographic_source_failures:
         title_batch_api_values = len(title_queries_to_query)
         try:
@@ -1777,6 +1892,8 @@ def run_on_demand(
         except OpenAlexError as error:
             bibliographic_source_failures.setdefault("openalex", str(error))
             openalex_batch_failures += 1
+        else:
+            title_batch_succeeded = True
     elif title_queries_to_query:
         circuit_skip_counts["openalex"] = circuit_skip_counts.get("openalex", 0) + 1
     if bibliography_cache is not None:
@@ -1791,6 +1908,11 @@ def run_on_demand(
                 exact_works,
                 now=requested_at,
             )
+        if title_batch_succeeded:
+            bibliography_cache.record_openalex_title_batch_attempts(
+                tuple(title_queries_to_query),
+                now=requested_at,
+            )
     title_works_by_id = {
         **cached_title_works,
         **{work.openalex_id: work for work in fresh_title_works},
@@ -1798,6 +1920,10 @@ def run_on_demand(
     title_works = tuple(title_works_by_id[key] for key in sorted(title_works_by_id))
     if progress is not None:
         progress("title_batch", len(title_queries), len(title_queries))
+    initial_title_batches = (
+        len(title_queries_to_query) + MAX_TITLE_BATCH_SIZE - 1
+    ) // MAX_TITLE_BATCH_SIZE
+    title_batch_request_upper_bound = initial_title_batches * (2 ** (MAX_TITLE_SPLIT_DEPTH + 1) - 1)
     fallback_candidates: list[MergedCandidate] = []
     title_batch_resolved_count = 0
     for candidate in title_candidates:
@@ -1832,30 +1958,70 @@ def run_on_demand(
             item.source_id,
         ),
     )
-    fallback_to_query = tuple(prioritized_fallback[:max_fallback_candidates])
-    fallback_deferred_count = len(fallback_candidates) - len(fallback_to_query)
-    fallback_total = len(fallback_to_query)
+    fallback_cache_ready: list[MergedCandidate] = []
+    fallback_remote_candidates: list[MergedCandidate] = []
+    if resolver is resolve_bibliography and bibliography_cache is not None:
+        for item in prioritized_fallback:
+            display = split_display_bibliography(item.display_title)
+            if bibliography_cache.can_resolve_fallback_without_remote(
+                display.title,
+                display.author_text,
+                now=requested_at,
+            ):
+                fallback_cache_ready.append(item)
+            else:
+                fallback_remote_candidates.append(item)
+        fallback_remote_candidates.sort(
+            key=lambda item: (
+                (
+                    last_attempt := bibliography_cache.fallback_last_attempt(
+                        item.source_id,
+                        now=requested_at,
+                    )
+                )
+                is not None,
+                last_attempt or datetime.min.replace(tzinfo=UTC),
+                not _native_arrival_eligible(item, window_start, window_end),
+                item.source_id,
+            )
+        )
+    else:
+        fallback_remote_candidates.extend(prioritized_fallback)
+    fallback_remote_selected = tuple(fallback_remote_candidates[:max_fallback_candidates])
+    fallback_to_resolve = tuple(fallback_cache_ready) + fallback_remote_selected
+    fallback_deferred_count = len(fallback_remote_candidates) - len(fallback_remote_selected)
+    fallback_total = len(fallback_to_resolve)
     if progress is not None:
         progress("fallback", 0, fallback_total)
-    resolution_results.extend(
-        _resolve_candidates_with_connection_reuse(
-            fallback_to_query,
-            snapshot,
-            config,
-            window_start,
-            window_end,
-            requested_at,
-            resolver=resolver,
-            bibliography_cache=bibliography_cache,
-            unavailable_sources=bibliographic_source_failures,
-            circuit_skip_counts=circuit_skip_counts,
-            progress=(
-                (lambda completed, total: progress("fallback", completed, total))
-                if progress is not None
-                else None
-            ),
-        )
+    fallback_results = _resolve_candidates_with_connection_reuse(
+        fallback_to_resolve,
+        snapshot,
+        config,
+        window_start,
+        window_end,
+        requested_at,
+        resolver=resolver,
+        bibliography_cache=bibliography_cache,
+        unavailable_sources=bibliographic_source_failures,
+        circuit_skip_counts=circuit_skip_counts,
+        progress=(
+            (lambda completed, total: progress("fallback", completed, total))
+            if progress is not None
+            else None
+        ),
     )
+    resolution_results.extend(fallback_results)
+    if resolver is resolve_bibliography and bibliography_cache is not None:
+        result_by_source_id = {result.candidate.source_id: result for result in fallback_results}
+        bibliography_cache.record_fallback_attempts(
+            tuple(
+                item.source_id
+                for item in fallback_remote_selected
+                if (result := result_by_source_id.get(item.source_id)) is not None
+                and result.reason_code != "old_work_check_incomplete"
+            ),
+            now=requested_at,
+        )
     works: dict[str, WorkRecord] = {}
     unresolved_count = fallback_deferred_count
     for result in tuple(resolution_results):
@@ -1910,14 +2076,21 @@ def run_on_demand(
         "candidate_records_without_any_feed_date_hint": sum(
             not item.feed_dates and not item.feed_year_hints for item in candidates
         ),
+        "explicit_unsupported_candidates": len(explicit_unsupported_results),
         "skipped_by_feed_hint": len(current_candidates) - len(candidates),
         "doi_hints": len(doi_values),
+        "candidate_records_with_conflicting_doi_hints": sum(
+            len(item.doi_hints) > 1 for item in candidates
+        ),
         "doi_batch_cache_hits": doi_batch_cache_hits,
         "doi_batch_api_values": len(doi_values_to_query),
+        "doi_batch_request_upper_bound": doi_batch_request_upper_bound,
         "doi_batch_resolved_candidates": doi_batch_resolved_count,
         "title_batch_queries": len(title_queries),
         "title_batch_cache_hits": title_batch_cache_hits,
+        "title_batch_attempt_cache_hits": title_batch_attempt_cache_hits,
         "title_batch_api_values": title_batch_api_values,
+        "title_batch_request_upper_bound": title_batch_request_upper_bound,
         "title_batch_resolved_candidates": title_batch_resolved_count,
         "openalex_batch_failures": openalex_batch_failures,
         "bibliographic_source_circuits_open": len(bibliographic_source_failures),
@@ -1929,8 +2102,17 @@ def run_on_demand(
         ),
         "batch_resolved_candidates": doi_batch_resolved_count + title_batch_resolved_count,
         "fallback_candidates": len(fallback_candidates),
-        "fallback_queried": len(fallback_to_query),
+        "fallback_cache_ready": len(fallback_cache_ready),
+        "fallback_processed": len(fallback_to_resolve),
+        "fallback_remote_candidates": len(fallback_remote_candidates),
+        "fallback_queried": len(fallback_remote_selected),
         "fallback_deferred": fallback_deferred_count,
+        "openalex_logical_request_upper_bound": (
+            doi_batch_request_upper_bound
+            + title_batch_request_upper_bound
+            + len(fallback_remote_selected)
+        ),
+        "crossref_logical_request_upper_bound": len(fallback_remote_selected),
         "resolved_works": len(works),
         "confirmed_new": sum(
             item.freshness_status is FreshnessStatus.CONFIRMED_NEW for item in works.values()
@@ -1954,6 +2136,9 @@ def run_on_demand(
             "bibliography_cache_misses": cache_stats_after.misses - cache_stats_before.misses,
             "bibliography_cache_writes": cache_stats_after.writes - cache_stats_before.writes,
             "bibliography_cache_expired": cache_stats_after.expired - cache_stats_before.expired,
+            "bibliography_cache_scheduling_writes": (
+                cache_stats_after.scheduling_writes - cache_stats_before.scheduling_writes
+            ),
         }
     )
     if progress is not None:

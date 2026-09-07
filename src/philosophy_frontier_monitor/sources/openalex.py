@@ -22,6 +22,7 @@ API_URL = "https://api.openalex.org/works"
 DEFAULT_USER_AGENT = "PhilosophyFrontierMonitor/0.1"
 MAX_DOI_BATCH_SIZE = 50
 MAX_TITLE_BATCH_SIZE = 20
+MAX_TITLE_SPLIT_DEPTH = 1
 
 
 class OpenAlexError(RuntimeError):
@@ -92,7 +93,7 @@ def find_exact_work(
     mailto: str | None = None,
     client: httpx.Client | None = None,
 ) -> OpenAlexWork | None:
-    params = {"search": title, "per-page": "5"}
+    params = {"search": title, "per_page": "5"}
     _add_access_parameters(params, mailto)
     owns_client = client is None
     active_client = client or httpx.Client(
@@ -163,7 +164,7 @@ def find_works_by_dois(
             batch = normalized[offset : offset + MAX_DOI_BATCH_SIZE]
             params = {
                 "filter": "doi:" + "|".join(batch),
-                "per-page": str(len(batch)),
+                "per_page": str(len(batch)),
                 "select": ("id,doi,title,publication_date,type,authorships,primary_location"),
             }
             _add_access_parameters(params, mailto)
@@ -223,15 +224,15 @@ def find_works_by_titles(
     retrieved_at = datetime.now(UTC)
     resolved: dict[str, OpenAlexWork] = {}
     pending = [
-        queries[offset : offset + MAX_TITLE_BATCH_SIZE]
+        (queries[offset : offset + MAX_TITLE_BATCH_SIZE], 0)
         for offset in range(0, len(queries), MAX_TITLE_BATCH_SIZE)
     ]
     try:
         while pending:
-            batch = pending.pop(0)
+            batch, split_depth = pending.pop(0)
             params = {
                 "filter": "title.search.exact:" + "|".join(batch),
-                "per-page": "100",
+                "per_page": "100",
                 "select": ("id,doi,title,publication_date,type,authorships,primary_location"),
             }
             _add_access_parameters(params, mailto)
@@ -243,15 +244,32 @@ def find_works_by_titles(
             items = payload.get("results", [])
             if not isinstance(items, list):
                 raise ValueError("OpenAlex results is not a list")
-            count = payload.get("meta", {}).get("count", len(items))
-            if isinstance(count, int) and count > 100 and len(batch) > 1:
-                midpoint = len(batch) // 2
-                pending[0:0] = [batch[:midpoint], batch[midpoint:]]
-                continue
+            represented_queries: set[str] = set()
             for item in items:
                 parsed = parse_openalex_work(item, retrieved_at=retrieved_at)
                 if parsed is not None:
                     resolved[parsed.openalex_id] = parsed
+                    normalized_result_title = normalize_title(parsed.title)
+                    if normalized_result_title in batch:
+                        represented_queries.add(normalized_result_title)
+            count = payload.get("meta", {}).get("count", len(items))
+            if (
+                isinstance(count, int)
+                and count > len(items)
+                and len(batch) > 1
+                and split_depth < MAX_TITLE_SPLIT_DEPTH
+            ):
+                missing = tuple(query for query in batch if query not in represented_queries)
+                if not missing:
+                    continue
+                if len(missing) < len(batch):
+                    pending.insert(0, (missing, split_depth + 1))
+                    continue
+                midpoint = len(batch) // 2
+                pending[0:0] = [
+                    (batch[:midpoint], split_depth + 1),
+                    (batch[midpoint:], split_depth + 1),
+                ]
     except BoundedRequestError as error:
         raise OpenAlexError(f"OpenAlex batch title lookup failed: {error}") from error
     except (ValueError, AttributeError) as error:

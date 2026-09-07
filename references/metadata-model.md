@@ -80,6 +80,12 @@ taxonomy 中实际存在的受控分类，具有分类 ID、规范名称和父�
 - 新旧状态 `freshness_status`；
 - 分类状态 `category_status`。
 
+`work_type` 优先采用来源提供的结构化书目类型。来源没有结构化类型时，本地规则只允许识别题名中
+明确出现的受控书目形式标签：当前包括英语、德语、法语、西班牙语、意大利语、葡萄牙语和中文的
+书评／评论前缀，并统一规范为 `review`。这类记录在调用 Crossref／OpenAlex 之前形成终局
+`unsupported_work_type`，不进入 `unresolved_records`。不得依据论文主题、作者、期刊名称或模型对
+内容的判断推断作品类型；没有明确标签的可疑记录仍应保留，等待结构化来源证据，而不是静默排除。
+
 作者、DOI、摘要或出版日期缺失时可以为 `null`。但是没有足够时间证据的记录不能设为 `confirmed_new`，没有受控分类的记录不能设为 `matched`。
 
 ## 4. 作品记录示例
@@ -642,15 +648,27 @@ exact_lookup_cache(
   expires_at,
   PRIMARY KEY(source, query_hash)
 )
+
+fallback_attempt_log(
+  source_id_hash,  -- PhilPapers 来源记录 ID 的 SHA-256，不保存原 URL
+  attempted_at,    -- 最近一次完成逐篇核验尝试的 UTC 时间
+  PRIMARY KEY(source_id_hash)
+)
 ```
 
-`source` 区分逐篇 Crossref、逐篇 OpenAlex、OpenAlex 单 DOI 批量键和 OpenAlex 单题名批量键。
+`source` 区分逐篇 Crossref、逐篇 OpenAlex、OpenAlex 单 DOI 批量键、OpenAlex 单题名正候选键和
+`openalex-title-batch-attempt` 调度键。
 逐篇键由规范化题名与首位作者提示散列，DOI 键由规范化 DOI 散列，题名批量键由规范化题名散列；
 均不保存原始查询串。正结果只保存 DOI／OpenAlex ID、题名、作者、载体、类型、稳定链接和已有
 日期证据。DOI 与逐篇正结果默认 24 小时过期；成功的 DOI／逐篇 `not_found` 默认 15 分钟过期；
-题名批量只写有结果的候选列表，1 小时过期，空题名批次不写入。传输失败、HTTP 限额错误、身份
+题名批量只把有结果的候选列表写成书目结果，1 小时过期，空题名批次不写成负书目结果；成功调用
+还会为参与题名写入一小时的散列调度标记，使重复拉取不立即重发相同批次。该标记不包含题名，
+也不表示 OpenAlex 查无记录；候选仍进入逐篇轮转。传输失败、HTTP 限额错误、身份
 冲突和语义复核结果不得写入缓存。缓存命中以后仍重新执行当前窗口的新近性、作品同一性判断与
 分类交集，不能充当通知历史。
+`fallback_attempt_log` 最多保留 31 天，只用于让跨次冷启动优先处理从未尝试或最久未尝试的延期
+候选。它不表示“查无记录”，不改变证据结论，也不能抑制即时报告或周报；因传输失败或来源熔断
+而没有完成核验的候选不写入该表。
 
 即时交付结果另含 `report_delivery`、`report_character_count`、`report_path` 和
 `on_demand_report_file_written`。`inline` 时 `report_markdown` 含全文且 `report_path=null`；用户明确
