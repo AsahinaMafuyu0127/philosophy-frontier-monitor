@@ -47,9 +47,17 @@ from .models import (
     SelectedCategory,
     TaxonomySnapshot,
     WorkRecord,
+    WorkTypeStatus,
 )
 from .normalize import normalize_doi, normalize_title
-from .report import SourceCoverage, render_on_demand_report, render_weekly_report
+from .report import (
+    HUMAN_REVIEW_REASON_CODES,
+    HumanReviewItem,
+    SourceCoverage,
+    render_on_demand_report,
+    render_weekly_report,
+    unresolved_workload_counts,
+)
 from .sources.crossref import DEFAULT_USER_AGENT as CROSSREF_USER_AGENT
 from .sources.crossref import CrossrefError, CrossrefWork
 from .sources.crossref import find_exact_work as find_crossref_work
@@ -66,6 +74,17 @@ from .sources.openalex import (
 from .sources.openalex import find_exact_work as find_openalex_work
 from .sources.openalex import find_works_by_dois as find_openalex_works_by_dois
 from .sources.openalex import find_works_by_titles as find_openalex_works_by_titles
+from .sources.philarchive_oai import (
+    OAIError,
+    OAIWindowSnapshot,
+    parse_oai_datestamp,
+)
+from .sources.philarchive_oai import (
+    load_recent_window as load_recent_oai_window,
+)
+from .sources.philarchive_oai import (
+    record_key as source_record_key,
+)
 from .sources.philpapers_rss import (
     DEFAULT_USER_AGENT as PHILPAPERS_USER_AGENT,
 )
@@ -87,10 +106,16 @@ from .state import (
     UnresolvedUpdate,
 )
 from .taxonomy import expand_selected_categories, load_taxonomy, require_production_taxonomy
+from .work_types import (
+    WorkTypeResolution,
+    WorkTypeSignal,
+    resolve_work_type,
+    resolve_work_type_evidence,
+)
 
 SOURCE_NAME = "philpapers-rss"
 NOTIFICATION_TYPE = "weekly_new_papers"
-PIPELINE_VERSION = "0.2.2"
+PIPELINE_VERSION = "0.4.0"
 MATCHING_RULE_VERSION = "set_intersection_v1"
 RECORD_PATH = re.compile(r"/rec/(?!\.{1,2}/?$)[A-Za-z0-9._~-]+/?")
 FEED_YEAR_HINT = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
@@ -105,7 +130,7 @@ FEED_WORK_TYPE_HINTS = (
 )
 EXPLICIT_UNSUPPORTED_TITLE_HINTS = (
     (
-        "review",
+        "book-review",
         re.compile(
             r"""
             ^\s*[\[(]?\s*(?:
@@ -124,6 +149,18 @@ EXPLICIT_UNSUPPORTED_TITLE_HINTS = (
 )
 MAX_ON_DEMAND_CANDIDATES = 1000
 MAX_ON_DEMAND_FALLBACK_CANDIDATES = 50
+WORK_TYPE_FAILURE_DETAILS = {
+    WorkTypeStatus.CONFLICT: (
+        "structured_work_type_conflict",
+        "Structured bibliographic sources disagree on whether this record is a "
+        "supported paper form; it was withheld pending later evidence.",
+    ),
+    WorkTypeStatus.UNKNOWN: (
+        "unknown_structured_work_type",
+        "A bibliographic source returned an unrecognized controlled work type; "
+        "it was withheld until the vocabulary is reviewed.",
+    ),
+}
 
 
 class PipelineError(RuntimeError):
@@ -153,6 +190,10 @@ class MergedCandidate:
     feed_year_hints: tuple[int, ...] = ()
     doi_hints: tuple[str, ...] = ()
     work_type_hints: tuple[str, ...] = ()
+    oai_datestamps: tuple[datetime, ...] = ()
+    oai_year_hints: tuple[int, ...] = ()
+    oai_record_ids: tuple[str, ...] = ()
+    oai_work_type_hints: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,6 +282,7 @@ BatchTitleResolver = Callable[
 ]
 ProgressReporter = Callable[[str, int, int], None]
 ReportWriter = Callable[[Path, str, str], Path]
+OAIWindowLoader = Callable[[datetime, datetime, str], OAIWindowSnapshot]
 
 
 def previous_completed_week(
@@ -757,6 +799,54 @@ def merge_feed_snapshots(snapshots: tuple[FeedSnapshot, ...]) -> tuple[MergedCan
     return tuple(sorted(completed, key=lambda item: item.source_id))
 
 
+def load_philarchive_oai_window(
+    window_start: datetime,
+    window_end: datetime,
+    endpoint: str,
+) -> OAIWindowSnapshot:
+    """Load a complete PhilArchive OAI window through the configured endpoint."""
+
+    return load_recent_oai_window(window_start, window_end, endpoint=endpoint)
+
+
+def _oai_year_hints(values: tuple[str, ...]) -> tuple[int, ...]:
+    years = {
+        int(match.group())
+        for value in values
+        if (match := FEED_YEAR_HINT.search(value[:128])) is not None
+    }
+    return tuple(sorted(years))
+
+
+def enrich_candidates_with_oai(
+    candidates: tuple[MergedCandidate, ...],
+    oai: OAIWindowSnapshot,
+) -> tuple[MergedCandidate, ...]:
+    """Attach OAI change evidence by the shared PhilPapers/PhilArchive record key."""
+
+    enriched: list[MergedCandidate] = []
+    for candidate in candidates:
+        key = source_record_key(candidate.source_id)
+        record = oai.records_by_key.get(key) if key is not None else None
+        if record is None:
+            enriched.append(candidate)
+            continue
+        enriched.append(
+            replace(
+                candidate,
+                oai_datestamps=(parse_oai_datestamp(record.source_datestamp),),
+                oai_year_hints=_oai_year_hints(record.fields.get("date", ())),
+                oai_record_ids=(record.identifier,),
+                oai_work_type_hints=tuple(sorted(set(record.fields.get("type", ())))),
+            )
+        )
+    return tuple(enriched)
+
+
+def _candidate_year_hints(candidate: MergedCandidate) -> frozenset[int]:
+    return frozenset((*candidate.feed_year_hints, *candidate.oai_year_hints))
+
+
 def _feed_updates(snapshots: tuple[FeedSnapshot, ...]) -> tuple[FeedStateUpdate, ...]:
     return tuple(
         FeedStateUpdate(
@@ -818,6 +908,61 @@ def _source_work_id(candidate: MergedCandidate) -> str:
     return f"pfm:work:philpapers:{identifier}"
 
 
+def _work_type_resolution(
+    candidate: MergedCandidate,
+    *,
+    crossref: CrossrefWork | None = None,
+    openalex: OpenAlexWork | None = None,
+    default_type: str = "article",
+) -> WorkTypeResolution:
+    signals = [
+        WorkTypeSignal(
+            source="philpapers-rss-description",
+            raw_type=hint,
+            source_record_id=candidate.source_id,
+            method="explicit-feed-label",
+        )
+        for hint in candidate.work_type_hints
+    ]
+    signals.extend(
+        WorkTypeSignal(
+            source="philarchive-oai",
+            raw_type=hint,
+            source_record_id=(candidate.oai_record_ids[0] if candidate.oai_record_ids else None),
+            method="structured-oai-dc-type",
+        )
+        for hint in candidate.oai_work_type_hints
+    )
+    if crossref is not None and crossref.work_type:
+        signals.append(
+            WorkTypeSignal(
+                source="crossref",
+                raw_type=crossref.work_type,
+                source_record_id=crossref.doi,
+            )
+        )
+    if openalex is not None and openalex.work_type:
+        signals.append(
+            WorkTypeSignal(
+                source="openalex",
+                raw_type=openalex.work_type,
+                source_record_id=openalex.openalex_id,
+            )
+        )
+    return resolve_work_type(tuple(signals), default_type=default_type)
+
+
+def _work_type_resolution_failure(
+    candidate: MergedCandidate,
+    resolution: WorkTypeResolution,
+) -> ResolutionResult | None:
+    failure = WORK_TYPE_FAILURE_DETAILS.get(resolution.status)
+    if failure is None:
+        return None
+    reason_code, detail = failure
+    return ResolutionResult(candidate, None, reason_code=reason_code, detail=detail)
+
+
 def _native_arrival_eligible(
     candidate: MergedCandidate,
     window_start: datetime,
@@ -830,12 +975,15 @@ def _native_arrival_eligible(
     """
 
     window_years = set(range(window_start.year, window_end.year + 1))
-    if candidate.feed_year_hints and not window_years.intersection(candidate.feed_year_hints):
+    year_hints = _candidate_year_hints(candidate)
+    if year_hints and not window_years.intersection(year_hints):
         return False
     return bool(
         candidate.work_type_hints
-        or window_years.intersection(candidate.feed_year_hints)
+        or candidate.oai_work_type_hints
+        or window_years.intersection(year_hints)
         or any(window_start <= value < window_end for value in candidate.feed_dates)
+        or any(window_start <= value < window_end for value in candidate.oai_datestamps)
     )
 
 
@@ -850,15 +998,30 @@ def _resolve_philpapers_arrival(
 
     display = split_display_bibliography(candidate.display_title)
     publication_date = None
-    if len(candidate.feed_year_hints) == 1:
+    year_hints = _candidate_year_hints(candidate)
+    if len(year_hints) == 1:
+        year = next(iter(year_hints))
+        date_source = (
+            "philpapers-rss-bibliography"
+            if candidate.feed_year_hints
+            else "philarchive-oai-dc-date"
+        )
         publication_date = DateValue(
-            str(candidate.feed_year_hints[0]),
+            str(year),
             DatePrecision.YEAR,
-            "philpapers-rss-bibliography",
+            date_source,
             source_record_id=candidate.source_id,
             retrieved_at=attempted_at,
         )
-    if candidate.feed_dates:
+    if candidate.oai_datestamps:
+        availability_date = DateValue(
+            min(candidate.oai_datestamps),
+            DatePrecision.SECOND,
+            "philarchive-oai-datestamp",
+            source_record_id=(candidate.oai_record_ids[0] if candidate.oai_record_ids else None),
+            retrieved_at=attempted_at,
+        )
+    elif candidate.feed_dates:
         availability_date = DateValue(
             min(candidate.feed_dates),
             DatePrecision.SECOND,
@@ -875,13 +1038,21 @@ def _resolve_philpapers_arrival(
             retrieved_at=attempted_at,
         )
 
-    if candidate.feed_year_hints and max(candidate.feed_year_hints) < window_start.year:
+    if year_hints and max(year_hints) < window_start.year:
         status = FreshnessStatus.NEWLY_INDEXED_OLD_WORK
         event = "newly_indexed_old_work"
     else:
         status = FreshnessStatus.CONFIRMED_SOURCE_ARRIVAL
-        event = "recently_arrived_in_philpapers_alert"
+        event = (
+            "recently_changed_in_philarchive_oai"
+            if candidate.oai_datestamps
+            else "recently_arrived_in_philpapers_alert"
+        )
 
+    type_resolution = _work_type_resolution(candidate)
+    type_failure = _work_type_resolution_failure(candidate, type_resolution)
+    if type_failure is not None:
+        return type_failure
     return ResolutionResult(
         candidate,
         WorkRecord(
@@ -892,8 +1063,16 @@ def _resolve_philpapers_arrival(
             freshness_status=status,
             category_status=CategoryStatus.AVAILABLE,
             category_assignments=_assignments(candidate, snapshot, attempted_at),
-            source_ids=((candidate.source, candidate.source_id),),
-            work_type=candidate.work_type_hints[0] if candidate.work_type_hints else "article",
+            source_ids=tuple(
+                sorted(
+                    {(candidate.source, candidate.source_id)}.union(
+                        {("philarchive-oai", value) for value in candidate.oai_record_ids}
+                    )
+                )
+            ),
+            work_type=type_resolution.work_type,
+            work_type_status=type_resolution.status,
+            work_type_evidence=type_resolution.evidence,
             publication_date=publication_date,
             availability_date=availability_date,
             freshness_event=event,
@@ -920,6 +1099,16 @@ def _resolve_explicit_unsupported_work(
     )
     if work_type is None:
         return None
+    type_resolution = resolve_work_type(
+        (
+            WorkTypeSignal(
+                source="philpapers-title-label",
+                raw_type=work_type,
+                source_record_id=candidate.source_id,
+                method="explicit-bibliographic-label",
+            ),
+        )
+    )
     availability_date = DateValue(
         min(candidate.feed_dates) if candidate.feed_dates else candidate.observed_at,
         DatePrecision.SECOND,
@@ -940,7 +1129,9 @@ def _resolve_explicit_unsupported_work(
             category_status=CategoryStatus.AVAILABLE,
             category_assignments=_assignments(candidate, snapshot, attempted_at),
             source_ids=((candidate.source, candidate.source_id),),
-            work_type=work_type,
+            work_type=type_resolution.work_type,
+            work_type_status=type_resolution.status,
+            work_type_evidence=type_resolution.evidence,
             availability_date=availability_date,
             freshness_event="explicit_unsupported_bibliographic_form",
             stable_url=candidate.stable_url,
@@ -973,13 +1164,15 @@ def _enrich_native_arrival(
         if openalex is not None and openalex.authors
         else native.work.authors
     )
-    work_type = (
-        crossref.work_type
-        if crossref is not None and crossref.work_type
-        else openalex.work_type
-        if openalex is not None and openalex.work_type
-        else native.work.work_type
+    type_resolution = _work_type_resolution(
+        candidate,
+        crossref=crossref,
+        openalex=openalex,
+        default_type=native.work.work_type,
     )
+    type_failure = _work_type_resolution_failure(candidate, type_resolution)
+    if type_failure is not None:
+        return type_failure
     source_ids = set(native.work.source_ids)
     if crossref is not None:
         source_ids.add(("crossref", crossref.doi))
@@ -994,7 +1187,9 @@ def _enrich_native_arrival(
             authors=authors,
             doi=doi,
             source_ids=tuple(sorted(source_ids)),
-            work_type=work_type,
+            work_type=type_resolution.work_type,
+            work_type_status=type_resolution.status,
+            work_type_evidence=type_resolution.evidence,
             publication_date=publication_date or native.work.publication_date,
             container_title=(
                 crossref.container_title if crossref is not None else native.work.container_title
@@ -1169,6 +1364,15 @@ def resolve_bibliography(
             detail="Exact-title sources returned conflicting DOI identifiers.",
         )
 
+    type_resolution = _work_type_resolution(
+        candidate,
+        crossref=crossref,
+        openalex=openalex,
+    )
+    type_failure = _work_type_resolution_failure(candidate, type_resolution)
+    if type_failure is not None:
+        return type_failure
+
     if (
         crossref is not None
         and crossref.publication_date is not None
@@ -1225,13 +1429,6 @@ def resolve_bibliography(
         if openalex is not None
         else ()
     )
-    work_type = (
-        crossref.work_type
-        if crossref is not None and crossref.work_type
-        else openalex.work_type
-        if openalex is not None and openalex.work_type
-        else "article"
-    )
     stable_url = (
         f"https://doi.org/{doi}"
         if doi
@@ -1255,7 +1452,9 @@ def resolve_bibliography(
         category_assignments=_assignments(candidate, snapshot, attempted_at),
         doi=doi,
         source_ids=tuple(sorted(source_ids)),
-        work_type=work_type,
+        work_type=type_resolution.work_type,
+        work_type_status=type_resolution.status,
+        work_type_evidence=type_resolution.evidence,
         publication_date=publication_date,
         freshness_event=publication_event,
         container_title=crossref.container_title if crossref is not None else None,
@@ -1316,6 +1515,10 @@ def _resolve_batched_openalex(
 
     if not _candidate_matches_openalex(candidate, openalex):
         return None
+    type_resolution = _work_type_resolution(candidate, openalex=openalex)
+    type_failure = _work_type_resolution_failure(candidate, type_resolution)
+    if type_failure is not None:
+        return type_failure
     if openalex.publication_date is None:
         native = _resolve_philpapers_arrival(
             candidate,
@@ -1342,7 +1545,9 @@ def _resolve_batched_openalex(
                         }
                     )
                 ),
-                work_type=openalex.work_type or native.work.work_type,
+                work_type=type_resolution.work_type,
+                work_type_status=type_resolution.status,
+                work_type_evidence=type_resolution.evidence,
                 stable_url=openalex.stable_url,
             ),
         )
@@ -1378,7 +1583,9 @@ def _resolve_batched_openalex(
                         }
                     )
                 ),
-                work_type=openalex.work_type or native.work.work_type,
+                work_type=type_resolution.work_type,
+                work_type_status=type_resolution.status,
+                work_type_evidence=type_resolution.evidence,
                 publication_date=openalex.publication_date,
                 stable_url=openalex.stable_url,
             ),
@@ -1402,7 +1609,9 @@ def _resolve_batched_openalex(
                     }
                 )
             ),
-            work_type=openalex.work_type or "article",
+            work_type=type_resolution.work_type,
+            work_type_status=type_resolution.status,
+            work_type_evidence=type_resolution.evidence,
             publication_date=openalex.publication_date,
             freshness_event=freshness.event,
             container_title=None,
@@ -1428,6 +1637,24 @@ def _merge_work(left: WorkRecord, right: WorkRecord) -> WorkRecord:
         freshness_status = FreshnessStatus.UNCERTAIN
         freshness_event = "conflicting_resolution_evidence"
         publication_date = None
+    type_evidence = {
+        (
+            item.source,
+            item.raw_type,
+            item.normalized_type or "",
+            item.source_record_id or "",
+            item.method,
+        ): item
+        for item in (*left.work_type_evidence, *right.work_type_evidence)
+    }
+    ordered_type_evidence = tuple(type_evidence[key] for key in sorted(type_evidence))
+    if not ordered_type_evidence and left.work_type != right.work_type:
+        type_resolution = WorkTypeResolution("unknown", WorkTypeStatus.UNKNOWN, ())
+    else:
+        type_resolution = resolve_work_type_evidence(
+            ordered_type_evidence,
+            default_type=left.work_type,
+        )
     return replace(
         left,
         observed_at=min(left.observed_at, right.observed_at),
@@ -1436,6 +1663,9 @@ def _merge_work(left: WorkRecord, right: WorkRecord) -> WorkRecord:
         publication_date=publication_date,
         category_assignments=tuple(assignments[key] for key in sorted(assignments)),
         source_ids=tuple(sorted(set(left.source_ids).union(right.source_ids))),
+        work_type=type_resolution.work_type,
+        work_type_status=type_resolution.status,
+        work_type_evidence=type_resolution.evidence,
     )
 
 
@@ -1679,6 +1909,7 @@ def run_on_demand(
     resolver: CandidateResolver = resolve_bibliography,
     batch_doi_resolver: BatchDoiResolver = load_openalex_doi_batch,
     batch_title_resolver: BatchTitleResolver = load_openalex_title_batch,
+    oai_loader: OAIWindowLoader = load_philarchive_oai_window,
     bibliography_cache: BibliographicCache | None = None,
     allow_development_fixture: bool = False,
     progress: ProgressReporter | None = None,
@@ -1731,21 +1962,49 @@ def run_on_demand(
         ),
     )
     current_candidates = merge_feed_snapshots(feed_snapshots)
+    oai_snapshot: OAIWindowSnapshot | None = None
+    oai_failure: str | None = None
+    if config.philarchive_oai.enabled:
+        if progress is not None:
+            progress("oai", 0, 1)
+        try:
+            oai_snapshot = oai_loader(
+                window_start,
+                window_end,
+                config.philarchive_oai.endpoint,
+            )
+        except OAIError as error:
+            oai_failure = str(error)
+        else:
+            current_candidates = enrich_candidates_with_oai(current_candidates, oai_snapshot)
+        if progress is not None:
+            progress("oai", 1, 1)
     window_years = set(
         range(
             window_start.astimezone(config.timezone).year,
             window_end.astimezone(config.timezone).year + 1,
         )
     )
-    candidates = tuple(
+    legacy_candidates = tuple(
         item
         for item in current_candidates
         if (
             False
-            if item.feed_year_hints and not window_years.intersection(item.feed_year_hints)
+            if _candidate_year_hints(item)
+            and not window_years.intersection(_candidate_year_hints(item))
             else any(window_start <= feed_date < window_end for feed_date in item.feed_dates)
             if item.feed_dates
             else True
+        )
+    )
+    candidates = tuple(
+        item
+        for item in legacy_candidates
+        if not (
+            oai_snapshot is not None
+            and not item.feed_dates
+            and not item.feed_year_hints
+            and not item.oai_datestamps
         )
     )
     if progress is not None:
@@ -1925,8 +2184,17 @@ def run_on_demand(
     ) // MAX_TITLE_BATCH_SIZE
     title_batch_request_upper_bound = initial_title_batches * (2 ** (MAX_TITLE_SPLIT_DEPTH + 1) - 1)
     fallback_candidates: list[MergedCandidate] = []
+    fallback_reason_by_source_id: dict[str, str] = {}
     title_batch_resolved_count = 0
+    title_batch_terminal_unresolved_count = 0
     for candidate in title_candidates:
+        display = split_display_bibliography(candidate.display_title)
+        normalized_candidate_title = normalize_title(display.title)
+        same_normalized_title_works = tuple(
+            work
+            for work in title_works
+            if normalize_title(work.title) == normalized_candidate_title
+        )
         batched_matches = [
             resolved
             for openalex in title_works
@@ -1943,14 +2211,22 @@ def run_on_demand(
             )
             is not None
         ]
-        unique_matches = {
-            item.work.work_id: item for item in batched_matches if item.work is not None
-        }
-        if len(unique_matches) == 1:
-            resolution_results.append(next(iter(unique_matches.values())))
-            title_batch_resolved_count += 1
+        if len(batched_matches) == 1:
+            terminal = batched_matches[0]
+            resolution_results.append(terminal)
+            if terminal.work is None:
+                title_batch_terminal_unresolved_count += 1
+            else:
+                title_batch_resolved_count += 1
         else:
             fallback_candidates.append(candidate)
+            fallback_reason_by_source_id[candidate.source_id] = (
+                "ambiguous_openalex_identity_matches"
+                if batched_matches
+                else "openalex_identity_mismatch"
+                if same_normalized_title_works
+                else "no_openalex_title_candidate"
+            )
     prioritized_fallback = sorted(
         fallback_candidates,
         key=lambda item: (
@@ -1988,8 +2264,9 @@ def run_on_demand(
     else:
         fallback_remote_candidates.extend(prioritized_fallback)
     fallback_remote_selected = tuple(fallback_remote_candidates[:max_fallback_candidates])
+    fallback_deferred_candidates = tuple(fallback_remote_candidates[max_fallback_candidates:])
     fallback_to_resolve = tuple(fallback_cache_ready) + fallback_remote_selected
-    fallback_deferred_count = len(fallback_remote_candidates) - len(fallback_remote_selected)
+    fallback_deferred_count = len(fallback_deferred_candidates)
     fallback_total = len(fallback_to_resolve)
     if progress is not None:
         progress("fallback", 0, fallback_total)
@@ -2023,17 +2300,55 @@ def run_on_demand(
             now=requested_at,
         )
     works: dict[str, WorkRecord] = {}
+    human_review_items: list[HumanReviewItem] = []
     unresolved_count = fallback_deferred_count
+    unresolved_reason_counts = {
+        reason_code: sum(result.reason_code == reason_code for result in resolution_results)
+        for reason_code in (
+            "semantic_identity_review_required",
+            "identifier_conflict",
+            "structured_work_type_conflict",
+            "unknown_structured_work_type",
+            "old_work_check_incomplete",
+        )
+    }
     for result in tuple(resolution_results):
         if result.work is None:
             if result.reason_code is None or result.detail is None:
                 raise PipelineError("unresolved result lacks a reason and detail")
             unresolved_count += 1
+            if result.reason_code in HUMAN_REVIEW_REASON_CODES:
+                display = split_display_bibliography(result.candidate.display_title)
+                human_review_items.append(
+                    HumanReviewItem(
+                        title=display.title,
+                        author_text=display.author_text or None,
+                        stable_url=result.candidate.stable_url,
+                        reason_code=result.reason_code,
+                    )
+                )
             continue
         current_work = works.get(result.work.work_id)
         works[result.work.work_id] = (
             result.work if current_work is None else _merge_work(current_work, result.work)
         )
+
+    for work_id, work in tuple(works.items()):
+        failure = WORK_TYPE_FAILURE_DETAILS.get(work.work_type_status)
+        if failure is None:
+            continue
+        reason_code, _detail = failure
+        unresolved_reason_counts[reason_code] += 1
+        unresolved_count += 1
+        human_review_items.append(
+            HumanReviewItem(
+                title=work.title,
+                author_text="; ".join(work.authors) or None,
+                stable_url=work.stable_url,
+                reason_code=reason_code,
+            )
+        )
+        del works[work_id]
 
     matches = tuple(
         match_work(work, profile, already_notified=False, now=requested_at)
@@ -2049,7 +2364,34 @@ def run_on_demand(
             detail=f"分类 feed 完整读取；条目数 {len(item.entries)}",
         )
         for item in feed_snapshots
-    ) + tuple(
+    )
+    if oai_snapshot is not None:
+        coverage += (
+            SourceCoverage(
+                source="philarchive-oai",
+                status="success",
+                checked_at=oai_snapshot.checked_at,
+                detail=(
+                    "完整跟随 resumptionToken；"
+                    f"收割 {oai_snapshot.harvested_records} 条，精确窗口内 "
+                    f"{oai_snapshot.records_in_exact_window} 条，当前非删除记录 "
+                    f"{len(oai_snapshot.records_by_key)} 条"
+                ),
+            ),
+        )
+    elif config.philarchive_oai.enabled:
+        coverage += (
+            SourceCoverage(
+                source="philarchive-oai",
+                status="failed",
+                checked_at=requested_at,
+                detail=(
+                    "OAI 增量收割失败；未把 OAI 缺失当作排除证据，沿用较宽的候选集。"
+                    f"失败原因：{oai_failure or '未记录'}"
+                ),
+            ),
+        )
+    coverage += tuple(
         SourceCoverage(
             source=f"{source}-bibliography",
             status="failed",
@@ -2067,16 +2409,44 @@ def run_on_demand(
         window_end=window_end,
         coverage=coverage,
         unresolved_count=unresolved_count,
+        unresolved_reason_counts=unresolved_reason_counts,
+        machine_deferred_count=fallback_deferred_count,
+        human_review_items=tuple(human_review_items),
+        oai_narrowing_applied=oai_snapshot is not None,
+    )
+    human_review_required, automatic_retry_required = unresolved_workload_counts(
+        unresolved_reason_counts
     )
     stats = {
         "feed_entries": sum(len(item.entries) for item in feed_snapshots),
         "unique_current_records": len(current_candidates),
         "candidate_records": len(candidates),
+        "candidates_before_oai_narrowing": len(legacy_candidates),
+        "oai_enabled": int(config.philarchive_oai.enabled),
+        "oai_harvest_failed": int(oai_failure is not None),
+        "oai_harvested_records": (
+            oai_snapshot.harvested_records if oai_snapshot is not None else 0
+        ),
+        "oai_records_in_exact_window": (
+            oai_snapshot.records_in_exact_window if oai_snapshot is not None else 0
+        ),
+        "oai_active_record_keys": (
+            len(oai_snapshot.records_by_key) if oai_snapshot is not None else 0
+        ),
+        "oai_deleted_record_keys": (
+            oai_snapshot.deleted_records if oai_snapshot is not None else 0
+        ),
+        "oai_candidate_matches": sum(bool(item.oai_datestamps) for item in current_candidates),
+        "oai_candidates_excluded_without_feed_time_or_year": (
+            len(legacy_candidates) - len(candidates) if oai_snapshot is not None else 0
+        ),
         "candidate_records_without_feed_timestamp": sum(not item.feed_dates for item in candidates),
         "candidate_records_without_any_feed_date_hint": sum(
             not item.feed_dates and not item.feed_year_hints for item in candidates
         ),
         "explicit_unsupported_candidates": len(explicit_unsupported_results),
+        "structured_work_type_conflicts": unresolved_reason_counts["structured_work_type_conflict"],
+        "unknown_structured_work_types": unresolved_reason_counts["unknown_structured_work_type"],
         "skipped_by_feed_hint": len(current_candidates) - len(candidates),
         "doi_hints": len(doi_values),
         "candidate_records_with_conflicting_doi_hints": sum(
@@ -2092,6 +2462,19 @@ def run_on_demand(
         "title_batch_api_values": title_batch_api_values,
         "title_batch_request_upper_bound": title_batch_request_upper_bound,
         "title_batch_resolved_candidates": title_batch_resolved_count,
+        "title_batch_terminal_unresolved_candidates": title_batch_terminal_unresolved_count,
+        "title_batch_no_openalex_title_candidate": sum(
+            reason == "no_openalex_title_candidate"
+            for reason in fallback_reason_by_source_id.values()
+        ),
+        "title_batch_openalex_identity_mismatch_candidates": sum(
+            reason == "openalex_identity_mismatch"
+            for reason in fallback_reason_by_source_id.values()
+        ),
+        "title_batch_ambiguous_identity_candidates": sum(
+            reason == "ambiguous_openalex_identity_matches"
+            for reason in fallback_reason_by_source_id.values()
+        ),
         "openalex_batch_failures": openalex_batch_failures,
         "bibliographic_source_circuits_open": len(bibliographic_source_failures),
         "bibliographic_source_circuit_skips": sum(circuit_skip_counts.values()),
@@ -2107,6 +2490,39 @@ def run_on_demand(
         "fallback_remote_candidates": len(fallback_remote_candidates),
         "fallback_queried": len(fallback_remote_selected),
         "fallback_deferred": fallback_deferred_count,
+        "fallback_deferred_with_doi_hint": sum(
+            bool(item.doi_hints) for item in fallback_deferred_candidates
+        ),
+        "fallback_deferred_without_doi_hint": sum(
+            not item.doi_hints for item in fallback_deferred_candidates
+        ),
+        "fallback_deferred_with_feed_year_hint": sum(
+            bool(item.feed_year_hints) for item in fallback_deferred_candidates
+        ),
+        "fallback_deferred_without_feed_date_or_year_hint": sum(
+            not item.feed_dates and not item.feed_year_hints
+            for item in fallback_deferred_candidates
+        ),
+        "fallback_deferred_with_work_type_hint": sum(
+            bool(item.work_type_hints) for item in fallback_deferred_candidates
+        ),
+        "fallback_deferred_native_arrival_eligible": sum(
+            _native_arrival_eligible(item, window_start, window_end)
+            for item in fallback_deferred_candidates
+        ),
+        "fallback_deferred_after_no_openalex_title_candidate": sum(
+            fallback_reason_by_source_id.get(item.source_id) == "no_openalex_title_candidate"
+            for item in fallback_deferred_candidates
+        ),
+        "fallback_deferred_after_openalex_identity_mismatch": sum(
+            fallback_reason_by_source_id.get(item.source_id) == "openalex_identity_mismatch"
+            for item in fallback_deferred_candidates
+        ),
+        "fallback_deferred_after_ambiguous_openalex_identity_matches": sum(
+            fallback_reason_by_source_id.get(item.source_id)
+            == "ambiguous_openalex_identity_matches"
+            for item in fallback_deferred_candidates
+        ),
         "openalex_logical_request_upper_bound": (
             doi_batch_request_upper_bound
             + title_batch_request_upper_bound
@@ -2122,6 +2538,9 @@ def run_on_demand(
             for item in works.values()
         ),
         "matched": sum(item.decision is MatchDecision.NOTIFY for item in matches),
+        "machine_deferred": fallback_deferred_count,
+        "human_review_required": human_review_required,
+        "automatic_retry_required": automatic_retry_required,
         "unresolved": unresolved_count,
     }
     cache_stats_after = (
@@ -2162,6 +2581,7 @@ def run_weekly(
     dry_run: bool = False,
     feed_loader: FeedLoader = load_philpapers_feed,
     resolver: CandidateResolver = resolve_bibliography,
+    oai_loader: OAIWindowLoader = load_philarchive_oai_window,
     report_writer: ReportWriter = write_report_atomic,
     before_commit: Callable[[], None] | None = None,
     defer_uncertain_until_later_window: bool = False,
@@ -2206,6 +2626,19 @@ def run_weekly(
 
     feed_snapshots = _load_all_feeds(config, checked_at=started_at, loader=feed_loader)
     current_candidates = merge_feed_snapshots(feed_snapshots)
+    oai_snapshot: OAIWindowSnapshot | None = None
+    oai_failure: str | None = None
+    if config.philarchive_oai.enabled:
+        try:
+            oai_snapshot = oai_loader(
+                window_start,
+                window_end,
+                config.philarchive_oai.endpoint,
+            )
+        except OAIError as error:
+            oai_failure = str(error)
+        else:
+            current_candidates = enrich_candidates_with_oai(current_candidates, oai_snapshot)
     current_by_key = {(item.source, item.source_id): item for item in current_candidates}
     current_ids = {item.source_id for item in current_candidates}
     known_ids = state.known_source_ids(SOURCE_NAME, current_ids)
@@ -2252,6 +2685,7 @@ def run_weekly(
     works: dict[str, WorkRecord] = {}
     source_to_work: dict[tuple[str, str], str] = {}
     unresolved_updates: list[UnresolvedUpdate] = []
+    human_review_items: list[HumanReviewItem] = []
     outcomes: list[ProcessingOutcome] = []
     for result in effective_results:
         key = (result.candidate.source, result.candidate.source_id)
@@ -2268,6 +2702,16 @@ def run_weekly(
                     next_retry_at=started_at + timedelta(days=config.unresolved_retry_days),
                 )
             )
+            if result.reason_code in HUMAN_REVIEW_REASON_CODES:
+                display = split_display_bibliography(result.candidate.display_title)
+                human_review_items.append(
+                    HumanReviewItem(
+                        title=display.title,
+                        author_text=display.author_text or None,
+                        stable_url=result.candidate.stable_url,
+                        reason_code=result.reason_code,
+                    )
+                )
             outcomes.append(
                 ProcessingOutcome(
                     source=result.candidate.source,
@@ -2283,6 +2727,57 @@ def run_weekly(
             result.work if current_work is None else _merge_work(current_work, result.work)
         )
 
+    for work_id, work in tuple(works.items()):
+        failure = WORK_TYPE_FAILURE_DETAILS.get(work.work_type_status)
+        if failure is None:
+            continue
+        reason_code, detail = failure
+        for key, source_work_id in tuple(source_to_work.items()):
+            if source_work_id != work_id:
+                continue
+            source, source_id = key
+            unresolved_updates.append(
+                UnresolvedUpdate(
+                    source=source,
+                    source_id=source_id,
+                    reason_code=reason_code,
+                    detail=detail,
+                    attempted_at=started_at,
+                    next_retry_at=started_at + timedelta(days=config.unresolved_retry_days),
+                )
+            )
+            human_review_items.append(
+                HumanReviewItem(
+                    title=work.title,
+                    author_text="; ".join(work.authors) or None,
+                    stable_url=work.stable_url,
+                    reason_code=reason_code,
+                )
+            )
+            outcomes.append(
+                ProcessingOutcome(
+                    source=source,
+                    source_id=source_id,
+                    status="unresolved",
+                    work_id=None,
+                )
+            )
+            del source_to_work[key]
+        del works[work_id]
+
+    unresolved_reason_counts = {
+        reason_code: sum(item.reason_code == reason_code for item in unresolved_updates)
+        for reason_code in (
+            "semantic_identity_review_required",
+            "identifier_conflict",
+            "structured_work_type_conflict",
+            "unknown_structured_work_type",
+            "old_work_check_incomplete",
+        )
+    }
+    human_review_required, automatic_retry_required = unresolved_workload_counts(
+        unresolved_reason_counts
+    )
     matches: list[MatchRecord] = []
     match_by_work: dict[str, MatchRecord] = {}
     notifications: list[Notification] = []
@@ -2329,7 +2824,34 @@ def run_weekly(
             detail=f"分类 feed 完整读取；条目数 {len(item.entries)}",
         )
         for item in feed_snapshots
-    ) + tuple(
+    )
+    if oai_snapshot is not None:
+        coverage += (
+            SourceCoverage(
+                source="philarchive-oai",
+                status="success",
+                checked_at=oai_snapshot.checked_at,
+                detail=(
+                    "完整跟随 resumptionToken；"
+                    f"收割 {oai_snapshot.harvested_records} 条，精确窗口内 "
+                    f"{oai_snapshot.records_in_exact_window} 条，当前非删除记录 "
+                    f"{len(oai_snapshot.records_by_key)} 条"
+                ),
+            ),
+        )
+    elif config.philarchive_oai.enabled:
+        coverage += (
+            SourceCoverage(
+                source="philarchive-oai",
+                status="failed",
+                checked_at=started_at,
+                detail=(
+                    "OAI 增量收割失败；周报仍依赖基线首次观察与外部书目核验。"
+                    f"失败原因：{oai_failure or '未记录'}"
+                ),
+            ),
+        )
+    coverage += tuple(
         SourceCoverage(
             source=f"{source}-bibliography",
             status="failed",
@@ -2347,11 +2869,22 @@ def run_weekly(
         window_end=window_end,
         coverage=coverage,
         unresolved_count=len(unresolved_updates),
+        unresolved_reason_counts=unresolved_reason_counts,
+        human_review_items=tuple(human_review_items),
     )
     stats = {
         "feed_entries": sum(len(item.entries) for item in feed_snapshots),
         "unique_current_records": len(current_candidates),
         "new_source_records": len(new_candidates),
+        "oai_enabled": int(config.philarchive_oai.enabled),
+        "oai_harvest_failed": int(oai_failure is not None),
+        "oai_harvested_records": (
+            oai_snapshot.harvested_records if oai_snapshot is not None else 0
+        ),
+        "oai_records_in_exact_window": (
+            oai_snapshot.records_in_exact_window if oai_snapshot is not None else 0
+        ),
+        "oai_candidate_matches": sum(bool(item.oai_datestamps) for item in current_candidates),
         "retry_records": len(retries),
         "processed_candidates": len(to_process),
         "resolved_works": len(works),
@@ -2368,6 +2901,11 @@ def run_weekly(
         ),
         "notified": len(notifications),
         "unresolved": len(unresolved_updates),
+        "machine_deferred": 0,
+        "human_review_required": human_review_required,
+        "automatic_retry_required": automatic_retry_required,
+        "structured_work_type_conflicts": unresolved_reason_counts["structured_work_type_conflict"],
+        "unknown_structured_work_types": unresolved_reason_counts["unknown_structured_work_type"],
         "deferred_to_later_window": len(deferred_keys),
         "bibliographic_source_circuits_open": len(bibliographic_source_failures),
         "bibliographic_source_circuit_skips": sum(circuit_skip_counts.values()),

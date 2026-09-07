@@ -5,9 +5,15 @@ import pytest
 
 from philosophy_frontier_monitor import http_retry
 from philosophy_frontier_monitor.identity import IdentityReviewRequired
-from philosophy_frontier_monitor.sources.crossref import find_exact_work as find_crossref
+from philosophy_frontier_monitor.sources.crossref import (
+    find_exact_work as find_crossref,
+)
+from philosophy_frontier_monitor.sources.crossref import (
+    parse_crossref_work,
+)
 from philosophy_frontier_monitor.sources.openalex import (
     OpenAlexError,
+    parse_openalex_work,
 )
 from philosophy_frontier_monitor.sources.openalex import (
     find_exact_work as find_openalex,
@@ -26,6 +32,31 @@ def test_splits_common_philpapers_feed_title():
 
     assert result.author_text == "Smith, Colin C."
     assert result.title == "Being as Common in Plato's _Theaetetus_"
+
+
+def test_bibliographic_adapters_mark_malformed_type_fields_unrecognized():
+    retrieved_at = datetime(2026, 9, 7, tzinfo=UTC)
+    crossref = parse_crossref_work(
+        {
+            "DOI": "10.1234/malformed-type",
+            "title": ["A Paper"],
+            "type": {"unexpected": "object"},
+        },
+        retrieved_at=retrieved_at,
+    )
+    openalex = parse_openalex_work(
+        {
+            "id": "https://openalex.org/W-MALFORMED",
+            "title": "A Paper",
+            "type": ["article"],
+        },
+        retrieved_at=retrieved_at,
+    )
+
+    assert crossref is not None
+    assert crossref.work_type == "unrecognized"
+    assert openalex is not None
+    assert openalex.work_type == "unrecognized"
 
 
 def test_crossref_accepts_only_exact_title_and_author():

@@ -36,9 +36,15 @@
 
 为了避免默认不支持的书评进入外部书目核验，程序可以在去除 PhilPapers 的作者前缀后，只按题名
 开头的明确书目形式标签识别 `Review of`、`Book Review`、`Rezension`、`Compte rendu`、`Reseña`、
-`Recensione`、`Resenha` 或“书评：”。命中时本地记为 `work_type=review`，不发送 Crossref／OpenAlex
+`Recensione`、`Resenha` 或“书评：”。命中时本地记为 `work_type=book-review`，不发送 Crossref／OpenAlex
 请求、不进入未解决重试，并由与周报共用的支持类型门槛排除。不得根据论文观点、题目主题、作者、
 期刊声誉或“看起来像评论”进行模型推断；没有明确标签的记录仍走正常书目核验。
+
+Crossref／OpenAlex 返回结构化类型时，程序必须按固定来源词表规范化并保留证据。OpenAlex 的
+`review` 表示综述论文，规范为支持的 `review-article`；`book-review` 才表示默认排除的书评。
+如果多个结构化来源在“支持论文形式／不支持形式”之间冲突，本次不推送并形成待核验原因；未知类型
+同样不能默认成 article。完全没有结构化类型时，仍可使用 PhilPapers 当前提醒流到达证据，但报告
+必须把 article 标为候选默认值而不是来源断言。详见[结构化作品类型政策](work-type-policy.md)。
 
 ## 3. 两道必要门槛
 
@@ -86,7 +92,8 @@ notify = (confirmed_new OR confirmed_source_arrival)
 采用这一状态必须同时满足：
 
 - 来源记录来自已配置分类的当前 PhilPapers RSS／Atom 提醒流；
-- 记录是相对于周报基线新增，或者在即时模式中仍处于来源当前提醒集合；
+- 记录是相对于周报基线新增，或者在即时模式中具有窗口内 feed 时间、窗口年份提示或窗口内
+  PhilArchive OAI 记录变化证据；
 - description 的书目年份没有明确表明作品早于窗口；
 - DOI、来源 ID、题目／作者作品同一性核验没有找到更早版本或旧期刊记录；
 - Crossref／OpenAlex 查无记录，而不是请求失败、限流或响应无法解析；
@@ -108,8 +115,9 @@ article 均可采用这一通道。它们不因为尚未取得 DOI、卷期页�
 - 数据库 `created` 或 `indexed` 字段，但无法确认其语义是作品首次公开；
 - 期刊旧卷期页面本周被重新发布或修复。
 
-这些证据不能生成 `confirmed_new`。PhilPapers 当前提醒流在完成旧作检查后可以生成范围更窄的
-`confirmed_source_arrival`；其他来源的索引或更新时间仍只能触发候选核验。
+这些证据不能生成 `confirmed_new`。PhilPapers 当前提醒流与同一 `/rec/` 记录的 PhilArchive OAI
+窗口变化证据，在完成旧作检查后可以共同生成范围更窄的 `confirmed_source_arrival`；OAI
+`datestamp` 仍不得写入 `publication_date`。其他来源的索引或更新时间仍只能触发候选核验。
 
 ### 4.4 日期冲突
 
@@ -161,10 +169,18 @@ article 均可采用这一通道。它们不因为尚未取得 DOI、卷期页�
 不能证明论文在窗口内发表。真实 PhilPapers RSS 条目目前可能完全不提供这些日期；此时程序可以
 只在内存中从 description 开头的书目信息提取第一个独立四位年份，作为更宽的候选年份提示，随后
 立即丢弃 description。该年份只用于排除明显不与窗口年份相交的条目，不能写成论文发表日期。
-时间戳和年份提示都缺失或无法可靠解析的条目仍进入候选。独立日期证据存在时使用
-`confirmed_new`；外部服务尚未收录但旧作检查完整且没有发现更早记录时，可以使用
-`confirmed_source_arrival`。明显早于窗口的旧 feed 条目可以不发起书目查询；近期重新分类的旧
-论文即使 feed 提示与窗口相交，也会被书目年份、共同标识符或作品同一性证据排除。
+时间戳和年份提示都缺失时，启用的 PhilArchive OAI 增量适配器必须完整跟随
+`resumptionToken`，以共享的 `/rec/` 标识求交，并在本地按精确半开窗口过滤 header
+`datestamp`。只有窗口内、非删除的 OAI 记录继续进入即时书目核验；OAI `dc:date` 若明显早于
+窗口，可以在外部查询前排除旧作补录。没有进入 OAI 增量集合的无日期记录只是不具备本次滚动
+窗口的正面候选证据，不能据此永久标成旧作；程序必须统计并披露这一缩减。由于 OAI 只覆盖开放
+记录，报告也必须说明非开放且完全无日期的 PhilPapers 记录可能遗漏。
+
+若 OAI 请求失败、分页不完整或无法解析，不能把 OAI 未命中当作排除证据；即时模式退回原有的宽
+候选流程并报告覆盖失败。独立日期证据存在时使用 `confirmed_new`；外部服务尚未收录但旧作检查
+完整且没有发现更早记录时，可以使用 `confirmed_source_arrival`。明显早于窗口的旧 feed 条目
+可以不发起书目查询；近期重新分类的旧论文即使 feed 提示与窗口相交，也会被书目年份、共同标识符
+或作品同一性证据排除。
 
 为防止宽画像、异常 feed 或大量无日期条目造成无界第三方请求，第一版先从 description 中提取
 并规范化可验证的 DOI 链接，再把 DOI 与规范化题目分别用 OpenAlex 同字段 OR 过滤进行小批量
@@ -186,6 +202,18 @@ article 均可采用这一通道。它们不因为尚未取得 DOI、卷期页�
 过期的候选按最早尝试时间轮转。其余计入 `fallback_deferred` 和未完成核验数。报告不得把延期部分
 声称为已经检查，也不得把“未匹配”写成“没有相关论文”。用户可以缩短 `--days` 或明确提高
 `--max-candidates`／`--max-fallback-candidates`。
+
+报告必须把未完成记录拆成三种操作含义，不得只给一个容易误读的总数：
+
+- `machine_deferred`：受本次逐篇远程预算限制而尚未轮到机器核验；不要求用户逐篇判断；
+- `human_review_required`：译名／大幅改题的语义同一性、冲突 DOI、支持与不支持作品类型冲突，
+  或尚未识别的结构化类型；只有这一栏构成实际人工复核工作量；
+- `automatic_retry_required`：书目来源失败导致旧作检查未完成，应由程序在以后运行中自动重试。
+
+产品目标是尽量让 `human_review_required` 保持在个位数，同时继续透明披露机器积压与覆盖缺口。
+不得为了让总数变小而丢弃缺少时间或外部书目证据的候选，也不得把它们改写为“不相关”。
+报告应展开至多 9 条人工复核候选的题名、作者、来源链接和原因；超过时说明未展开数量。远程文本
+必须按不可信 Markdown 转义，机器积压不得进入该清单。
 提高安全上限前必须按[兴趣范围与资源提醒政策](resource-and-scope-warnings.md)区分分类 feed、远程
 API／credits、运行时间、报告长度和模型 token，并说明将要提高的具体上限；不得只用“会很耗
 token”代替可测量的候选数与请求预算。

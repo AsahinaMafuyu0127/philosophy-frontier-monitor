@@ -1,6 +1,6 @@
 # 第三方软件与数据来源声明
 
-最后核验：2026-09-06
+最后核验：2026-09-08
 
 本文件说明 `philosophy-frontier-monitor` 直接依赖的软件，以及运行时访问的学术元数据来源。它不把
 这些软件或数据纳入本项目自身的代码许可证，也不声称取得第三方论文全文、摘要或数据库的所有权。
@@ -80,7 +80,22 @@ OpenAlex 提供的论文位置、PDF URL 或开放获取状态不向本项目转
 项目实现 OAI-PMH `ListRecords`／`resumptionToken` 客户端。协议本身只规定元数据交换方式，不为
 具体仓库记录自动授予统一的内容再分发许可证。每个仓库的记录和全文仍服从其来源权利声明。
 
-## 4. 不属于本项目许可证的内容
+## 4. GitHub 设计参考
+
+本项目对“近期记录”实现做过公开源码对照：
+
+- [sea9401/philosophy-mcp](https://github.com/sea9401/philosophy-mcp/tree/96a39290ac7095db0fe8895b08d3e288c088c73f)，
+  MIT License；其 OAI `from`／`until` 思路是本项目增量入口的直接设计启发；
+- [tamnd/philpapers-cli](https://github.com/tamnd/philpapers-cli/tree/6c8a3b18e0ae41b337d27180b2e741b9d9a32af3)，
+  Apache-2.0 License；用于对照检查无窗口和未消费分页令牌的 `Recent` 实现；
+- [Sfgangloff/co-philosopher](https://github.com/Sfgangloff/co-philosopher/tree/fc9ba00e220419e45c30af47371b5368cfbcd038)，
+  用于对照 RSS 年份与稿本状态提取；核验时 GitHub API 没有返回可确认的 SPDX 仓库许可证。
+
+本仓库没有复制、翻译、修改或捆绑上述项目的源代码；OAI 适配器是独立 Python 实现。引用这些
+项目不使其代码成为本项目 MIT License 的组成部分。固定版本、具体源文件、采用／未采用的设计和
+差异见[设计来源、实现差异与独立贡献](references/design-lineage.md)。
+
+## 5. 不属于本项目许可证的内容
 
 无论维护者最终为项目代码选择何种许可证，它都不自动覆盖：
 
@@ -93,7 +108,7 @@ OpenAlex 提供的论文位置、PDF URL 或开放获取状态不向本项目转
 周报只保存完成识别、日期核验和标签交集所需的最小事实性书目信息。对外分享周报时，分享者仍需
 自行检查其中第三方内容的适用权利。
 
-## 5. 更新责任
+## 6. 更新责任
 
 以下变化发生时必须重新审查本文件和 `references/security-and-privacy.md`：
 

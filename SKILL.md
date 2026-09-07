@@ -118,11 +118,21 @@ Do not require the user to know PhilPapers category names in advance.
    taxonomy and configured feeds, but does not require a weekly baseline or
    state database. Read every configured feed, use feed timestamps or an
    in-memory bibliography-year and early-work-status hints to bound and
-   prioritize candidates. Before any OpenAlex/Crossref batch or fallback,
+   prioritize candidates. When `sources.philarchive_oai.enabled` is true,
+   harvest the rolling window with a one-datestamp-unit overlap, follow every
+   `resumptionToken`, filter the exact half-open window locally, and join only
+   by the shared PhilPapers/PhilArchive `/rec/` key. Keep the OAI header
+   datestamp separate from `dc:date`; it proves a source-record change, never a
+   publication date. For feed records lacking both timestamp and year, a
+   successful complete OAI harvest may retain only records changed in the
+   window. Report the excluded count and the open-access-only coverage limit.
+   If OAI fails, do not use absence as exclusion evidence: retain the wider
+   candidate set and disclose the source failure. Before any OpenAlex/Crossref
+   batch or fallback,
    recognize only explicit bibliographic-form labels for unsupported reviews
    (`Review of`, `Book Review`, `Rezension`, `Compte rendu`, `Reseña`,
    `Recensione`, `Resenha`, or `书评：`) at the start of the actual title. Mark
-   them locally as `review` and let the shared supported-work-type gate reject
+   them locally as `book-review` and let the shared supported-work-type gate reject
    them without a retry; do not infer unsupported type from topic, venue,
    writing style, author reputation, or a merely critical argument. Treat
    Crossref and OpenAlex as optional bibliographic
@@ -133,6 +143,11 @@ Do not require the user to know PhilPapers category names in advance.
    as recent source arrival. Include manuscripts, working papers, preprints,
    author-accepted manuscripts, and forthcoming articles when they satisfy the
    same arrival and old-work rules.
+   When Crossref or OpenAlex returns a structured work type, apply
+   [references/work-type-policy.md](references/work-type-policy.md). Preserve
+   source-specific type evidence, distinguish OpenAlex `book-review` from its
+   `review` article type, and withhold supported-versus-unsupported conflicts
+   or unknown controlled values instead of defaulting them to `article`.
    Batch DOI and normalized-title candidates through OpenAlex, then use bounded
    Crossref/OpenAlex individual lookup for unresolved fallbacks. Compare
    bibliographic identity by a hierarchy of shared identifiers, compatible
@@ -158,7 +173,7 @@ Do not require the user to know PhilPapers category names in advance.
    or checkpoints in this mode. Repeated on-demand pulls and a later weekly
    report may therefore contain the same paper; this is intentional. Do not
    silently turn an explicit on-demand request into `weekly-run` or `catch-up`.
-   Show count-only progress for feed loading, candidate selection, DOI/title
+   Show count-only progress for feed loading, OAI harvesting, candidate selection, DOI/title
    batches, and individual fallbacks; never include paper titles, descriptions,
    query URLs, or credentials in progress output.
    Reuse bounded HTTP connection pools across category feeds and individual

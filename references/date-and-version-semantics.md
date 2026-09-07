@@ -255,6 +255,9 @@ RSS／Atom 条目日期在即时模式中只是候选选择时间，必须与作
   发起本次书目核验，也可以在旧作检查完成后保存为来源提醒时间，但不成为出版日期；
 - `feed_candidate_year`：当真实 RSS 没有时间字段时，从 description 开头书目串提取的第一个
   独立四位年份，只能把候选限制到与窗口相交的年份；其精度不足以证明七日窗口内新出；
+- `source_datestamp`：PhilArchive OAI header 的记录创建、修改或删除时间。增量收割必须向前重叠
+  一个 datestamp 单位、完整跟随 `resumptionToken`，再在本地按精确半开窗口过滤；它只能证明
+  来源记录在窗口内变化，不能证明作品在窗口内发表；
 - `publication_date`：Crossref、OpenAlex、出版方或经批准来源给出的作品发表／公开日期，进入
   `confirmed_new` 判断；允许在 `confirmed_source_arrival` 记录上保持为 `null`；
 - `availability_date`：作品新近进入 PhilPapers 当前提醒流的来源时间；没有来源条目时间时，只能
@@ -262,7 +265,10 @@ RSS／Atom 条目日期在即时模式中只是候选选择时间，必须与作
 - `request_time`：用户触发即时拉取的时刻，只定义窗口右端；
 - `observed_at`：程序读取 feed 的时刻，不证明发表。
 
-程序不得把 `feed_candidate_time`、`feed_candidate_year` 或 `observed_at` 复制到
-`publication_date`，也不得在报告中把它们称为“首次发表日期”。两者都缺失或无法可靠解析时，
-候选不能仅因此被排除；外部出版日期存在时形成 `confirmed_new`，外部数据库查无记录而非访问
-失败、且旧作检查没有发现更早证据时，可以形成 `confirmed_source_arrival`。
+程序不得把 `feed_candidate_time`、`feed_candidate_year`、`source_datestamp` 或 `observed_at`
+复制到 `publication_date`，也不得在报告中把它们称为“首次发表日期”。feed 时间与年份都缺失
+时，成功且完整的 OAI 窗口收割可以作为即时模式的正面候选门槛：同一 `/rec/` 记录在窗口内发生
+变化才继续核验，未命中只从本次滚动候选集移除，不形成永久的 `not_new` 判断。若 OAI 失败或
+不完整，则不能依据未命中排除，必须回退到宽候选并披露覆盖失败。外部出版日期存在时形成
+`confirmed_new`；外部数据库查无记录而非访问失败、且旧作检查没有发现更早证据时，可以形成
+`confirmed_source_arrival`。

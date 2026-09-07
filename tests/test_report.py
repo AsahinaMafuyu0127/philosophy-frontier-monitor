@@ -9,8 +9,15 @@ from philosophy_frontier_monitor.models import (
     DateValue,
     FreshnessStatus,
     WorkRecord,
+    WorkTypeEvidence,
+    WorkTypeStatus,
 )
-from philosophy_frontier_monitor.report import SourceCoverage, render_weekly_report
+from philosophy_frontier_monitor.report import (
+    HumanReviewItem,
+    SourceCoverage,
+    render_on_demand_report,
+    render_weekly_report,
+)
 
 START = datetime(2026, 8, 31, tzinfo=UTC)
 END = datetime(2026, 9, 7, tzinfo=UTC)
@@ -37,6 +44,16 @@ def test_report_states_factual_match_and_date_evidence(taxonomy):
         publication_date=DateValue(date(2026, 9, 3), DatePrecision.DAY, "crossref"),
         freshness_event="recently_published_online",
         container_title="Example Journal",
+        work_type="article",
+        work_type_status=WorkTypeStatus.CONFIRMED,
+        work_type_evidence=(
+            WorkTypeEvidence(
+                source="crossref",
+                raw_type="journal-article",
+                normalized_type="article",
+                source_record_id="10.1234/example",
+            ),
+        ),
     )
     match = match_work(work, profile, now=END)
 
@@ -54,6 +71,8 @@ def test_report_states_factual_match_and_date_evidence(taxonomy):
     assert "Plato: Theaetetus" in report
     assert "2026-09-03" in report
     assert "https://doi.org/10.1234/example" in report
+    assert "类型证据状态：confirmed" in report
+    assert "crossref：journal-article → article" in report
     assert "不评价论文质量" in report
     assert "不承诺对全球哲学新作的穷尽覆盖" in report
 
@@ -113,7 +132,65 @@ def test_report_discloses_unresolved_candidates(taxonomy):
         window_end=END,
         coverage=(SourceCoverage("fixture", "success", END, "complete"),),
         unresolved_count=2,
+        unresolved_reason_counts={"structured_work_type_conflict": 1},
     )
 
-    assert "## 尚待核验" in report
+    assert "## 核验状态" in report
     assert "另有 2 条" in report
+    assert "需要人工复核：1 条" in report
+    assert "尚未分类的内部核验状态：1 条" in report
+    assert "结构化来源在支持论文形式与不支持形式之间冲突：1 条" in report
+
+
+def test_on_demand_report_discloses_unknown_structured_work_types(taxonomy):
+    profile = build_interest_profile("我研究《泰阿泰德》。", taxonomy, now=START)
+
+    report = render_on_demand_report(
+        profile=profile,
+        snapshot=taxonomy,
+        works={},
+        matches=(),
+        window_start=START,
+        window_end=END,
+        coverage=(SourceCoverage("fixture", "success", END, "complete"),),
+        unresolved_count=3,
+        unresolved_reason_counts={"unknown_structured_work_type": 2},
+    )
+
+    assert "## 本次核验状态" in report
+    assert "需要人工复核：2 条" in report
+    assert "尚未分类的内部核验状态：1 条" in report
+    assert "来源返回当前词表尚未识别的结构化作品类型：2 条" in report
+
+
+def test_on_demand_report_separates_machine_backlog_from_human_review(taxonomy):
+    profile = build_interest_profile("我研究《泰阿泰德》。", taxonomy, now=START)
+
+    report = render_on_demand_report(
+        profile=profile,
+        snapshot=taxonomy,
+        works={},
+        matches=(),
+        window_start=START,
+        window_end=END,
+        coverage=(SourceCoverage("fixture", "success", END, "complete"),),
+        unresolved_count=244,
+        unresolved_reason_counts={"structured_work_type_conflict": 2},
+        machine_deferred_count=242,
+        human_review_items=(
+            HumanReviewItem(
+                title="A disputed paper",
+                author_text="Ada Scholar",
+                stable_url="https://philpapers.org/rec/TEST",
+                reason_code="structured_work_type_conflict",
+            ),
+        ),
+    )
+
+    assert "机器核验积压：242 条" in report
+    assert "不要求用户逐篇判断" in report
+    assert "需要人工复核：2 条" in report
+    assert "尚未分类的内部核验状态" not in report
+    assert "需要人工复核的候选" in report
+    assert "A disputed paper" in report
+    assert "https://philpapers.org/rec/TEST" in report

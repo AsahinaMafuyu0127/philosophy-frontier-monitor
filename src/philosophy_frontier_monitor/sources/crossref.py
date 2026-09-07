@@ -108,12 +108,20 @@ def parse_crossref_work(item: dict[str, Any], *, retrieved_at: datetime) -> Cros
     if doi is None or title is None:
         return None
     publication_date, publication_event = _publication_evidence(item, retrieved_at)
+    raw_work_type = item.get("type")
+    work_type = (
+        raw_work_type.strip()
+        if isinstance(raw_work_type, str) and raw_work_type.strip()
+        else "unrecognized"
+        if raw_work_type is not None
+        else None
+    )
     return CrossrefWork(
         doi=doi,
         title=title,
         authors=_authors(item),
         container_title=_first_text(item, "container-title"),
-        work_type=item.get("type"),
+        work_type=work_type,
         stable_url=f"https://doi.org/{doi}",
         publication_date=publication_date,
         publication_event=publication_event,

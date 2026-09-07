@@ -82,9 +82,16 @@ taxonomy 中实际存在的受控分类，具有分类 ID、规范名称和父�
 
 `work_type` 优先采用来源提供的结构化书目类型。来源没有结构化类型时，本地规则只允许识别题名中
 明确出现的受控书目形式标签：当前包括英语、德语、法语、西班牙语、意大利语、葡萄牙语和中文的
-书评／评论前缀，并统一规范为 `review`。这类记录在调用 Crossref／OpenAlex 之前形成终局
+书评／评论前缀，并统一规范为 `book-review`。这类记录在调用 Crossref／OpenAlex 之前形成终局
 `unsupported_work_type`，不进入 `unresolved_records`。不得依据论文主题、作者、期刊名称或模型对
 内容的判断推断作品类型；没有明确标签的可疑记录仍应保留，等待结构化来源证据，而不是静默排除。
+
+`work_type_status` 取值为 `confirmed`、`compatible`、`explicit_label`、`defaulted`、`unknown` 或
+`conflict`。`work_type_evidence[]` 逐项保存来源、经安全处理的原始类型、统一类型、来源记录 ID 和
+取得方法。结构化未知值和支持／不支持冲突不得降级成默认 article；它们分别形成
+`unknown_structured_work_type` 和 `structured_work_type_conflict`。完全缺少结构化类型时仍允许当前
+PhilPapers 提醒流走 `defaulted` 候选路径，但报告必须说明这不是来源断言。完整映射与门槛见
+[结构化作品类型政策](work-type-policy.md)。
 
 作者、DOI、摘要或出版日期缺失时可以为 `null`。但是没有足够时间证据的记录不能设为 `confirmed_new`，没有受控分类的记录不能设为 `matched`。
 
@@ -103,7 +110,15 @@ canonical:
       orcid: null
       position: 1
   language: "en"
-  work_type: "journal_article"
+  work_type: "article"
+
+work_type_status: "confirmed"
+work_type_evidence:
+  - source: "crossref"
+    raw_type: "journal-article"
+    normalized_type: "article"
+    source_record_id: "10.0000/example"
+    method: "structured"
 
 identifiers:
   doi: "10.0000/example"
@@ -631,8 +646,9 @@ schema 4 使 `pfm catch-up` 能在跨兴趣版本的多个缺口中逐周选择�
 `display_title` 只用于书目查询和故障复核；远程文本写入 Markdown 前必须折叠换行并转义结构字符。
 
 `pfm pull-now` 不打开周报状态数据库，也不写入上述任何表。当前 feed 条目、候选 feed 日期、从
-description 书目串提取的候选年份与规范化 DOI、临时作品合并、匹配结果和未解决原因仅存在于
-本次进程中；description 本身、候选年份和只用于查询的中间标题批次均不进入命令报告。如果用户
+description 书目串提取的候选年份与规范化 DOI、OAI header datestamp、OAI `dc:date`／`dc:type`
+提示、临时作品合并、匹配结果和未解决原因仅存在于本次进程中；description 本身、候选年份和只
+用于查询的中间标题批次均不进入命令报告。如果用户
 另行保存即时报告文件，该文件按私人报告处理，但它仍不成为周报运行记录或通知历史。
 
 默认即时命令另行使用 Git 忽略目录中的 `bibliography-cache.sqlite3`。它与上述周报 schema 没有

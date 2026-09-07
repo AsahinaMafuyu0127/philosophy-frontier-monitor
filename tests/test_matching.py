@@ -88,6 +88,34 @@ def test_working_paper_is_a_supported_frontier_work_type(taxonomy):
     assert match_work(work, profile, now=NOW).decision is MatchDecision.NOTIFY
 
 
+def test_structured_review_article_is_supported_but_book_review_is_not(taxonomy):
+    profile = build_interest_profile("我研究《泰阿泰德》。", taxonomy, now=NOW)
+    original = make_work("74924")
+    review_article = WorkRecord(
+        work_id=original.work_id,
+        title=original.title,
+        authors=original.authors,
+        observed_at=original.observed_at,
+        freshness_status=original.freshness_status,
+        category_status=original.category_status,
+        category_assignments=original.category_assignments,
+        work_type="review-article",
+    )
+    book_review = WorkRecord(
+        work_id=original.work_id,
+        title=original.title,
+        authors=original.authors,
+        observed_at=original.observed_at,
+        freshness_status=original.freshness_status,
+        category_status=original.category_status,
+        category_assignments=original.category_assignments,
+        work_type="book-review",
+    )
+
+    assert match_work(review_article, profile, now=NOW).decision is MatchDecision.NOTIFY
+    assert match_work(book_review, profile, now=NOW).decision is MatchDecision.UNSUPPORTED_WORK_TYPE
+
+
 def test_book_is_notified_neither_by_freshness_nor_category_overlap(taxonomy):
     profile = build_interest_profile("我研究《泰阿泰德》。", taxonomy, now=NOW)
     work = make_work("74924")

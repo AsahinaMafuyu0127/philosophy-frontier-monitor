@@ -74,13 +74,21 @@ def parse_openalex_work(item: dict[str, Any], *, retrieved_at: datetime) -> Open
                 source_record_id=openalex_id,
                 retrieved_at=retrieved_at,
             )
+    raw_work_type = item.get("type")
+    work_type = (
+        raw_work_type.strip()
+        if isinstance(raw_work_type, str) and raw_work_type.strip()
+        else "unrecognized"
+        if raw_work_type is not None
+        else None
+    )
     return OpenAlexWork(
         openalex_id=openalex_id,
         doi=normalize_doi(item.get("doi")),
         title=title.strip(),
         authors=authors,
         publication_date=publication_date,
-        work_type=item.get("type"),
+        work_type=work_type,
         stable_url=item.get("primary_location", {}).get("landing_page_url") or openalex_id,
         raw=item,
     )

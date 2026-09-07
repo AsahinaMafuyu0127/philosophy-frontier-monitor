@@ -41,6 +41,15 @@ class CategoryStatus(StrEnum):
     EXPIRED_UNCLASSIFIED = "expired_unclassified"
 
 
+class WorkTypeStatus(StrEnum):
+    CONFIRMED = "confirmed"
+    COMPATIBLE = "compatible"
+    EXPLICIT_LABEL = "explicit_label"
+    DEFAULTED = "defaulted"
+    UNKNOWN = "unknown"
+    CONFLICT = "conflict"
+
+
 class MappingSource(StrEnum):
     EXACT_NAME = "exact_name"
     VERIFIED_ALIAS = "verified_alias"
@@ -177,6 +186,15 @@ class CategoryAssignment:
 
 
 @dataclass(frozen=True, slots=True)
+class WorkTypeEvidence:
+    source: str
+    raw_type: str
+    normalized_type: str | None
+    source_record_id: str | None = None
+    method: str = "structured"
+
+
+@dataclass(frozen=True, slots=True)
 class WorkRecord:
     work_id: str
     title: str
@@ -187,7 +205,9 @@ class WorkRecord:
     category_assignments: tuple[CategoryAssignment, ...] = ()
     doi: str | None = None
     source_ids: tuple[tuple[str, str], ...] = ()
-    work_type: str = "journal_article"
+    work_type: str = "article"
+    work_type_status: WorkTypeStatus = WorkTypeStatus.DEFAULTED
+    work_type_evidence: tuple[WorkTypeEvidence, ...] = ()
     publication_date: DateValue | None = None
     availability_date: DateValue | None = None
     freshness_event: str | None = None

@@ -1,9 +1,15 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 
 from philosophy_frontier_monitor import http_retry
-from philosophy_frontier_monitor.sources.philarchive_oai import iter_records, parse_oai_page
+from philosophy_frontier_monitor.sources.philarchive_oai import (
+    iter_records,
+    load_recent_window,
+    parse_oai_page,
+    record_key,
+)
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
 
@@ -57,3 +63,52 @@ def test_oai_page_retries_transient_server_failure_without_losing_page(monkeypat
 
     assert calls == 2
     assert [record.identifier for record in records] == ["oai:philarchive:EXAMPLE-2"]
+
+
+def test_record_key_joins_philpapers_and_philarchive_identifiers():
+    assert record_key("https://philpapers.org/rec/ABCDEF-2") == "abcdef-2"
+    assert record_key("https://philarchive.org/rec/ABCDEF-2") == "abcdef-2"
+    assert record_key("oai:philarchive.org/rec/ABCDEF-2") == "abcdef-2"
+
+
+def test_recent_window_follows_all_pages_and_applies_exact_local_window():
+    first = (
+        (FIXTURE_DIR / "oai_page_1.xml")
+        .read_text(encoding="utf-8")
+        .replace("oai:philarchive:EXAMPLE-1", "oai:philarchive.org/rec/EXAMPLE-1")
+    )
+    second = (
+        (FIXTURE_DIR / "oai_page_2.xml")
+        .read_text(encoding="utf-8")
+        .replace("oai:philarchive:EXAMPLE-2", "oai:philarchive.org/rec/EXAMPLE-2")
+    )
+
+    def handler(request):
+        body = second if "resumptionToken" in request.url.params else first
+        return httpx.Response(200, text=body, request=request)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        snapshot = load_recent_window(
+            datetime(2026, 9, 5, tzinfo=UTC),
+            datetime(2026, 9, 6, tzinfo=UTC),
+            client=client,
+        )
+
+    assert snapshot.harvested_records == 2
+    assert snapshot.records_in_exact_window == 1
+    assert snapshot.overlap_records_excluded == 1
+    assert tuple(snapshot.records_by_key) == ("example-2",)
+
+
+def test_no_records_match_is_a_successful_empty_page():
+    page = parse_oai_page(
+        """<?xml version="1.0" encoding="UTF-8"?>
+        <OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/">
+          <responseDate>2026-09-05T00:00:00Z</responseDate>
+          <request verb="ListRecords">https://philarchive.org/oai.pl</request>
+          <error code="noRecordsMatch">No matches</error>
+        </OAI-PMH>"""
+    )
+
+    assert page.records == ()
+    assert page.resumption_token is None

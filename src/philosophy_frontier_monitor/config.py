@@ -59,6 +59,12 @@ class FeedConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class PhilArchiveOAIConfig:
+    enabled: bool
+    endpoint: str
+
+
+@dataclass(frozen=True, slots=True)
 class StorageConfig:
     state_database: Path
     report_directory: Path
@@ -99,6 +105,7 @@ class WatchlistConfig:
     taxonomy_path: Path
     allow_fixture_for_dry_run: bool
     feeds: tuple[FeedConfig, ...]
+    philarchive_oai: PhilArchiveOAIConfig
     crossref_mailto: str | None
     openalex_mailto: str | None
     max_unresolved_attempts: int
@@ -165,6 +172,27 @@ def _optional_mailto(value: object, path: str) -> str | None:
     text = _require_text(value, path)
     if "@" not in text or any(character.isspace() for character in text):
         raise ConfigError(f"{path} must be a valid-looking email address")
+    return text
+
+
+def _philarchive_oai_endpoint(value: object, path: str) -> str:
+    text = _require_text(value, path)
+    try:
+        parsed = urlsplit(text)
+        port = parsed.port
+    except ValueError as error:
+        raise ConfigError(f"{path} is not a valid URL") from error
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname not in {"philarchive.org", "www.philarchive.org"}
+        or port not in {None, 443}
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path != "/oai.pl"
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ConfigError(f"{path} must be the credential-free HTTPS PhilArchive OAI endpoint")
     return text
 
 
@@ -433,6 +461,9 @@ def load_watchlist(path: str | Path) -> WatchlistConfig:
             )
         )
 
+    philarchive_oai = _require_mapping(
+        sources.get("philarchive_oai", {}), "sources.philarchive_oai"
+    )
     crossref = _require_mapping(sources.get("crossref", {}), "sources.crossref")
     openalex = _require_mapping(sources.get("openalex", {}), "sources.openalex")
     retry = _require_mapping(root.get("retry", {}), "retry")
@@ -479,6 +510,13 @@ def load_watchlist(path: str | Path) -> WatchlistConfig:
         ),
         allow_fixture_for_dry_run=bool(taxonomy.get("allow_fixture_for_dry_run", False)),
         feeds=tuple(feeds),
+        philarchive_oai=PhilArchiveOAIConfig(
+            enabled=bool(philarchive_oai.get("enabled", False)),
+            endpoint=_philarchive_oai_endpoint(
+                philarchive_oai.get("endpoint", "https://philarchive.org/oai.pl"),
+                "sources.philarchive_oai.endpoint",
+            ),
+        ),
         crossref_mailto=_optional_mailto(crossref.get("mailto"), "sources.crossref.mailto"),
         openalex_mailto=_optional_mailto(openalex.get("mailto"), "sources.openalex.mailto"),
         max_unresolved_attempts=max_attempts,

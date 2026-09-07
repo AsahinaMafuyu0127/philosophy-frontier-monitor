@@ -271,13 +271,37 @@ ListRecords?metadataPrefix=oai_dc&from=2026-09-04
 
 ### 当前状态
 
-- 作为记录发现源：`provisional`；
+- 作为完整增量候选入口：`experimental`；
 - 作为新论文日期源：`not_suitable`；
 - 作为细粒度分类源：`not_suitable`。
 
+### 2026-09-07 增量适配器
+
+程序现已把这一端点接入周报和即时拉取的共用证据管线：查询窗口向前重叠一个 OAI datestamp
+单位，完整跟随全部 `resumptionToken`，随后在本地按精确 UTC 半开窗口去重和过滤。OAI header
+或 `dc:identifier` 中的 `/rec/` 键可以与 PhilPapers 分类 feed 的记录键确定性求交；删除记录不会
+成为论文候选。`dc:date` 保留为作品年份线索，header `datestamp` 保留为来源记录变化时间，二者
+不会相互覆盖。OAI `dc:type` 当前识别 article、book 和 review；book 由共用作品类型门槛排除。
+
+即时模式只对“feed 时间与书目年份均缺失”的库存使用 OAI 求交缩减；未命中表示缺少本次窗口的
+正面来源变化证据，不表示作品永久为旧。OAI 失败或分页不完整时，程序退回原来的宽候选集，并在
+覆盖记录中报告失败。周报仍以持久基线发现新增记录，OAI 只补充来源变化时间、`dc:date` 和
+`dc:type` 证据，不取代基线。当前安全映射包括 article、book、bookPart、三类 thesis、workingPaper
+和 preprint；笼统的 `review` 不能区分综述论文与书评，保持未知并等待复核。
+
+同日 2026-09-08 00:02（Asia/Shanghai）真实七日即时拉取完整读取 9 个 OAI 逻辑页：含重叠区间
+共 8205 条记录，精确半开窗口内 7628 条，其中当前非删除键 6586 个、删除键 1042 个。2039 条
+兴趣分类当前记录按原规则形成 347 条宽候选；OAI 交集将其缩为 47 条，排除 300 条既无 feed
+时间／年份、又没有窗口内 OAI 变化证据的库存记录。缩减后只有 1 条仍同时缺少 feed 时间戳和年份
+提示，逐篇预算延期为 0，需要人工判断的作品同一性候选为 2 条。这次运行因此把人工负担降至个位
+数，但 OpenAlex 一次题名批量请求返回 HTTP 429 和 34 秒 `Retry-After`；程序没有超过单次等待
+预算，16 条保留为自动重试，不能把这份结果称为外部书目来源完全覆盖。
+
 ### 结论
 
-该端点可以帮助发现发生变化的开放记录，但每条记录必须另行核验首次公开／正式发表日期和 PhilPapers 分类。绝不能直接把 OAI 最近 `datestamp` 结果作为本周新论文推送。
+该端点可以帮助发现发生变化的开放记录，但每条记录必须另行核验首次公开／正式发表日期，并与
+PhilPapers 分类 feed 求交。绝不能直接把 OAI 最近 `datestamp` 结果作为本周正式发表日期；完成
+旧作检查后，它只能支持范围较窄的 `confirmed_source_arrival`。
 
 ## 9. OpenAlex
 
@@ -349,6 +373,31 @@ Python 3.12 请求 OpenAlex Works API 返回 HTTP 200 和 `application/json`。
   `Review of ...`。该次一小时题名调度标记已经到期，因此 OpenAlex 又执行 30 个逻辑请求；Crossref
   为 5 个，全部请求无失败、重试或等待。这说明调度标记只负责短时去重，而非长期缓存来源未收录
   结论；明确书评的本地排除则独立于外部书目额度生效。
+
+### 2026-09-07 结构化作品类型复核
+
+- PhilPapers 公开记录页对普通程序请求返回 HTTP 403；在正常内置浏览器中访问同一公开记录也停在
+  Cloudflare“正在进行安全验证”页面。当前实现不绕过验证、不复用浏览器 Cookie，也不把逐篇 HTML
+  抓取纳入运行依赖。PhilPapers 结构化类型需要等待官方允许的 article feed 或稳定机器接口。
+- OpenAlex 官方 Work types 词表当前有 25 个类型，并明确说明每个 Work 有一个 `type`。其中
+  `book-review` 是单本书书评，`review` 是文献综述、系统综述或元分析等综述论文；二者不能共用
+  `review` 这一内部值。程序分别规范为不支持的 `book-review` 和支持的 `review-article`。
+- Crossref 官方 `/types` 返回 30 个类型。程序把 `journal-article`、`posted-content`、
+  `proceedings-article` 分别规范为 `article`、`preprint`、`conference-paper`；书籍、书章、容器、
+  数据集、学位论文和同行评议报告保持为不支持形式。
+- 对本机既有私人书目缓存作只读、无题名统计：271 条带结构化类型的记录全部得到识别，包括
+  129 条 article、15 条 preprint、1 条 review-article、61 条 book、53 条 book-chapter、4 条
+  book-review，以及少量 dataset、dissertation、editorial 和 other。唯一同时有两源类型的样本是
+  Crossref `posted-content`／OpenAlex `preprint`，一致规范为 `preprint`。
+- 证据管线 `0.3.0` 保存来源特定类型证据。结构化来源若跨越“支持论文／不支持形式”发生冲突，形成
+  `structured_work_type_conflict`；明确返回未知词表值时形成 `unknown_structured_work_type`。两者都
+  暂缓推送而不是默认成 article。完全没有结构化类型时仍保留 PhilPapers 来源到达路径，并把默认值
+  标为 `defaulted`，防止 OpenAlex／Crossref 收录延迟成为新手稿推送的必要条件。
+
+完整映射、冲突规则与安全边界见[结构化作品类型政策](work-type-policy.md)。官方依据为
+[OpenAlex Work types](https://help.openalex.org/data/work-types/)、
+[OpenAlex Works attributes](https://help.openalex.org/data/works/attributes/)和
+[Crossref `/types`](https://api.crossref.org/types)。
 
 接口语义依据 OpenAlex 官方的 [Filter](https://help.openalex.org/api/filtering/)、
 [Authentication](https://help.openalex.org/api/authentication/) 和

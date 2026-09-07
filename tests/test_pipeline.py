@@ -14,6 +14,8 @@ from philosophy_frontier_monitor.models import (
     DateValue,
     FreshnessStatus,
     WorkRecord,
+    WorkTypeEvidence,
+    WorkTypeStatus,
 )
 from philosophy_frontier_monitor.pipeline import (
     CatchUpError,
@@ -31,6 +33,7 @@ from philosophy_frontier_monitor.pipeline import (
 )
 from philosophy_frontier_monitor.sources.crossref import CrossrefWork
 from philosophy_frontier_monitor.sources.openalex import OpenAlexWork
+from philosophy_frontier_monitor.sources.philarchive_oai import OAIRecord, OAIWindowSnapshot
 from philosophy_frontier_monitor.sources.philpapers_rss import FeedEntry
 from philosophy_frontier_monitor.state import StateStore
 
@@ -112,6 +115,129 @@ def confirmed_resolver(candidate, taxonomy, _config, _start, _end, attempted_at)
 
 def allow_test_fixture_for_committing_run(monkeypatch):
     monkeypatch.setattr(pipeline, "require_production_taxonomy", lambda _snapshot: None)
+
+
+def test_merge_work_re_resolves_combined_structured_type_evidence():
+    base = WorkRecord(
+        work_id="pfm:work:doi:10.1234/merge",
+        title="A Preprint",
+        authors=("Ada Scholar",),
+        observed_at=RUN_TIME,
+        freshness_status=FreshnessStatus.CONFIRMED_NEW,
+        category_status=CategoryStatus.AVAILABLE,
+        doi="10.1234/merge",
+    )
+    openalex = replace(
+        base,
+        work_type="preprint",
+        work_type_status=WorkTypeStatus.CONFIRMED,
+        work_type_evidence=(
+            WorkTypeEvidence(
+                source="openalex",
+                raw_type="preprint",
+                normalized_type="preprint",
+                source_record_id="https://openalex.org/W-MERGE",
+            ),
+        ),
+    )
+
+    merged = pipeline._merge_work(base, openalex)
+
+    assert merged.work_type == "preprint"
+    assert merged.work_type_status is WorkTypeStatus.CONFIRMED
+    assert merged.work_type_evidence == openalex.work_type_evidence
+
+    unverified_mismatch = pipeline._merge_work(base, replace(base, work_type="book"))
+    assert unverified_mismatch.work_type == "unknown"
+    assert unverified_mismatch.work_type_status is WorkTypeStatus.UNKNOWN
+
+
+def test_weekly_merged_type_conflict_is_retained_for_retry(monkeypatch):
+    allow_test_fixture_for_committing_run(monkeypatch)
+    first = replace(
+        NEW_ENTRY,
+        source_id="https://philpapers.org/rec/TYPE-A",
+        link="https://philpapers.org/rec/TYPE-A",
+    )
+    second = replace(
+        NEW_ENTRY,
+        source_id="https://philpapers.org/rec/TYPE-B",
+        link="https://philpapers.org/rec/TYPE-B",
+    )
+    holder = {"entries": (BASE_ENTRY,)}
+
+    def conflicting_resolver(candidate, taxonomy, _config, _start, _end, attempted_at):
+        is_first = candidate.source_id.endswith("TYPE-A")
+        raw_type = "journal-article" if is_first else "book"
+        normalized_type = "article" if is_first else "book"
+        source = "crossref" if is_first else "openalex"
+        assignment = CategoryAssignment(
+            category_id="74924",
+            category_name=taxonomy.categories["74924"].category_name,
+            assignment_source="philpapers-category-feed",
+            retrieved_at=attempted_at,
+            source_record_id=candidate.source_id,
+            mapping_method="category_feed_membership",
+        )
+        return ResolutionResult(
+            candidate,
+            WorkRecord(
+                work_id="pfm:work:doi:10.1234/type-conflict",
+                title=candidate.display_title,
+                authors=("Bea Scholar",),
+                observed_at=candidate.observed_at,
+                freshness_status=FreshnessStatus.CONFIRMED_NEW,
+                category_status=CategoryStatus.AVAILABLE,
+                category_assignments=(assignment,),
+                doi="10.1234/type-conflict",
+                source_ids=((candidate.source, candidate.source_id),),
+                work_type=normalized_type,
+                work_type_status=WorkTypeStatus.CONFIRMED,
+                work_type_evidence=(
+                    WorkTypeEvidence(
+                        source=source,
+                        raw_type=raw_type,
+                        normalized_type=normalized_type,
+                        source_record_id=candidate.source_id,
+                    ),
+                ),
+                publication_date=DateValue(
+                    date(2026, 9, 3),
+                    DatePrecision.DAY,
+                    source=source,
+                ),
+                stable_url="https://doi.org/10.1234/type-conflict",
+            ),
+        )
+
+    with StateStore(":memory:") as state:
+        establish_baseline(
+            CONFIG,
+            state,
+            now=BASELINE_TIME,
+            feed_loader=loader_for(holder),
+            allow_development_fixture=True,
+        )
+        holder["entries"] = (BASE_ENTRY, first, second)
+        result = run_weekly(
+            CONFIG,
+            state,
+            now=RUN_TIME,
+            window_start=WINDOW_START,
+            window_end=WINDOW_END,
+            feed_loader=loader_for(holder),
+            resolver=conflicting_resolver,
+            report_writer=lambda directory, filename, content: Path("F:/virtual") / filename,
+        )
+
+    assert result.stats["notified"] == 0
+    assert result.stats["unresolved"] == 2
+    assert result.stats["structured_work_type_conflicts"] == 2
+    assert result.stats["machine_deferred"] == 0
+    assert result.stats["human_review_required"] == 2
+    assert result.stats["automatic_retry_required"] == 0
+    assert "需要人工复核：2 条" in result.report_markdown
+    assert "结构化来源在支持论文形式与不支持形式之间冲突：2 条" in result.report_markdown
 
 
 def test_previous_completed_week_uses_local_monday_boundary():
@@ -421,6 +547,9 @@ def test_crossref_publication_event_confirms_current_week(monkeypatch):
     assert result.work is not None
     assert result.work.freshness_status is FreshnessStatus.CONFIRMED_NEW
     assert result.work.category_ids == frozenset({"74924"})
+    assert result.work.work_type == "article"
+    assert result.work.work_type_status is WorkTypeStatus.CONFIRMED
+    assert result.work.work_type_evidence[0].source == "crossref"
 
 
 def test_openalex_date_can_supply_missing_crossref_date(monkeypatch):
@@ -462,6 +591,52 @@ def test_openalex_date_can_supply_missing_crossref_date(monkeypatch):
     assert result.work is not None
     assert result.work.freshness_event == "recently_published"
     assert result.work.publication_date is openalex.publication_date
+    assert result.work.work_type == "article"
+    assert result.work.work_type_status is WorkTypeStatus.CONFIRMED
+    assert {item.source for item in result.work.work_type_evidence} == {
+        "crossref",
+        "openalex",
+    }
+
+
+def test_crossref_and_openalex_supported_unsupported_type_conflict_is_withheld(monkeypatch):
+    candidate = merge_feed_snapshots((snapshot((NEW_ENTRY,), RUN_TIME),))[0]
+    crossref = CrossrefWork(
+        doi="10.1234/conflict",
+        title="Knowledge in Plato's Theaetetus",
+        authors=("Bea Scholar",),
+        container_title="Journal of Test Philosophy",
+        work_type="journal-article",
+        stable_url="https://doi.org/10.1234/conflict",
+        publication_date=None,
+        publication_event=None,
+        raw={},
+    )
+    openalex = OpenAlexWork(
+        openalex_id="https://openalex.org/W-CONFLICT",
+        doi="10.1234/conflict",
+        title="Knowledge in Plato's Theaetetus",
+        authors=("Bea Scholar",),
+        publication_date=DateValue(date(2026, 9, 4), DatePrecision.DAY, "openalex"),
+        work_type="book-chapter",
+        stable_url="https://example.test/chapter",
+        raw={},
+    )
+    monkeypatch.setattr(pipeline, "find_crossref_work", lambda *args, **kwargs: crossref)
+    monkeypatch.setattr(pipeline, "find_openalex_work", lambda *args, **kwargs: openalex)
+    taxonomy = pipeline.load_taxonomy(CONFIG.taxonomy_path)
+
+    result = resolve_bibliography(
+        candidate,
+        taxonomy,
+        CONFIG,
+        WINDOW_START,
+        WINDOW_END,
+        RUN_TIME,
+    )
+
+    assert result.work is None
+    assert result.reason_code == "structured_work_type_conflict"
 
 
 def test_future_publication_date_is_reported_as_current_source_arrival(monkeypatch):
@@ -548,6 +723,9 @@ def test_missing_external_record_uses_philpapers_arrival_without_inventing_publi
     assert result.work.publication_date is None
     assert result.work.availability_date is not None
     assert result.work.availability_date.source == "philpapers-rss-current-alert-observation"
+    assert result.work.work_type == "article"
+    assert result.work.work_type_status is WorkTypeStatus.DEFAULTED
+    assert result.work.work_type_evidence == ()
 
 
 @pytest.mark.parametrize(
@@ -594,7 +772,8 @@ def test_explicit_review_labels_are_resolved_locally_as_unsupported(monkeypatch,
     )
 
     assert result.work is not None
-    assert result.work.work_type == "review"
+    assert result.work.work_type == "book-review"
+    assert result.work.work_type_status is WorkTypeStatus.EXPLICIT_LABEL
     assert result.work.freshness_status is FreshnessStatus.UNCERTAIN
     assert result.work.freshness_event == "explicit_unsupported_bibliographic_form"
 
@@ -735,7 +914,7 @@ def test_weekly_pipeline_resolves_only_records_new_since_baseline(monkeypatch):
     assert run_context["taxonomy_snapshot_id"] == "philpapers-fixture:2026-09-05"
     assert run_context["interest_profile_id"] == "pfm:interest:test"
     assert run_context["interest_profile_version"] == 3
-    assert run_context["pipeline_version"] == "0.2.2"
+    assert run_context["pipeline_version"] == "0.4.0"
     assert run_context["matching_rule_version"] == "set_intersection_v1"
 
 
@@ -787,6 +966,10 @@ def test_weekly_run_opens_bibliographic_circuits_after_bounded_source_failure(mo
     assert result.stats["bibliographic_source_circuits_open"] == 2
     assert result.stats["bibliographic_source_circuit_skips"] == 2
     assert result.stats["unresolved"] == 2
+    assert result.stats["machine_deferred"] == 0
+    assert result.stats["human_review_required"] == 0
+    assert result.stats["automatic_retry_required"] == 2
+    assert "等待程序自动重试：2 条" in result.report_markdown
     assert "crossref-bibliography" in result.report_markdown
     assert "openalex-bibliography" in result.report_markdown
 
@@ -840,6 +1023,77 @@ def test_weekly_accepts_same_source_arrival_and_early_work_evidence_as_pull_now(
     assert result.stats["confirmed_source_arrivals"] == 1
     assert "working-paper" in result.report_markdown
     assert "recently_arrived_in_philpapers_alert" in result.report_markdown
+
+
+def test_weekly_uses_oai_evidence_without_replacing_publication_date(monkeypatch):
+    allow_test_fixture_for_committing_run(monkeypatch)
+    holder = {"entries": (BASE_ENTRY,)}
+    config = replace(
+        CONFIG,
+        philarchive_oai=replace(CONFIG.philarchive_oai, enabled=True),
+    )
+
+    def oai_loader(start, end, _endpoint):
+        return OAIWindowSnapshot(
+            window_start=start,
+            window_end=end,
+            checked_at=RUN_TIME,
+            records_by_key={
+                "new": OAIRecord(
+                    identifier="oai:philarchive.org/rec/NEW",
+                    source_datestamp="2026-09-06T12:00:00Z",
+                    deleted=False,
+                    fields={
+                        "date": ("2026",),
+                        "type": ("info:eu-repo/semantics/article",),
+                    },
+                )
+            },
+            harvested_records=1,
+            records_in_exact_window=1,
+            deleted_records=0,
+            unkeyed_records=0,
+            duplicate_keys=0,
+            overlap_records_excluded=0,
+        )
+
+    def native_resolver(candidate, taxonomy, _config, start, end, attempted_at):
+        assert candidate.oai_record_ids == ("oai:philarchive.org/rec/NEW",)
+        return pipeline._resolve_philpapers_arrival(
+            candidate,
+            taxonomy,
+            start,
+            end,
+            attempted_at,
+        )
+
+    with StateStore(":memory:") as state:
+        establish_baseline(
+            config,
+            state,
+            now=BASELINE_TIME,
+            feed_loader=loader_for(holder),
+            allow_development_fixture=True,
+        )
+        holder["entries"] = (BASE_ENTRY, NEW_ENTRY)
+        result = run_weekly(
+            config,
+            state,
+            now=RUN_TIME,
+            window_start=WINDOW_START,
+            window_end=WINDOW_END,
+            feed_loader=loader_for(holder),
+            oai_loader=oai_loader,
+            resolver=native_resolver,
+            report_writer=lambda directory, filename, content: Path("F:/virtual") / filename,
+        )
+
+    assert result.stats["oai_candidate_matches"] == 1
+    assert result.stats["notified"] == 1
+    assert "philarchive-oai-datestamp" in result.report_markdown
+    assert (
+        "发表日期证据：2026（精度：year；来源：philarchive-oai-dc-date）" in result.report_markdown
+    )
 
 
 def test_baseline_fetches_only_newly_added_category_feeds():

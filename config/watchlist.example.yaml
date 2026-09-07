@@ -59,6 +59,11 @@ sources:
     - category_id: "74844"
       category_name: "Plato: Knowledge and Belief"
       url: "https://philpapers.org/browse/plato-knowledge-and-belief"
+  philarchive_oai:
+    # Optional completeness aid for records that have no RSS timestamp or year.
+    # Its datestamp means "metadata record created or updated", not publication date.
+    enabled: true
+    endpoint: "https://philarchive.org/oai.pl"
   crossref:
     # Optional. Crossref recommends a contact address for its polite pool.
     # Put a real address only in the private watchlist.yaml, never in Git.

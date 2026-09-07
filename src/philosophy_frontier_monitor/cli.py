@@ -87,6 +87,7 @@ def _emit_pull_now_progress(stage: str, completed: int, total: int) -> None:
 
     labels = {
         "feeds": "分类 feed",
+        "oai": "PhilArchive OAI 增量记录",
         "candidates": "候选筛选",
         "doi_batch": "DOI 批量核验",
         "title_batch": "题名批量核验",

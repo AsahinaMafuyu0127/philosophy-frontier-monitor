@@ -31,6 +31,11 @@ from philosophy_frontier_monitor.pipeline import (
 )
 from philosophy_frontier_monitor.sources.crossref import CrossrefWork
 from philosophy_frontier_monitor.sources.openalex import OpenAlexWork
+from philosophy_frontier_monitor.sources.philarchive_oai import (
+    OAIError,
+    OAIRecord,
+    OAIWindowSnapshot,
+)
 from philosophy_frontier_monitor.sources.philpapers_rss import FeedEntry, FeedRequest
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
@@ -114,6 +119,96 @@ def resolver_for(publication_dates: dict[str, date], calls: list[str]):
 
 def no_title_batch(_titles, _config, _attempted_at):
     return ()
+
+
+def test_oai_window_narrows_undated_cold_start_before_external_lookups():
+    config = replace(
+        CONFIG,
+        philarchive_oai=replace(CONFIG.philarchive_oai, enabled=True),
+    )
+    calls: list[str] = []
+
+    def oai_loader(start, end, _endpoint):
+        return OAIWindowSnapshot(
+            window_start=start,
+            window_end=end,
+            checked_at=REQUEST_TIME,
+            records_by_key={
+                "recent": OAIRecord(
+                    identifier="oai:philarchive.org/rec/RECENT",
+                    source_datestamp="2026-09-08T00:00:00Z",
+                    deleted=False,
+                    fields={
+                        "date": ("2026",),
+                        "type": ("info:eu-repo/semantics/article",),
+                    },
+                ),
+                "old": OAIRecord(
+                    identifier="oai:philarchive.org/rec/OLD",
+                    source_datestamp="2026-09-08T00:00:00Z",
+                    deleted=False,
+                    fields={
+                        "date": ("2011",),
+                        "type": ("info:eu-repo/semantics/article",),
+                    },
+                ),
+            },
+            harvested_records=3,
+            records_in_exact_window=3,
+            deleted_records=1,
+            unkeyed_records=0,
+            duplicate_keys=0,
+            overlap_records_excluded=0,
+        )
+
+    result = run_on_demand(
+        config,
+        now=REQUEST_TIME,
+        feed_loader=loader_with(
+            entry("RECENT", published_text=None),
+            entry("OLD", published_text=None),
+            entry("NO-OAI", published_text=None),
+        ),
+        oai_loader=oai_loader,
+        resolver=resolver_for({"RECENT": date(2026, 9, 8)}, calls),
+        batch_title_resolver=no_title_batch,
+        allow_development_fixture=True,
+    )
+
+    assert calls == ["RECENT"]
+    assert result.stats["candidates_before_oai_narrowing"] == 2
+    assert result.stats["candidate_records"] == 1
+    assert result.stats["oai_candidate_matches"] == 2
+    assert result.stats["oai_candidates_excluded_without_feed_time_or_year"] == 1
+    assert result.stats["oai_deleted_record_keys"] == 1
+    assert result.stats["matched"] == 1
+
+
+def test_oai_failure_keeps_the_wider_candidate_set_and_reports_degradation():
+    config = replace(
+        CONFIG,
+        philarchive_oai=replace(CONFIG.philarchive_oai, enabled=True),
+    )
+    calls: list[str] = []
+
+    def failed_oai(_start, _end, _endpoint):
+        raise OAIError("bounded fixture failure")
+
+    result = run_on_demand(
+        config,
+        now=REQUEST_TIME,
+        feed_loader=loader_with(entry("NO-OAI", published_text=None)),
+        oai_loader=failed_oai,
+        resolver=resolver_for({"NO-OAI": date(2026, 9, 8)}, calls),
+        batch_title_resolver=no_title_batch,
+        allow_development_fixture=True,
+    )
+
+    assert calls == ["NO-OAI"]
+    assert result.stats["candidate_records"] == 1
+    assert result.stats["oai_harvest_failed"] == 1
+    assert result.stats["oai_candidates_excluded_without_feed_time_or_year"] == 0
+    assert "OAI 增量收割失败" in result.report_markdown
 
 
 class FakeNetworkClient:
@@ -737,6 +832,12 @@ def test_on_demand_fallback_limit_defers_excess_without_failing_the_report():
     assert calls == ["ONE"]
     assert result.stats["fallback_queried"] == 1
     assert result.stats["fallback_deferred"] == 1
+    assert result.stats["fallback_deferred_without_doi_hint"] == 1
+    assert result.stats["fallback_deferred_without_feed_date_or_year_hint"] == 1
+    assert result.stats["fallback_deferred_after_no_openalex_title_candidate"] == 1
+    assert result.stats["machine_deferred"] == 1
+    assert result.stats["human_review_required"] == 0
+    assert result.stats["automatic_retry_required"] == 0
     assert result.stats["unresolved"] == 1
 
 
@@ -910,6 +1011,53 @@ def test_on_demand_resolves_candidates_with_batched_title_and_author_match():
     assert result.stats["title_batch_resolved_candidates"] == 1
     assert result.stats["fallback_candidates"] == 0
     assert result.stats["matched"] == 1
+
+
+def test_on_demand_keeps_single_title_batch_type_conflict_out_of_fallback():
+    def title_batch(_titles, _config, attempted_at):
+        return (
+            OpenAlexWork(
+                openalex_id="https://openalex.org/W-TYPE-CONFLICT",
+                doi=None,
+                title="Paper TYPE-CONFLICT",
+                authors=("Ada Scholar",),
+                publication_date=DateValue(
+                    date(2026, 9, 8),
+                    DatePrecision.DAY,
+                    source="openalex",
+                    retrieved_at=attempted_at,
+                ),
+                work_type="book",
+                stable_url="https://openalex.org/W-TYPE-CONFLICT",
+                raw={},
+            ),
+        )
+
+    def no_fallback(*_args):
+        raise AssertionError("a terminal type conflict must not be queried again")
+
+    result = run_on_demand(
+        CONFIG,
+        now=REQUEST_TIME,
+        feed_loader=loader_with(
+            entry(
+                "TYPE-CONFLICT",
+                published_text=None,
+                description="Working paper. 2026 draft.",
+            )
+        ),
+        resolver=no_fallback,
+        batch_title_resolver=title_batch,
+        allow_development_fixture=True,
+    )
+
+    assert result.stats["title_batch_terminal_unresolved_candidates"] == 1
+    assert result.stats["structured_work_type_conflicts"] == 1
+    assert result.stats["machine_deferred"] == 0
+    assert result.stats["human_review_required"] == 1
+    assert result.stats["automatic_retry_required"] == 0
+    assert result.stats["fallback_candidates"] == 0
+    assert result.stats["unresolved"] == 1
 
 
 def test_repeated_pull_uses_positive_per_title_batch_cache():

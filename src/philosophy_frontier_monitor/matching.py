@@ -13,25 +13,7 @@ from .models import (
     MatchRecord,
     WorkRecord,
 )
-
-SUPPORTED_WORK_TYPES = frozenset(
-    {
-        "article",
-        "journal-article",
-        "journal_article",
-        "posted-content",
-        "preprint",
-        "manuscript",
-        "submitted-manuscript",
-        "submitted_manuscript",
-        "working-paper",
-        "working_paper",
-        "forthcoming-article",
-        "author-accepted-manuscript",
-        "author_accepted_manuscript",
-        "proceedings-article",
-    }
-)
+from .work_types import is_supported_work_type
 
 
 def match_work(
@@ -47,7 +29,7 @@ def match_work(
     matched = paper_ids.intersection(profile.expanded_category_ids)
     excluded = paper_ids.intersection(profile.excluded_category_ids)
 
-    if work.work_type.casefold() not in SUPPORTED_WORK_TYPES:
+    if not is_supported_work_type(work.work_type):
         decision = MatchDecision.UNSUPPORTED_WORK_TYPE
     elif work.freshness_status not in {
         FreshnessStatus.CONFIRMED_NEW,
