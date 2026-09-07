@@ -35,6 +35,27 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/philosophy_frontier_monitor"]
 
+[tool.hatch.build.targets.sdist]
+only-include = [
+  ".env.example",
+  ".gitattributes",
+  ".gitignore",
+  "CHANGELOG.md",
+  "CONTRIBUTING.md",
+  "LICENSE",
+  "README.md",
+  "SECURITY.md",
+  "SKILL.md",
+  "THIRD_PARTY_NOTICES.md",
+  "agents",
+  "config/watchlist.example.yaml",
+  "references",
+  "scripts",
+  "src",
+  "tests",
+  "uv.lock",
+]
+
 [tool.pytest.ini_options]
 addopts = "-ra -p no:cacheprovider"
 testpaths = ["tests"]
