@@ -1,4 +1,4 @@
-"""Factual Markdown weekly reports without quality judgments or ranking."""
+"""Factual bilingual Markdown reports without quality judgments or ranking."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ class SourceCoverage:
     status: str
     checked_at: datetime
     detail: str
+    detail_en: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +40,23 @@ UNRESOLVED_REASON_LABELS = {
     "structured_work_type_conflict": "结构化来源在支持论文形式与不支持形式之间冲突",
     "unknown_structured_work_type": "来源返回当前词表尚未识别的结构化作品类型",
     "old_work_check_incomplete": "外部书目来源失败，旧作检查等待程序自动重试",
+}
+
+UNRESOLVED_REASON_LABELS_EN = {
+    "semantic_identity_review_required": (
+        "The item may be a translated or substantially retitled version and requires manual "
+        "identity review"
+    ),
+    "identifier_conflict": "Structured sources returned conflicting DOI identifiers",
+    "structured_work_type_conflict": (
+        "Structured sources conflict across supported and unsupported work types"
+    ),
+    "unknown_structured_work_type": (
+        "A source returned a structured work type not recognized by the current vocabulary"
+    ),
+    "old_work_check_incomplete": (
+        "An external bibliographic source failed; the old-work check awaits automatic retry"
+    ),
 }
 
 HUMAN_REVIEW_REASON_CODES = frozenset(
@@ -127,6 +145,28 @@ def _availability_text(work: WorkRecord) -> str:
     )
 
 
+def _date_text_en(work: WorkRecord) -> str:
+    if work.publication_date is None:
+        return "Not recorded"
+    value = work.publication_date.value
+    rendered = value.isoformat() if isinstance(value, datetime) else str(value)
+    return (
+        f"{rendered} (precision: {work.publication_date.precision.value}; "
+        f"source: {work.publication_date.source})"
+    )
+
+
+def _availability_text_en(work: WorkRecord) -> str:
+    if work.availability_date is None:
+        return "Not recorded"
+    value = work.availability_date.value
+    rendered = value.isoformat() if isinstance(value, datetime) else str(value)
+    return (
+        f"{rendered} (precision: {work.availability_date.precision.value}; "
+        f"source: {work.availability_date.source})"
+    )
+
+
 def _work_type_evidence_text(work: WorkRecord) -> str:
     if work.work_type_evidence:
         return "；".join(
@@ -141,6 +181,25 @@ def _work_type_evidence_text(work: WorkRecord) -> str:
     if work.work_type_status is WorkTypeStatus.DEFAULTED:
         return "来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言"
     return "未记录"
+
+
+def _work_type_evidence_text_en(work: WorkRecord) -> str:
+    if work.work_type_evidence:
+        return "; ".join(
+            f"{_safe_text(item.source)}: {_safe_text(item.raw_type)}"
+            + (
+                f" -> {_safe_text(item.normalized_type)}"
+                if item.normalized_type and item.normalized_type != item.raw_type
+                else ""
+            )
+            for item in work.work_type_evidence
+        )
+    if work.work_type_status is WorkTypeStatus.DEFAULTED:
+        return (
+            "The sources supplied no usable structured work type; article is the alert-stream "
+            "candidate default, not a source assertion"
+        )
+    return "Not recorded"
 
 
 def _category_names(category_ids: frozenset[str], snapshot: TaxonomySnapshot) -> list[str]:
@@ -165,6 +224,7 @@ def render_weekly_report(
     unresolved_reason_counts: Mapping[str, int] | None = None,
     machine_deferred_count: int = 0,
     human_review_items: tuple[HumanReviewItem, ...] = (),
+    include_english: bool = True,
 ) -> str:
     """Render only works whose deterministic decision is ``notify``."""
 
@@ -297,6 +357,209 @@ def render_weekly_report(
             "",
         ]
     )
+    chinese = "\n".join(lines)
+    if not include_english:
+        return chinese
+    english = _render_weekly_report_en(
+        profile=profile,
+        snapshot=snapshot,
+        works=works,
+        matches=matches,
+        window_start=window_start,
+        window_end=window_end,
+        coverage=coverage,
+        unresolved_count=unresolved_count,
+        unresolved_reason_counts=unresolved_reason_counts,
+        machine_deferred_count=machine_deferred_count,
+        human_review_items=human_review_items,
+    )
+    return f"{chinese}\n\n---\n\n{english}"
+
+
+def _render_weekly_report_en(
+    *,
+    profile: InterestProfile,
+    snapshot: TaxonomySnapshot,
+    works: dict[str, WorkRecord],
+    matches: tuple[MatchRecord, ...],
+    window_start: datetime,
+    window_end: datetime,
+    coverage: tuple[SourceCoverage, ...],
+    unresolved_count: int = 0,
+    unresolved_reason_counts: Mapping[str, int] | None = None,
+    machine_deferred_count: int = 0,
+    human_review_items: tuple[HumanReviewItem, ...] = (),
+) -> str:
+    """Render the English version of a weekly report from the same evidence."""
+
+    selected_names = [item.category_name for item in profile.selected_categories]
+    notifying = [item for item in matches if item.decision is MatchDecision.NOTIFY]
+    lines = [
+        "# Philosophy Frontier Weekly Report",
+        "",
+        f"Monitoring window: `{window_start.isoformat()}` to `{window_end.isoformat()}` "
+        "(exclusive end)",
+        f"Interest profile: `{profile.profile_id}` version {profile.version}",
+        f"Taxonomy snapshot: `{snapshot.snapshot_id}`",
+        f"Selected categories: {', '.join(selected_names) if selected_names else 'None'}",
+        "",
+        "This report includes papers only when they are confirmed as new within the window and "
+        "their controlled category set intersects the user's confirmed interest set. It does "
+        "not evaluate paper quality or rank by author, journal, or citation count.",
+        "",
+        f"## Matching papers ({len(notifying)})",
+        "",
+    ]
+
+    if not notifying:
+        successful = any(item.status == "success" for item in coverage)
+        failed = any(item.status != "success" for item in coverage)
+        if successful and not failed:
+            lines.extend(
+                [
+                    "No work passed both the new-paper and category gates in the sources "
+                    "successfully checked for this week.",
+                    "",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    "No notifiable record was established. Because at least one source could "
+                    "not be checked successfully, this does not mean that no relevant new work "
+                    "exists this week.",
+                    "",
+                ]
+            )
+    else:
+        for index, match in enumerate(notifying, start=1):
+            work = works.get(match.work_id)
+            if work is None:
+                raise ValueError(f"missing WorkRecord for match {match.match_id}")
+            authors = "; ".join(_safe_text(item) for item in work.authors) or "Not recorded"
+            matched_names = _category_names(match.matched_category_ids, snapshot)
+            paper_names = _category_names(match.paper_category_ids, snapshot)
+            identifier = f"https://doi.org/{work.doi}" if work.doi else work.stable_url
+            lines.extend(
+                [
+                    f"### {index}. {_safe_text(work.title)}",
+                    "",
+                    f"- Authors: {authors}",
+                    "- Venue: "
+                    + (
+                        _safe_text(work.container_title)
+                        if work.container_title
+                        else "Not recorded"
+                    ),
+                    f"- Work type: {_safe_text(work.work_type)}",
+                    f"- Work-type evidence status: {work.work_type_status.value}",
+                    f"- Work-type evidence: {_work_type_evidence_text_en(work)}",
+                    "- Freshness event: "
+                    + (work.freshness_event or "Confirmed; subtype not recorded"),
+                    f"- Publication-date evidence: {_date_text_en(work)}",
+                    f"- Recent-availability evidence: {_availability_text_en(work)}",
+                    f"- Matching interest categories: {'; '.join(matched_names)}",
+                    f"- Verified paper categories: {'; '.join(paper_names)}",
+                    "- DOI or stable link: "
+                    + (_safe_text(identifier) if identifier else "Not recorded"),
+                    "",
+                ]
+            )
+
+    if unresolved_count:
+        human_review_count, automatic_retry_count = unresolved_workload_counts(
+            unresolved_reason_counts
+        )
+        unclassified_count = max(
+            0,
+            unresolved_count - machine_deferred_count - human_review_count - automatic_retry_count,
+        )
+        lines.extend(
+            [
+                "## Verification status",
+                "",
+                f"Another {unresolved_count} new or retried records have not completed work-type, "
+                "bibliographic-identity, old-work, or recent-availability verification. They were "
+                "not notified and remain in the bounded retry queue.",
+                "",
+            ]
+        )
+        if machine_deferred_count:
+            lines.append(
+                f"- Machine-verification backlog: {machine_deferred_count}. These records have not "
+                "yet reached external bibliographic verification and do not require item-by-item "
+                "user judgment."
+            )
+        if human_review_count:
+            lines.append(f"- Human review required: {human_review_count}.")
+        if automatic_retry_count:
+            lines.append(f"- Awaiting automatic retry: {automatic_retry_count}.")
+        if unclassified_count:
+            lines.append(f"- Unclassified internal verification states: {unclassified_count}.")
+        lines.append("")
+        counts = unresolved_reason_counts or {}
+        reason_lines = [
+            f"- {label}: {counts[reason_code]}"
+            for reason_code, label in UNRESOLVED_REASON_LABELS_EN.items()
+            if counts.get(reason_code, 0) > 0
+        ]
+        if reason_lines:
+            lines.extend(["Reasons:", "", *reason_lines, ""])
+        if human_review_items:
+            lines.extend(["Candidates requiring human review:", ""])
+            for index, item in enumerate(human_review_items[:9], start=1):
+                reason = UNRESOLVED_REASON_LABELS_EN.get(item.reason_code, item.reason_code)
+                lines.extend(
+                    [
+                        f"{index}. {_safe_text(item.title)}",
+                        "   - Authors: "
+                        + (_safe_text(item.author_text) if item.author_text else "Not recorded"),
+                        f"   - Reason: {_safe_text(reason)}",
+                        "   - Source link: "
+                        + (_safe_text(item.stable_url) if item.stable_url else "Not recorded"),
+                    ]
+                )
+            if len(human_review_items) > 9:
+                lines.append(
+                    f"- {len(human_review_items) - 9} additional human-review candidates are not "
+                    "expanded in this report."
+                )
+            lines.append("")
+
+    lines.extend(["## Source coverage", ""])
+    if not coverage:
+        lines.extend(
+            ["- No source-run record was supplied; coverage cannot be claimed complete.", ""]
+        )
+    else:
+        for item in coverage:
+            detail = item.detail_en or item.detail
+            lines.append(
+                f"- `{item.source}`: {item.status}; checked at "
+                f"`{item.checked_at.isoformat()}`; {_safe_text(detail)}"
+            )
+        lines.append("")
+
+    lines.extend(
+        [
+            "## Method",
+            "",
+            "A work appears above only when `freshness_status = confirmed_new` (confirmed by "
+            "independent date evidence) or `confirmed_source_arrival` (recent PhilPapers arrival "
+            "with no old-work evidence), and its category IDs intersect the current interest set. "
+            "The latter means that the work recently entered the researcher's visible frontier "
+            "stream; it does not present a feed or retrieval time as the formal publication date.",
+            "",
+            "## Source limitations",
+            "",
+            "This report reflects only the configured PhilPapers category feeds that returned "
+            "successfully at run time and the external bibliographic metadata then available. "
+            "Works absent from a source, delayed by source updates, or missing critical metadata "
+            "may appear later. Failed sources and unfinished verification are disclosed, but the "
+            "system does not claim exhaustive coverage of all new philosophy papers worldwide.",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -326,6 +589,7 @@ def render_on_demand_report(
         window_end=window_end,
         coverage=coverage,
         unresolved_count=0,
+        include_english=False,
     )
     lines = weekly.splitlines()
     lines[0] = "# 哲学前沿论文即时拉取报告"
@@ -394,5 +658,148 @@ def render_on_demand_report(
                 ]
             )
         workload_lines.extend(_human_review_lines(human_review_items))
+        lines[method_index:method_index] = workload_lines
+    chinese = "\n".join(lines)
+    english = _render_on_demand_report_en(
+        profile=profile,
+        snapshot=snapshot,
+        works=works,
+        matches=matches,
+        window_start=window_start,
+        window_end=window_end,
+        coverage=coverage,
+        unresolved_count=unresolved_count,
+        unresolved_reason_counts=unresolved_reason_counts,
+        machine_deferred_count=machine_deferred_count,
+        human_review_items=human_review_items,
+        oai_narrowing_applied=oai_narrowing_applied,
+    )
+    return f"{chinese}\n\n---\n\n{english}"
+
+
+def _render_on_demand_report_en(
+    *,
+    profile: InterestProfile,
+    snapshot: TaxonomySnapshot,
+    works: dict[str, WorkRecord],
+    matches: tuple[MatchRecord, ...],
+    window_start: datetime,
+    window_end: datetime,
+    coverage: tuple[SourceCoverage, ...],
+    unresolved_count: int = 0,
+    unresolved_reason_counts: Mapping[str, int] | None = None,
+    machine_deferred_count: int = 0,
+    human_review_items: tuple[HumanReviewItem, ...] = (),
+    oai_narrowing_applied: bool = False,
+) -> str:
+    """Render the English version of a state-independent on-demand report."""
+
+    weekly = _render_weekly_report_en(
+        profile=profile,
+        snapshot=snapshot,
+        works=works,
+        matches=matches,
+        window_start=window_start,
+        window_end=window_end,
+        coverage=coverage,
+        unresolved_count=0,
+    )
+    lines = weekly.splitlines()
+    lines[0] = "# Philosophy Frontier On-Demand Report"
+    lines[2] = (
+        f"On-demand window: `{window_start.isoformat()}` to `{window_end.isoformat()}` "
+        "(exclusive end)"
+    )
+    weekly_zero = (
+        "No work passed both the new-paper and category gates in the sources successfully "
+        "checked for this week."
+    )
+    for index, line in enumerate(lines):
+        if line == weekly_zero:
+            lines[index] = (
+                "No work passed both the new-paper and category gates in the sources "
+                "successfully checked for this on-demand window."
+            )
+    notice = [
+        "This report was generated by an explicit user request and is independent of the formal "
+        "weekly report. It neither reads weekly notification history nor writes or advances the "
+        "baseline, retry queue, run history, or feed checkpoints. It is therefore normal for the "
+        "same paper to appear in a later weekly report.",
+        "",
+    ]
+    if oai_narrowing_applied:
+        notice.extend(
+            [
+                "PhilArchive OAI incremental narrowing was used. Feed records lacking both a "
+                "timestamp and a bibliographic year continued to verification only when the same "
+                "`/rec/` record changed within the window. OAI covers open records only, so fully "
+                "undated non-open PhilPapers records may be absent from this report; this is not a "
+                "permanent old-work judgment.",
+                "",
+            ]
+        )
+    lines[9:9] = notice
+
+    if unresolved_count:
+        human_review_count, automatic_retry_count = unresolved_workload_counts(
+            unresolved_reason_counts
+        )
+        unclassified_count = max(
+            0,
+            unresolved_count - machine_deferred_count - human_review_count - automatic_retry_count,
+        )
+        method_index = lines.index("## Method")
+        workload_lines = [
+            "## Verification status for this request",
+            "",
+            f"Another {unresolved_count} candidate records have not completed work-type, "
+            "bibliographic-identity, old-work, or recent-availability verification. They were not "
+            "reported as matches and were not written to the weekly bounded retry queue; a later "
+            "explicit pull may verify them again.",
+            "",
+        ]
+        if machine_deferred_count:
+            workload_lines.append(
+                f"- Machine-verification backlog: {machine_deferred_count}. The per-item query "
+                "budget prevented them from reaching external bibliographic verification in this "
+                "run; they do not require item-by-item user judgment."
+            )
+        if human_review_count:
+            workload_lines.append(f"- Human review required: {human_review_count}.")
+        if automatic_retry_count:
+            workload_lines.append(f"- Awaiting automatic retry: {automatic_retry_count}.")
+        if unclassified_count:
+            workload_lines.append(
+                f"- Unclassified internal verification states: {unclassified_count}."
+            )
+        workload_lines.append("")
+        counts = unresolved_reason_counts or {}
+        reason_lines = [
+            f"- {label}: {counts[reason_code]}"
+            for reason_code, label in UNRESOLVED_REASON_LABELS_EN.items()
+            if counts.get(reason_code, 0) > 0
+        ]
+        if reason_lines:
+            workload_lines.extend(["Reasons:", "", *reason_lines, ""])
+        if human_review_items:
+            workload_lines.extend(["Candidates requiring human review:", ""])
+            for index, item in enumerate(human_review_items[:9], start=1):
+                reason = UNRESOLVED_REASON_LABELS_EN.get(item.reason_code, item.reason_code)
+                workload_lines.extend(
+                    [
+                        f"{index}. {_safe_text(item.title)}",
+                        "   - Authors: "
+                        + (_safe_text(item.author_text) if item.author_text else "Not recorded"),
+                        f"   - Reason: {_safe_text(reason)}",
+                        "   - Source link: "
+                        + (_safe_text(item.stable_url) if item.stable_url else "Not recorded"),
+                    ]
+                )
+            if len(human_review_items) > 9:
+                workload_lines.append(
+                    f"- {len(human_review_items) - 9} additional human-review candidates are not "
+                    "expanded in this report."
+                )
+            workload_lines.append("")
         lines[method_index:method_index] = workload_lines
     return "\n".join(lines)

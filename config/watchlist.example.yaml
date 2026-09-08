@@ -77,6 +77,9 @@ retry:
   unresolved_retry_days: 7
 
 storage:
+  # On Windows, prefer a spacious non-system drive instead of C: when available.
+  # OAI and bibliography caches are created beside this database and may grow
+  # substantially during upstream bulk metadata updates.
   state_database: "var/state.sqlite3"
   report_directory: "reports"
 

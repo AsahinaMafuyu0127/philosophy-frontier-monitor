@@ -708,15 +708,50 @@ oai_coverage(
   checked_at,
   PRIMARY KEY(endpoint_hash, window_start, window_end)
 )
+
+oai_harvest_sessions(
+  endpoint_hash,
+  metadata_prefix,
+  window_start,
+  window_end,
+  next_token,       -- 不透明恢复令牌；不得进入日志、报告或 status 输出
+  token_expiration,
+  cursor,
+  complete_list_size,
+  completed_pages,
+  harvested_records,
+  sequence_complete,
+  lease_owner,
+  lease_pid,
+  lease_updated_at,
+  UNIQUE(endpoint_hash, metadata_prefix, window_start, window_end)
+)
+
+oai_staged_record_events(
+  session_id,
+  identifier,
+  source_datestamp,
+  changed_at,
+  deleted,
+  fields_json,       -- 仍仅含 dc:identifier、dc:date、dc:type
+  cached_at,
+  PRIMARY KEY(session_id, identifier, source_datestamp)
+)
 ```
 
-覆盖区间只在完整跟随全部 `resumptionToken` 后与记录事件一起提交，相邻或重叠区间会合并。缓存
-读取按 `changed_at` 重建精确半开窗口；同一 `/rec/` 键只保留窗口内时间最新的状态，最新状态为
+每个成功页的暂存记录和下一枚 `resumptionToken` 在同一 SQLite 事务中提交。进程中断后，同一
+缺口取得短期进程租约并从最近令牌继续；令牌过期或返回 `badResumptionToken` 时删除该会话的暂存，
+从原窗口重启。最后一页先标记 `sequence_complete`，随后把全部暂存记录、覆盖区间和会话删除在
+同一事务中提交；因此最后一页之后的进程中断也能在不访问网络的情况下完成提升。相邻或重叠区间
+会合并。缓存读取按 `changed_at` 重建精确半开窗口；同一 `/rec/` 键只保留窗口内时间最新的状态，最新状态为
 删除时不得进入候选。缓存统计中的 `oai_retrieval_mode` 区分 `cold_start`、`cache_hit`、
 `incremental_refresh` 和未启用缓存时的直接 `network`；覆盖起止时间以 ISO 8601 字符串保存到运行
-统计，保证周报状态 JSON 可序列化。
+统计，保证周报状态 JSON 可序列化。`oai-cache status` 不返回 `next_token`，只返回 token 是否存在、
+到期时间、游标、完整列表大小和计数；`prune` 在活跃收割期间拒绝执行，并与周报状态数据库隔离。
 
-即时交付结果另含 `report_delivery`、`report_character_count`、`report_path` 和
+周报和即时报告的 `report_markdown` 均包含由同一证据集合生成的完整中文版本与完整英文版本，中间
+以 Markdown 分隔线区分；两种语言不得分别执行筛选或产生不同计数。即时交付结果另含
+`report_delivery`、`report_character_count`、`report_path` 和
 `on_demand_report_file_written`。`inline` 时 `report_markdown` 含全文且 `report_path=null`；用户明确
 选择 `file` 时，全文写入私人报告目录，`report_markdown=null`，路径只用于交付。两者都不是周报
 运行记录。

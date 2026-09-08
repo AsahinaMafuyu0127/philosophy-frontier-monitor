@@ -1,6 +1,6 @@
 ---
 name: philosophy-frontier-monitor
-description: Onboard a researcher's natural-language philosophy interests, map them to verified PhilPapers categories, and maintain recurring weekly new-paper reports with missed-run catch-up. Use when a user asks how to use, configure, update, inspect, run, or schedule philosophy-paper monitoring by research direction. An immediate rolling pull exists only as an explicitly opted-in experimental mode. Do not use for judging paper quality, ranking papers, or general literature reviews.
+description: Onboard a researcher's natural-language philosophy interests, map them to verified PhilPapers categories, and maintain recurring weekly or user-requested rolling new-paper reports with missed-run catch-up. Use when a user asks how to use, configure, update, inspect, run, or schedule philosophy-paper monitoring by research direction. Do not use for judging paper quality, ranking papers, or general literature reviews.
 ---
 
 # Philosophy Frontier Monitor
@@ -12,7 +12,8 @@ quality and importance.
 ## Installation and runtime root
 
 For installation, environment setup, or first deployment, read
-[installation.md](references/installation.md). Treat the directory containing
+[installation.md](references/installation.md) or its English version,
+[installation.en.md](references/installation.en.md). Treat the directory containing
 this `SKILL.md` as the skill root. Run the platform-specific `pfm` executable
 from that root (`.venv\\Scripts\\pfm.exe` on Windows or `.venv/bin/pfm` on
 macOS/Linux); do not assume the user's current working directory is the skill
@@ -20,6 +21,9 @@ root. If the virtual environment is absent, guide the user through `uv sync`
 and `pfm doctor` before any live run. Do not overwrite an existing private
 watchlist, state database, taxonomy snapshot, or report while installing or
 updating.
+
+For an English command-oriented workflow after installation, read
+[usage.en.md](references/usage.en.md).
 
 ## First-dialogue onboarding
 
@@ -106,12 +110,15 @@ Do not require the user to know PhilPapers category names in advance.
    republication, bibliographic-identity, supported-work-type, and category-set
    gates. On-demand batching and fallback budgets are performance mechanisms,
    not a separate evidence policy.
-8. The public stable contract is the baseline, weekly run, and missed-run
-   catch-up workflow. `pull-now` remains an experimental cold-start mode because
-   real PhilPapers category feeds omit day-level timestamps and DOI coverage is
-   sparse. When the user explicitly asks to test it, explain that a broad profile
-   may require hundreds of individual bibliographic lookups and obtain explicit
-   agreement before raising either safety limit. Then run `pfm pull-now --config
+8. The public stable contract includes the baseline, weekly run, missed-run
+   catch-up, and user-requested `pull-now` workflow. The immediate mode remains
+   opt-in, read-only, and resource-bounded: broad profiles and upstream bulk OAI
+   metadata changes can still require many requests and substantial private disk
+   space. Before every immediate pull, advise the user to keep the state database
+   and adjacent caches off a space-constrained Windows `C:` drive when another
+   spacious local drive is available. Do not move existing private files without
+   authorization. Explain those conditions, and obtain explicit agreement before
+   raising either safety limit. Then run `pfm pull-now --config
    config/watchlist.yaml`. This separate, read-only mode has a default window
    of the seven rolling local days ending at the request time;
    `--days` may select 1 through 31 days. It requires a verified production
@@ -122,8 +129,14 @@ Do not require the user to know PhilPapers category names in advance.
    use the private cross-run `oai-cache.sqlite3` by default, fetch only uncovered
    intervals, overlap PhilArchive's second-granularity datestamp by one second,
    follow every `resumptionToken`, filter the exact half-open window locally,
-   and join only by the shared PhilPapers/PhilArchive `/rec/` key. Register cache
-   coverage only after complete pagination; `--no-oai-cache` may disable it.
+   and join only by the shared PhilPapers/PhilArchive `/rec/` key. Persist each
+   successful page and its successor token atomically; resume an interrupted
+   gap from that checkpoint. If a token has expired or the server returns
+   `badResumptionToken`, discard only that gap's staging and restart its original
+   window. Register cache coverage only after complete pagination and atomic
+   promotion; `--no-oai-cache` may disable it. Use `pfm oai-cache status` for
+   count-only inspection. Use `pfm oai-cache prune --before <ISO-8601> --confirm`
+   only when the user explicitly asks to remove old cache material.
    Keep the OAI header
    datestamp separate from `dc:date`; it proves a source-record change, never a
    publication date. For feed records lacking both timestamp and year, a

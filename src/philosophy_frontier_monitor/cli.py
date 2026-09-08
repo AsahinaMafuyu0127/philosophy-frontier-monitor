@@ -109,6 +109,31 @@ def _emit_pull_now_progress(stage: str, completed: int, total: int) -> None:
         return
 
 
+def _emit_pull_now_storage_advice(*cache_paths: Path) -> None:
+    """Warn that on-demand caches belong on a spacious non-system drive when possible."""
+
+    on_windows_system_drive = any(path.resolve().drive.casefold() == "c:" for path in cache_paths)
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    if on_windows_system_drive:
+        message = (
+            "[pull-now] 存储警告：即时拉取缓存可能因上游批量元数据更新而显著增长；当前至少一个"
+            "缓存位于 C:。如有其他可用磁盘，请把 storage.state_database 配置到空间充足的非系统盘，"
+            "报告目录也可一并迁移。Storage warning: on-demand caches can grow substantially; "
+            "place storage.state_database on a spacious non-system drive when possible."
+        )
+    else:
+        message = (
+            "[pull-now] 存储建议：即时拉取缓存可能因上游批量元数据更新而显著增长；如可选择，"
+            "请避免放在空间紧张的 C:，优先使用空间充足的非系统盘。Storage advice: on-demand "
+            "caches may grow during bulk upstream updates; prefer a spacious non-system drive."
+        )
+    try:
+        print(message, file=sys.stderr, flush=True)
+    except OSError:
+        return
+
+
 def _emit_oai_page_progress(completed_pages: int, harvested_records: int) -> None:
     """Show page progress when the OAI token does not advertise a total size."""
 
@@ -160,6 +185,63 @@ def _parse_instant(value: str | None, field: str) -> datetime | None:
     if parsed.tzinfo is None:
         raise ValueError(f"{field} 必须包含时区，例如 Z 或 +08:00")
     return parsed
+
+
+def _oai_cache_status(args: argparse.Namespace) -> int:
+    config = load_watchlist(args.config)
+    cache_path = _oai_cache_path(config)
+    if not cache_path.is_file():
+        _emit(
+            {
+                "ok": True,
+                "operation": "oai-cache-status",
+                "exists": False,
+                "path": str(cache_path.resolve()),
+                "database_size_bytes": 0,
+                "record_events": 0,
+                "coverage_intervals": 0,
+                "incomplete_sessions": [],
+                "state_advanced": False,
+            }
+        )
+        return 0
+    with OAIHarvestCache(cache_path) as cache:
+        info = asdict(cache.inspect())
+    _emit(
+        {
+            "ok": True,
+            "operation": "oai-cache-status",
+            "exists": True,
+            **info,
+            "state_advanced": False,
+        }
+    )
+    return 0
+
+
+def _oai_cache_prune(args: argparse.Namespace) -> int:
+    if not args.confirm:
+        raise ValueError("oai-cache prune 会删除指定时间以前的可重建缓存；请显式添加 --confirm。")
+    cutoff = _parse_instant(args.before, "--before")
+    if cutoff is None:  # pragma: no cover - argparse requires the value
+        raise ValueError("--before 不能为空。")
+    config = load_watchlist(args.config)
+    cache_path = _oai_cache_path(config)
+    if not cache_path.is_file():
+        raise ValueError(f"OAI 缓存不存在：{cache_path}")
+    with OAIHarvestCache(cache_path) as cache:
+        result = asdict(cache.prune(cutoff))
+    _emit(
+        {
+            "ok": True,
+            "operation": "oai-cache-prune",
+            "path": str(cache_path.resolve()),
+            **result,
+            "weekly_state_advanced": False,
+            "recovery": "以后请求被清理的时间窗口时，程序会从 OAI 重新收割。",
+        }
+    )
+    return 0
 
 
 def _doctor(args: argparse.Namespace) -> int:
@@ -596,6 +678,7 @@ def _pull_now(args: argparse.Namespace) -> int:
     config = load_watchlist(args.config)
     cache_path = config.storage.state_database.parent / "bibliography-cache.sqlite3"
     oai_cache_path = _oai_cache_path(config)
+    _emit_pull_now_storage_advice(cache_path, oai_cache_path)
     with collect_request_telemetry() as events, ExitStack() as stack:
         bibliography_cache = (
             None
@@ -877,6 +960,34 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     release_check.set_defaults(handler=_release_check)
+
+    oai_cache = subparsers.add_parser(
+        "oai-cache",
+        help="inspect or prune the private recoverable OAI harvest cache",
+    )
+    oai_cache_actions = oai_cache.add_subparsers(dest="oai_cache_action", required=True)
+    oai_cache_status = oai_cache_actions.add_parser(
+        "status",
+        help="show count-only coverage, size and interrupted-session state",
+    )
+    oai_cache_status.add_argument("--config", default=str(_default_watchlist()))
+    oai_cache_status.set_defaults(handler=_oai_cache_status)
+    oai_cache_prune = oai_cache_actions.add_parser(
+        "prune",
+        help="delete rebuildable OAI cache data older than an explicit UTC cutoff",
+    )
+    oai_cache_prune.add_argument("--config", default=str(_default_watchlist()))
+    oai_cache_prune.add_argument(
+        "--before",
+        required=True,
+        help="timezone-aware ISO 8601 cutoff; older cache data becomes a future fetch gap",
+    )
+    oai_cache_prune.add_argument(
+        "--confirm",
+        action="store_true",
+        help="confirm deletion of rebuildable cache data; weekly state remains untouched",
+    )
+    oai_cache_prune.set_defaults(handler=_oai_cache_prune)
 
     onboarding_status = subparsers.add_parser(
         "onboarding-status",

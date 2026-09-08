@@ -914,7 +914,7 @@ def test_weekly_pipeline_resolves_only_records_new_since_baseline(monkeypatch):
     assert run_context["taxonomy_snapshot_id"] == "philpapers-fixture:2026-09-05"
     assert run_context["interest_profile_id"] == "pfm:interest:test"
     assert run_context["interest_profile_version"] == 3
-    assert run_context["pipeline_version"] == "0.5.0"
+    assert run_context["pipeline_version"] == "0.6.0"
     assert run_context["matching_rule_version"] == "set_intersection_v1"
 
 

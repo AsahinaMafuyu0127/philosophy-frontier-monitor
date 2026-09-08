@@ -1,7 +1,7 @@
 interface:
   display_name: "Philosophy Frontier Monitor"
-  short_description: "Onboard interests and monitor weekly philosophy papers"
-  default_prompt: "Use $philosophy-frontier-monitor to help me describe my research interests, explain the optional public PhilPapers-profile consent, and set up my weekly new-paper monitor."
+  short_description: "Monitor weekly or on-demand philosophy papers"
+  default_prompt: "Use $philosophy-frontier-monitor to help me describe my research interests, explain the optional public PhilPapers-profile consent, and set up weekly monitoring or a bilingual on-demand report."
 
 policy:
   allow_implicit_invocation: true

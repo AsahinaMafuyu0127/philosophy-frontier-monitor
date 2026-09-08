@@ -16,6 +16,7 @@ MAX_TEXT_SCAN_BYTES = 2 * 1024 * 1024
 REQUIRED_PUBLIC_FILES = (
     ".gitignore",
     "README.md",
+    "README.en.md",
     "SKILL.md",
     "SECURITY.md",
     "CONTRIBUTING.md",
@@ -23,6 +24,8 @@ REQUIRED_PUBLIC_FILES = (
     "pyproject.toml",
     "agents/openai.yaml",
     "config/watchlist.example.yaml",
+    "references/installation.en.md",
+    "references/usage.en.md",
 )
 
 REQUIRED_IGNORE_RULES = (

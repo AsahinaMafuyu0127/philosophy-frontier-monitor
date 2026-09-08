@@ -28,3 +28,13 @@ confirmed_new AND bool(paper_category_ids & interest_category_ids)
 
 普通问题也可以发送至 `junxuanxie@stu.xjtu.edu.cn`。安全漏洞不得包含在公开 Issue 中，应按照
 `SECURITY.md` 使用 GitHub Private Vulnerability Reporting。
+
+即时拉取反馈应尽量包含版本、平台、窗口天数、可复现步骤、去除私人信息后的错误摘要，以及
+`pfm oai-cache status` 中的计数、令牌存在布尔值和到期时间；不得粘贴令牌本身、缓存数据库、私人
+watchlist 或完整报告。维护者应先把反馈归类为：可复现代码缺陷、上游协议／字段语义变化、性能与
+资源边界问题、证据政策提案。前三类修改需要相应回归测试；证据政策变更还必须更新对应 reference，
+不得以单个用户样本静默放宽“新论文”、作品类型或分类交集标准。
+
+涉及 OAI 恢复的修改至少覆盖：初始页中断、令牌续页、过期令牌、`badResumptionToken`、最后一页
+后中断、滚动窗口尾部、第二写入者互斥以及 status 不泄露令牌。真实网络试跑应使用隔离的 Git 忽略
+缓存和固定窗口，并在前后核对周报状态散列；不要通过删除生产状态或降低 TLS 验证来制造通过结果。

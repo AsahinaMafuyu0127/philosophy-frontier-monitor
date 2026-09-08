@@ -10,6 +10,7 @@ from philosophy_frontier_monitor.bibliographic_cache import BibliographicCache
 from philosophy_frontier_monitor.cli import (
     _deliver_on_demand_report,
     _emit_pull_now_progress,
+    _emit_pull_now_storage_advice,
     build_parser,
 )
 from philosophy_frontier_monitor.config import FeedConfig, load_watchlist
@@ -1213,6 +1214,23 @@ def test_cli_exposes_pull_now_as_a_distinct_command():
     assert args.no_bibliography_cache is False
     assert args.report_delivery == "inline"
     assert file_args.report_delivery == "file"
+
+
+def test_pull_now_storage_advice_warns_for_windows_system_drive(capsys):
+    _emit_pull_now_storage_advice(Path("C:/pfm/var/oai-cache.sqlite3"))
+
+    warning = capsys.readouterr().err
+    assert "存储警告" in warning
+    assert "non-system drive" in warning
+    assert "C:" in warning
+
+
+def test_pull_now_storage_advice_is_always_emitted_off_system_drive(capsys):
+    _emit_pull_now_storage_advice(Path("F:/pfm/var/oai-cache.sqlite3"))
+
+    advice = capsys.readouterr().err
+    assert "存储建议" in advice
+    assert "prefer a spacious non-system drive" in advice
 
 
 def test_cli_file_delivery_writes_full_private_report_and_returns_no_markdown(

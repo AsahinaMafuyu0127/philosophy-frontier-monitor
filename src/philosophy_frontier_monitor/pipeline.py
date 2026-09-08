@@ -115,7 +115,7 @@ from .work_types import (
 
 SOURCE_NAME = "philpapers-rss"
 NOTIFICATION_TYPE = "weekly_new_papers"
-PIPELINE_VERSION = "0.5.0"
+PIPELINE_VERSION = "0.6.0"
 MATCHING_RULE_VERSION = "set_intersection_v1"
 RECORD_PATH = re.compile(r"/rec/(?!\.{1,2}/?$)[A-Za-z0-9._~-]+/?")
 FEED_YEAR_HINT = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
@@ -816,12 +816,47 @@ def _oai_coverage_detail(snapshot: OAIWindowSnapshot) -> str:
         "cache_hit": "跨运行缓存热命中；未发出 OAI 网络请求",
         "incremental_refresh": "跨运行缓存增量刷新",
     }.get(snapshot.retrieval_mode, snapshot.retrieval_mode)
-    return (
+    detail = (
         f"{mode_detail}；完整跟随 resumptionToken；"
         f"本次网络收割 {snapshot.network_harvested_records} 条，缓存精确窗口内 "
         f"{snapshot.records_in_exact_window} 条，当前非删除记录 "
         f"{len(snapshot.records_by_key)} 条"
     )
+    recovery: list[str] = []
+    if snapshot.cache_resumed_sessions:
+        recovery.append(f"续收中断会话 {snapshot.cache_resumed_sessions} 个")
+    if snapshot.cache_expired_token_restarts:
+        recovery.append(f"过期 token 安全重启 {snapshot.cache_expired_token_restarts} 次")
+    if snapshot.cache_invalid_token_restarts:
+        recovery.append(f"失效 token 安全重启 {snapshot.cache_invalid_token_restarts} 次")
+    return f"{detail}；{'；'.join(recovery)}" if recovery else detail
+
+
+def _oai_coverage_detail_en(snapshot: OAIWindowSnapshot) -> str:
+    mode_detail = {
+        "network": "direct network harvest without the cross-run cache",
+        "cold_start": "cross-run cache cold start",
+        "cache_hit": "cross-run cache hit; no OAI network request was sent",
+        "incremental_refresh": "cross-run cache incremental refresh",
+    }.get(snapshot.retrieval_mode, snapshot.retrieval_mode)
+    detail = (
+        f"{mode_detail}; followed every resumptionToken; harvested "
+        f"{snapshot.network_harvested_records} records from the network; the exact cached "
+        f"window contains {snapshot.records_in_exact_window} records and "
+        f"{len(snapshot.records_by_key)} currently active records"
+    )
+    recovery: list[str] = []
+    if snapshot.cache_resumed_sessions:
+        recovery.append(f"resumed {snapshot.cache_resumed_sessions} interrupted sessions")
+    if snapshot.cache_expired_token_restarts:
+        recovery.append(
+            f"safely restarted {snapshot.cache_expired_token_restarts} expired tokens"
+        )
+    if snapshot.cache_invalid_token_restarts:
+        recovery.append(
+            f"safely restarted {snapshot.cache_invalid_token_restarts} invalid tokens"
+        )
+    return f"{detail}; {'; '.join(recovery)}" if recovery else detail
 
 
 def _oai_cache_stats(snapshot: OAIWindowSnapshot | None) -> dict[str, object]:
@@ -833,6 +868,9 @@ def _oai_cache_stats(snapshot: OAIWindowSnapshot | None) -> dict[str, object]:
             "oai_cache_refresh_windows": 0,
             "oai_cache_coverage_start": None,
             "oai_cache_coverage_end": None,
+            "oai_cache_resumed_sessions": 0,
+            "oai_cache_expired_token_restarts": 0,
+            "oai_cache_invalid_token_restarts": 0,
         }
     return {
         "oai_retrieval_mode": snapshot.retrieval_mode,
@@ -849,6 +887,9 @@ def _oai_cache_stats(snapshot: OAIWindowSnapshot | None) -> dict[str, object]:
             if snapshot.cache_coverage_end is not None
             else None
         ),
+        "oai_cache_resumed_sessions": snapshot.cache_resumed_sessions,
+        "oai_cache_expired_token_restarts": snapshot.cache_expired_token_restarts,
+        "oai_cache_invalid_token_restarts": snapshot.cache_invalid_token_restarts,
     }
 
 
@@ -2405,6 +2446,7 @@ def run_on_demand(
             status="success",
             checked_at=item.checked_at,
             detail=f"分类 feed 完整读取；条目数 {len(item.entries)}",
+            detail_en=f"category feed read completely; {len(item.entries)} entries",
         )
         for item in feed_snapshots
     )
@@ -2415,6 +2457,7 @@ def run_on_demand(
                 status="success",
                 checked_at=oai_snapshot.checked_at,
                 detail=_oai_coverage_detail(oai_snapshot),
+                detail_en=_oai_coverage_detail_en(oai_snapshot),
             ),
         )
     elif config.philarchive_oai.enabled:
@@ -2427,6 +2470,10 @@ def run_on_demand(
                     "OAI 增量收割失败；未把 OAI 缺失当作排除证据，沿用较宽的候选集。"
                     f"失败原因：{oai_failure or '未记录'}"
                 ),
+                detail_en=(
+                    "OAI incremental harvesting failed. OAI absence was not used as exclusion "
+                    "evidence, and the wider candidate set was retained."
+                ),
             ),
         )
     coverage += tuple(
@@ -2435,6 +2482,10 @@ def run_on_demand(
             status="failed",
             checked_at=requested_at,
             detail=detail,
+            detail_en=(
+                "The bibliographic source failed; affected candidates remain unresolved rather "
+                "than being treated as verified."
+            ),
         )
         for source, detail in sorted(bibliographic_source_failures.items())
     )
@@ -2861,6 +2912,7 @@ def run_weekly(
             status="success",
             checked_at=item.checked_at,
             detail=f"分类 feed 完整读取；条目数 {len(item.entries)}",
+            detail_en=f"category feed read completely; {len(item.entries)} entries",
         )
         for item in feed_snapshots
     )
@@ -2871,6 +2923,7 @@ def run_weekly(
                 status="success",
                 checked_at=oai_snapshot.checked_at,
                 detail=_oai_coverage_detail(oai_snapshot),
+                detail_en=_oai_coverage_detail_en(oai_snapshot),
             ),
         )
     elif config.philarchive_oai.enabled:
@@ -2883,6 +2936,10 @@ def run_weekly(
                     "OAI 增量收割失败；周报仍依赖基线首次观察与外部书目核验。"
                     f"失败原因：{oai_failure or '未记录'}"
                 ),
+                detail_en=(
+                    "OAI incremental harvesting failed. The weekly report still relies on the "
+                    "baseline's first observation and external bibliographic verification."
+                ),
             ),
         )
     coverage += tuple(
@@ -2891,6 +2948,10 @@ def run_weekly(
             status="failed",
             checked_at=started_at,
             detail=detail,
+            detail_en=(
+                "The bibliographic source failed; affected records remain in the bounded retry "
+                "workflow rather than being treated as verified."
+            ),
         )
         for source, detail in sorted(bibliographic_source_failures.items())
     )

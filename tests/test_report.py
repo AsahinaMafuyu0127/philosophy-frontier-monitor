@@ -75,6 +75,11 @@ def test_report_states_factual_match_and_date_evidence(taxonomy):
     assert "crossref：journal-article → article" in report
     assert "不评价论文质量" in report
     assert "不承诺对全球哲学新作的穷尽覆盖" in report
+    assert "# Philosophy Frontier Weekly Report" in report
+    assert "Publication-date evidence: 2026-09-03" in report
+    assert "does not evaluate paper quality" in report
+    assert report.count("A New Paper on the Theaetetus") == 2
+    assert "\n\n---\n\n# Philosophy Frontier Weekly Report" in report
 
 
 def test_zero_results_does_not_claim_none_exist_when_source_failed(taxonomy):
@@ -161,6 +166,10 @@ def test_on_demand_report_discloses_unknown_structured_work_types(taxonomy):
     assert "需要人工复核：2 条" in report
     assert "尚未分类的内部核验状态：1 条" in report
     assert "来源返回当前词表尚未识别的结构化作品类型：2 条" in report
+    assert "# Philosophy Frontier On-Demand Report" in report
+    assert "Human review required: 2" in report
+    assert "not recognized by the current vocabulary: 2" in report
+    assert "\n\n---\n\n# Philosophy Frontier On-Demand Report" in report
 
 
 def test_on_demand_report_separates_machine_backlog_from_human_review(taxonomy):
