@@ -27,6 +27,7 @@ def test_resumption_request_drops_initial_date_parameters():
     first = (FIXTURE_DIR / "oai_page_1.xml").read_text(encoding="utf-8")
     second = (FIXTURE_DIR / "oai_page_2.xml").read_text(encoding="utf-8")
     requests = []
+    progress = []
 
     def handler(request):
         requests.append(request)
@@ -34,7 +35,13 @@ def test_resumption_request_drops_initial_date_parameters():
         return httpx.Response(200, text=body, request=request)
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        records = tuple(iter_records(from_date="2026-09-04", client=client))
+        records = tuple(
+            iter_records(
+                from_date="2026-09-04",
+                client=client,
+                page_progress=lambda pages, records: progress.append((pages, records)),
+            )
+        )
 
     assert [record.identifier for record in records] == [
         "oai:philarchive:EXAMPLE-1",
@@ -44,6 +51,7 @@ def test_resumption_request_drops_initial_date_parameters():
     assert requests[1].url.params["resumptionToken"] == "token-page-2"
     assert "from" not in requests[1].url.params
     assert "metadataPrefix" not in requests[1].url.params
+    assert progress == [(1, 1), (2, 2)]
 
 
 def test_oai_page_retries_transient_server_failure_without_losing_page(monkeypatch):
@@ -83,7 +91,10 @@ def test_recent_window_follows_all_pages_and_applies_exact_local_window():
         .replace("oai:philarchive:EXAMPLE-2", "oai:philarchive.org/rec/EXAMPLE-2")
     )
 
+    requests = []
+
     def handler(request):
+        requests.append(request)
         body = second if "resumptionToken" in request.url.params else first
         return httpx.Response(200, text=body, request=request)
 
@@ -98,6 +109,8 @@ def test_recent_window_follows_all_pages_and_applies_exact_local_window():
     assert snapshot.records_in_exact_window == 1
     assert snapshot.overlap_records_excluded == 1
     assert tuple(snapshot.records_by_key) == ("example-2",)
+    assert requests[0].url.params["from"] == "2026-09-04T23:59:59Z"
+    assert requests[0].url.params["until"] == "2026-09-05T23:59:59Z"
 
 
 def test_no_records_match_is_a_successful_empty_page():

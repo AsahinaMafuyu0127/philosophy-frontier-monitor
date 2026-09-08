@@ -181,6 +181,8 @@ def test_oai_window_narrows_undated_cold_start_before_external_lookups():
     assert result.stats["oai_candidate_matches"] == 2
     assert result.stats["oai_candidates_excluded_without_feed_time_or_year"] == 1
     assert result.stats["oai_deleted_record_keys"] == 1
+    assert result.stats["oai_retrieval_mode"] == "network"
+    assert result.stats["oai_cache_coverage_start"] is None
     assert result.stats["matched"] == 1
 
 

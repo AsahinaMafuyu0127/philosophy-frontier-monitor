@@ -255,8 +255,9 @@ RSS／Atom 条目日期在即时模式中只是候选选择时间，必须与作
   发起本次书目核验，也可以在旧作检查完成后保存为来源提醒时间，但不成为出版日期；
 - `feed_candidate_year`：当真实 RSS 没有时间字段时，从 description 开头书目串提取的第一个
   独立四位年份，只能把候选限制到与窗口相交的年份；其精度不足以证明七日窗口内新出；
-- `source_datestamp`：PhilArchive OAI header 的记录创建、修改或删除时间。增量收割必须向前重叠
-  一个 datestamp 单位、完整跟随 `resumptionToken`，再在本地按精确半开窗口过滤；它只能证明
+- `source_datestamp`：PhilArchive OAI header 的记录创建、修改或删除时间。PhilArchive 当前提供
+  秒级粒度，增量收割必须向前重叠一秒、完整跟随 `resumptionToken`，并把包含式 `until` 对齐为
+  半开窗口末端前的最后一个完整秒，再在本地按精确半开窗口过滤；它只能证明
   来源记录在窗口内变化，不能证明作品在窗口内发表；
 - `publication_date`：Crossref、OpenAlex、出版方或经批准来源给出的作品发表／公开日期，进入
   `confirmed_new` 判断；允许在 `confirmed_source_arrival` 记录上保持为 `null`；
@@ -272,3 +273,7 @@ RSS／Atom 条目日期在即时模式中只是候选选择时间，必须与作
 不完整，则不能依据未命中排除，必须回退到宽候选并披露覆盖失败。外部出版日期存在时形成
 `confirmed_new`；外部数据库查无记录而非访问失败、且旧作检查没有发现更早证据时，可以形成
 `confirmed_source_arrival`。
+
+已经完整收割的 OAI 区间可以保存到与周报状态分离的私人跨运行缓存。缓存覆盖只有在分页完整成功
+后才成立；命中缓存仍重新执行当前窗口和 `/rec/` 交集。缓存中的 `source_datestamp` 不因持久化而
+获得出版日期含义，删除标记也必须在较新记录覆盖较旧活跃记录时生效。

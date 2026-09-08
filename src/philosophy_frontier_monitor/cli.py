@@ -6,6 +6,7 @@ import argparse
 import json
 import platform
 import sys
+from contextlib import ExitStack
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,7 @@ from .http_retry import (
     summarize_request_telemetry,
 )
 from .interest import build_interest_profile
+from .oai_cache import OAIHarvestCache
 from .pipeline import (
     CatchUpError,
     OnDemandRunResult,
@@ -107,6 +109,23 @@ def _emit_pull_now_progress(stage: str, completed: int, total: int) -> None:
         return
 
 
+def _emit_oai_page_progress(completed_pages: int, harvested_records: int) -> None:
+    """Show page progress when the OAI token does not advertise a total size."""
+
+    if completed_pages != 1 and completed_pages % 10:
+        return
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    try:
+        print(
+            f"[oai-cache] 已完成分页：{completed_pages}；已读取记录：{harvested_records}",
+            file=sys.stderr,
+            flush=True,
+        )
+    except OSError:
+        return
+
+
 def _project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -125,6 +144,10 @@ def _default_taxonomy_directory() -> Path:
 
 def _default_credential_file() -> Path:
     return _project_root() / "var" / "secrets" / "philpapers-credentials.txt"
+
+
+def _oai_cache_path(config: WatchlistConfig) -> Path:
+    return config.storage.state_database.parent / "oai-cache.sqlite3"
 
 
 def _parse_instant(value: str | None, field: str) -> datetime | None:
@@ -493,16 +516,23 @@ def _weekly_run(args: argparse.Namespace) -> int:
         raise ValueError(f"状态库不存在：{config.storage.state_database}；请先运行 pfm baseline。")
     window_start = _parse_instant(args.window_start, "--window-start")
     window_end = _parse_instant(args.window_end, "--window-end")
-    with (
-        collect_request_telemetry() as events,
-        StateStore(config.storage.state_database) as state,
-    ):
+    cache_path = _oai_cache_path(config)
+    with collect_request_telemetry() as events, ExitStack() as stack:
+        state = stack.enter_context(StateStore(config.storage.state_database))
+        oai_cache = (
+            None
+            if args.no_oai_cache
+            else stack.enter_context(
+                OAIHarvestCache(cache_path, page_progress=_emit_oai_page_progress)
+            )
+        )
         result = run_weekly(
             config,
             state,
             window_start=window_start,
             window_end=window_end,
             dry_run=args.dry_run,
+            **({"oai_loader": oai_cache.load_window} if oai_cache is not None else {}),
         )
     payload: dict[str, Any] = {
         "ok": True,
@@ -517,6 +547,7 @@ def _weekly_run(args: argparse.Namespace) -> int:
             events,
             circuit_skipped=result.stats.get("bibliographic_source_circuit_skips", 0),
         ),
+        "oai_cache_path": None if args.no_oai_cache else str(cache_path.resolve()),
     }
     if result.dry_run:
         payload["report_markdown"] = result.report_markdown
@@ -564,27 +595,30 @@ def _deliver_on_demand_report(
 def _pull_now(args: argparse.Namespace) -> int:
     config = load_watchlist(args.config)
     cache_path = config.storage.state_database.parent / "bibliography-cache.sqlite3"
-    with collect_request_telemetry() as events:
-        if args.no_bibliography_cache:
-            result = run_on_demand(
-                config,
-                lookback_days=args.days,
-                max_candidates=args.max_candidates,
-                max_fallback_candidates=args.max_fallback_candidates,
-                allow_development_fixture=args.allow_development_fixture,
-                progress=_emit_pull_now_progress,
+    oai_cache_path = _oai_cache_path(config)
+    with collect_request_telemetry() as events, ExitStack() as stack:
+        bibliography_cache = (
+            None
+            if args.no_bibliography_cache
+            else stack.enter_context(BibliographicCache(cache_path))
+        )
+        oai_cache = (
+            None
+            if args.no_oai_cache
+            else stack.enter_context(
+                OAIHarvestCache(oai_cache_path, page_progress=_emit_oai_page_progress)
             )
-        else:
-            with BibliographicCache(cache_path) as bibliography_cache:
-                result = run_on_demand(
-                    config,
-                    lookback_days=args.days,
-                    max_candidates=args.max_candidates,
-                    max_fallback_candidates=args.max_fallback_candidates,
-                    bibliography_cache=bibliography_cache,
-                    allow_development_fixture=args.allow_development_fixture,
-                    progress=_emit_pull_now_progress,
-                )
+        )
+        result = run_on_demand(
+            config,
+            lookback_days=args.days,
+            max_candidates=args.max_candidates,
+            max_fallback_candidates=args.max_fallback_candidates,
+            bibliography_cache=bibliography_cache,
+            allow_development_fixture=args.allow_development_fixture,
+            progress=_emit_pull_now_progress,
+            **({"oai_loader": oai_cache.load_window} if oai_cache is not None else {}),
+        )
     delivery_payload = _deliver_on_demand_report(result, config, args.report_delivery)
     _emit(
         {
@@ -612,6 +646,9 @@ def _pull_now(args: argparse.Namespace) -> int:
                 result.stats["bibliography_cache_writes"] > 0
                 or result.stats["bibliography_cache_scheduling_writes"] > 0
             ),
+            "oai_cache_path": (None if args.no_oai_cache else str(oai_cache_path.resolve())),
+            "oai_cache_is_weekly_state": False,
+            "oai_cache_updated": result.stats["oai_cache_refresh_windows"] > 0,
         }
     )
     return 0
@@ -622,10 +659,16 @@ def _catch_up(args: argparse.Namespace) -> int:
     if not config.storage.state_database.is_file():
         raise ValueError(f"状态库不存在：{config.storage.state_database}；请先运行 pfm baseline。")
     as_of = _parse_instant(args.as_of, "--as-of")
-    with (
-        collect_request_telemetry() as events,
-        StateStore(config.storage.state_database) as state,
-    ):
+    cache_path = _oai_cache_path(config)
+    with collect_request_telemetry() as events, ExitStack() as stack:
+        state = stack.enter_context(StateStore(config.storage.state_database))
+        oai_cache = (
+            None
+            if args.no_oai_cache
+            else stack.enter_context(
+                OAIHarvestCache(cache_path, page_progress=_emit_oai_page_progress)
+            )
+        )
         schema_backup_created = state.last_schema_backup is not None
         try:
             result = run_weekly_catch_up(
@@ -634,6 +677,7 @@ def _catch_up(args: argparse.Namespace) -> int:
                 now=as_of,
                 dry_run=args.dry_run,
                 max_windows=args.max_windows,
+                **({"oai_loader": oai_cache.load_window} if oai_cache is not None else {}),
             )
         except CatchUpError as error:
             source_failure = _source_failure_payload(error)
@@ -659,6 +703,7 @@ def _catch_up(args: argparse.Namespace) -> int:
                     ),
                     "retry_safe": True,
                     "network_telemetry": summarize_request_telemetry(events),
+                    "oai_cache_path": (None if args.no_oai_cache else str(cache_path.resolve())),
                     **({"source_failure": source_failure} if source_failure is not None else {}),
                 }
             )
@@ -698,6 +743,7 @@ def _catch_up(args: argparse.Namespace) -> int:
                     for item in result.completed_runs
                 ),
             ),
+            "oai_cache_path": None if args.no_oai_cache else str(cache_path.resolve()),
         }
     )
     return 0
@@ -862,6 +908,11 @@ def build_parser() -> argparse.ArgumentParser:
     weekly.add_argument("--dry-run", action="store_true")
     weekly.add_argument("--window-start")
     weekly.add_argument("--window-end")
+    weekly.add_argument(
+        "--no-oai-cache",
+        action="store_true",
+        help="disable the private cross-run OAI harvest cache",
+    )
     weekly.set_defaults(handler=_weekly_run)
 
     pull_now = subparsers.add_parser(
@@ -905,6 +956,11 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     pull_now.add_argument(
+        "--no-oai-cache",
+        action="store_true",
+        help="disable the private cross-run OAI harvest cache",
+    )
+    pull_now.add_argument(
         "--report-delivery",
         choices=("inline", "file"),
         default="inline",
@@ -930,6 +986,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=8,
         help="fail before collection when more missing windows require review",
+    )
+    catch_up.add_argument(
+        "--no-oai-cache",
+        action="store_true",
+        help="disable the private cross-run OAI harvest cache",
     )
     catch_up.set_defaults(handler=_catch_up)
     return parser

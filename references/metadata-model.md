@@ -646,9 +646,9 @@ schema 4 使 `pfm catch-up` 能在跨兴趣版本的多个缺口中逐周选择�
 `display_title` 只用于书目查询和故障复核；远程文本写入 Markdown 前必须折叠换行并转义结构字符。
 
 `pfm pull-now` 不打开周报状态数据库，也不写入上述任何表。当前 feed 条目、候选 feed 日期、从
-description 书目串提取的候选年份与规范化 DOI、OAI header datestamp、OAI `dc:date`／`dc:type`
-提示、临时作品合并、匹配结果和未解决原因仅存在于本次进程中；description 本身、候选年份和只
-用于查询的中间标题批次均不进入命令报告。如果用户
+description 书目串提取的候选年份与规范化 DOI、临时作品合并、匹配结果和未解决原因仅存在于
+本次进程中；description 本身、候选年份和只用于查询的中间标题批次均不进入命令报告。OAI header
+datestamp 与 `dc:date`／`dc:type` 可以进入下述独立最小缓存，但不进入周报状态库。如果用户
 另行保存即时报告文件，该文件按私人报告处理，但它仍不成为周报运行记录或通知历史。
 
 默认即时命令另行使用 Git 忽略目录中的 `bibliography-cache.sqlite3`。它与上述周报 schema 没有
@@ -685,6 +685,36 @@ fallback_attempt_log(
 `fallback_attempt_log` 最多保留 31 天，只用于让跨次冷启动优先处理从未尝试或最久未尝试的延期
 候选。它不表示“查无记录”，不改变证据结论，也不能抑制即时报告或周报；因传输失败或来源熔断
 而没有完成核验的候选不写入该表。
+
+`pull-now`、`weekly-run` 和 `catch-up` 默认另行使用 Git 忽略目录中的 `oai-cache.sqlite3`。它不与
+周报 schema 建立外键，也不保存兴趣画像、通知或书目题名。最小结构为：
+
+```text
+oai_record_events(
+  endpoint_hash,
+  identifier,
+  source_datestamp,
+  changed_at,
+  deleted,
+  fields_json,       -- 仅 dc:identifier、dc:date、dc:type
+  cached_at,
+  PRIMARY KEY(endpoint_hash, identifier, source_datestamp)
+)
+
+oai_coverage(
+  endpoint_hash,
+  window_start,
+  window_end,
+  checked_at,
+  PRIMARY KEY(endpoint_hash, window_start, window_end)
+)
+```
+
+覆盖区间只在完整跟随全部 `resumptionToken` 后与记录事件一起提交，相邻或重叠区间会合并。缓存
+读取按 `changed_at` 重建精确半开窗口；同一 `/rec/` 键只保留窗口内时间最新的状态，最新状态为
+删除时不得进入候选。缓存统计中的 `oai_retrieval_mode` 区分 `cold_start`、`cache_hit`、
+`incremental_refresh` 和未启用缓存时的直接 `network`；覆盖起止时间以 ISO 8601 字符串保存到运行
+统计，保证周报状态 JSON 可序列化。
 
 即时交付结果另含 `report_delivery`、`report_character_count`、`report_path` 和
 `on_demand_report_file_written`。`inline` 时 `report_markdown` 含全文且 `report_path=null`；用户明确

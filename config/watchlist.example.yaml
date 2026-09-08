@@ -62,6 +62,7 @@ sources:
   philarchive_oai:
     # Optional completeness aid for records that have no RSS timestamp or year.
     # Its datestamp means "metadata record created or updated", not publication date.
+    # Successful windows use private var/oai-cache.sqlite3 unless --no-oai-cache is set.
     enabled: true
     endpoint: "https://philarchive.org/oai.pl"
   crossref:

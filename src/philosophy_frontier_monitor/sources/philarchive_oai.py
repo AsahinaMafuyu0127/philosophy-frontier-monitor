@@ -7,7 +7,7 @@ are never mapped to a paper publication date by this module.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from urllib.parse import unquote
@@ -63,6 +63,13 @@ class OAIWindowSnapshot:
     unkeyed_records: int
     duplicate_keys: int
     overlap_records_excluded: int
+    record_events: tuple[OAIRecord, ...] = ()
+    retrieval_mode: str = "network"
+    network_harvested_records: int = 0
+    cache_records_written: int = 0
+    cache_refresh_windows: int = 0
+    cache_coverage_start: datetime | None = None
+    cache_coverage_end: datetime | None = None
 
 
 def parse_oai_page(xml_text: str) -> OAIPage:
@@ -125,6 +132,7 @@ def iter_records(
     endpoint: str = DEFAULT_ENDPOINT,
     metadata_prefix: str = "oai_dc",
     client: httpx.Client | None = None,
+    page_progress: Callable[[int, int], None] | None = None,
 ) -> Iterator[OAIRecord]:
     """Yield every page, using only ``resumptionToken`` after the first request."""
 
@@ -135,6 +143,8 @@ def iter_records(
     params = {"verb": "ListRecords", "metadataPrefix": metadata_prefix, "from": from_date}
     if until_date:
         params["until"] = until_date
+    completed_pages = 0
+    harvested_records = 0
     try:
         while True:
             try:
@@ -145,6 +155,10 @@ def iter_records(
             except BoundedRequestError as error:
                 raise OAIError(f"OAI request failed: {error}") from error
             page = parse_oai_page(response.text)
+            completed_pages += 1
+            harvested_records += len(page.records)
+            if page_progress is not None:
+                page_progress(completed_pages, harvested_records)
             yield from page.records
             if page.resumption_token is None:
                 return
@@ -195,13 +209,16 @@ def load_recent_window(
     *,
     endpoint: str = DEFAULT_ENDPOINT,
     client: httpx.Client | None = None,
+    page_progress: Callable[[int, int], None] | None = None,
 ) -> OAIWindowSnapshot:
     """Harvest all OAI pages and retain records changed in ``[start, end)``.
 
-    The server query deliberately overlaps the requested window by one day,
-    following OAI incremental-harvesting guidance.  Exact filtering and
-    deduplication happen locally.  The resulting datestamps are source-record
-    change evidence, never publication dates.
+    PhilArchive exposes second-granularity datestamps, so the server query
+    deliberately overlaps the requested window by one second following OAI
+    incremental-harvesting guidance.  Its inclusive ``until`` parameter is
+    set to the last whole second before the half-open local boundary.  Exact
+    filtering and deduplication still happen locally.  The resulting
+    datestamps are source-record change evidence, never publication dates.
     """
 
     if window_start.tzinfo is None or window_end.tzinfo is None:
@@ -217,12 +234,16 @@ def load_recent_window(
     unkeyed = 0
     duplicate_keys = 0
     overlap_excluded = 0
+    exact_records: list[OAIRecord] = []
     latest_by_key: dict[str, tuple[datetime, OAIRecord]] = {}
+    query_start = start.replace(microsecond=0) - timedelta(seconds=1)
+    query_end = (end - timedelta(microseconds=1)).replace(microsecond=0)
     for record in iter_records(
-        from_date=(start - timedelta(days=1)).date().isoformat(),
-        until_date=end.date().isoformat(),
+        from_date=query_start.isoformat().replace("+00:00", "Z"),
+        until_date=query_end.isoformat().replace("+00:00", "Z"),
         endpoint=endpoint,
         client=client,
+        page_progress=page_progress,
     ):
         harvested += 1
         changed_at = parse_oai_datestamp(record.source_datestamp)
@@ -230,6 +251,7 @@ def load_recent_window(
             overlap_excluded += 1
             continue
         in_window += 1
+        exact_records.append(record)
         key = oai_record_key(record)
         if key is None:
             unkeyed += 1
@@ -257,4 +279,7 @@ def load_recent_window(
         unkeyed_records=unkeyed,
         duplicate_keys=duplicate_keys,
         overlap_records_excluded=overlap_excluded,
+        record_events=tuple(exact_records),
+        retrieval_mode="network",
+        network_harvested_records=harvested,
     )

@@ -106,26 +106,31 @@ Do not require the user to know PhilPapers category names in advance.
    republication, bibliographic-identity, supported-work-type, and category-set
    gates. On-demand batching and fallback budgets are performance mechanisms,
    not a separate evidence policy.
-8. The public v0.1 stable contract is the baseline, weekly run, and missed-run
+8. The public stable contract is the baseline, weekly run, and missed-run
    catch-up workflow. `pull-now` remains an experimental cold-start mode because
    real PhilPapers category feeds omit day-level timestamps and DOI coverage is
    sparse. When the user explicitly asks to test it, explain that a broad profile
    may require hundreds of individual bibliographic lookups and obtain explicit
    agreement before raising either safety limit. Then run `pfm pull-now --config
-   config/watchlist.yaml`. This separate, read-only mode has a
-   default window is the seven rolling local days ending at the request time;
+   config/watchlist.yaml`. This separate, read-only mode has a default window
+   of the seven rolling local days ending at the request time;
    `--days` may select 1 through 31 days. It requires a verified production
    taxonomy and configured feeds, but does not require a weekly baseline or
    state database. Read every configured feed, use feed timestamps or an
    in-memory bibliography-year and early-work-status hints to bound and
    prioritize candidates. When `sources.philarchive_oai.enabled` is true,
-   harvest the rolling window with a one-datestamp-unit overlap, follow every
-   `resumptionToken`, filter the exact half-open window locally, and join only
-   by the shared PhilPapers/PhilArchive `/rec/` key. Keep the OAI header
+   use the private cross-run `oai-cache.sqlite3` by default, fetch only uncovered
+   intervals, overlap PhilArchive's second-granularity datestamp by one second,
+   follow every `resumptionToken`, filter the exact half-open window locally,
+   and join only by the shared PhilPapers/PhilArchive `/rec/` key. Register cache
+   coverage only after complete pagination; `--no-oai-cache` may disable it.
+   Keep the OAI header
    datestamp separate from `dc:date`; it proves a source-record change, never a
    publication date. For feed records lacking both timestamp and year, a
    successful complete OAI harvest may retain only records changed in the
    window. Report the excluded count and the open-access-only coverage limit.
+   Do not add paywalled or per-record PhilPapers scraping merely to chase the
+   remaining fully undated, non-open records.
    If OAI fails, do not use absence as exclusion evidence: retain the wider
    candidate set and disclose the source failure. Before any OpenAlex/Crossref
    batch or fallback,

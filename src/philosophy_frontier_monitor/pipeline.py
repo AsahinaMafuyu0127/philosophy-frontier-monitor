@@ -115,7 +115,7 @@ from .work_types import (
 
 SOURCE_NAME = "philpapers-rss"
 NOTIFICATION_TYPE = "weekly_new_papers"
-PIPELINE_VERSION = "0.4.0"
+PIPELINE_VERSION = "0.5.0"
 MATCHING_RULE_VERSION = "set_intersection_v1"
 RECORD_PATH = re.compile(r"/rec/(?!\.{1,2}/?$)[A-Za-z0-9._~-]+/?")
 FEED_YEAR_HINT = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
@@ -807,6 +807,49 @@ def load_philarchive_oai_window(
     """Load a complete PhilArchive OAI window through the configured endpoint."""
 
     return load_recent_oai_window(window_start, window_end, endpoint=endpoint)
+
+
+def _oai_coverage_detail(snapshot: OAIWindowSnapshot) -> str:
+    mode_detail = {
+        "network": "直接网络收割",
+        "cold_start": "跨运行缓存冷启动",
+        "cache_hit": "跨运行缓存热命中；未发出 OAI 网络请求",
+        "incremental_refresh": "跨运行缓存增量刷新",
+    }.get(snapshot.retrieval_mode, snapshot.retrieval_mode)
+    return (
+        f"{mode_detail}；完整跟随 resumptionToken；"
+        f"本次网络收割 {snapshot.network_harvested_records} 条，缓存精确窗口内 "
+        f"{snapshot.records_in_exact_window} 条，当前非删除记录 "
+        f"{len(snapshot.records_by_key)} 条"
+    )
+
+
+def _oai_cache_stats(snapshot: OAIWindowSnapshot | None) -> dict[str, object]:
+    if snapshot is None:
+        return {
+            "oai_retrieval_mode": None,
+            "oai_network_harvested_records": 0,
+            "oai_cache_records_written": 0,
+            "oai_cache_refresh_windows": 0,
+            "oai_cache_coverage_start": None,
+            "oai_cache_coverage_end": None,
+        }
+    return {
+        "oai_retrieval_mode": snapshot.retrieval_mode,
+        "oai_network_harvested_records": snapshot.network_harvested_records,
+        "oai_cache_records_written": snapshot.cache_records_written,
+        "oai_cache_refresh_windows": snapshot.cache_refresh_windows,
+        "oai_cache_coverage_start": (
+            snapshot.cache_coverage_start.isoformat()
+            if snapshot.cache_coverage_start is not None
+            else None
+        ),
+        "oai_cache_coverage_end": (
+            snapshot.cache_coverage_end.isoformat()
+            if snapshot.cache_coverage_end is not None
+            else None
+        ),
+    }
 
 
 def _oai_year_hints(values: tuple[str, ...]) -> tuple[int, ...]:
@@ -2371,12 +2414,7 @@ def run_on_demand(
                 source="philarchive-oai",
                 status="success",
                 checked_at=oai_snapshot.checked_at,
-                detail=(
-                    "完整跟随 resumptionToken；"
-                    f"收割 {oai_snapshot.harvested_records} 条，精确窗口内 "
-                    f"{oai_snapshot.records_in_exact_window} 条，当前非删除记录 "
-                    f"{len(oai_snapshot.records_by_key)} 条"
-                ),
+                detail=_oai_coverage_detail(oai_snapshot),
             ),
         )
     elif config.philarchive_oai.enabled:
@@ -2543,6 +2581,7 @@ def run_on_demand(
         "automatic_retry_required": automatic_retry_required,
         "unresolved": unresolved_count,
     }
+    stats.update(_oai_cache_stats(oai_snapshot))
     cache_stats_after = (
         bibliography_cache.stats
         if bibliography_cache is not None
@@ -2831,12 +2870,7 @@ def run_weekly(
                 source="philarchive-oai",
                 status="success",
                 checked_at=oai_snapshot.checked_at,
-                detail=(
-                    "完整跟随 resumptionToken；"
-                    f"收割 {oai_snapshot.harvested_records} 条，精确窗口内 "
-                    f"{oai_snapshot.records_in_exact_window} 条，当前非删除记录 "
-                    f"{len(oai_snapshot.records_by_key)} 条"
-                ),
+                detail=_oai_coverage_detail(oai_snapshot),
             ),
         )
     elif config.philarchive_oai.enabled:
@@ -2910,6 +2944,7 @@ def run_weekly(
         "bibliographic_source_circuits_open": len(bibliographic_source_failures),
         "bibliographic_source_circuit_skips": sum(circuit_skip_counts.values()),
     }
+    stats.update(_oai_cache_stats(oai_snapshot))
 
     run_id = f"pfm:run:{uuid.uuid4()}"
     report_path: Path | None = None
@@ -2968,6 +3003,7 @@ def run_weekly_catch_up(
     max_windows: int = 8,
     feed_loader: FeedLoader = load_philpapers_feed,
     resolver: CandidateResolver = resolve_bibliography,
+    oai_loader: OAIWindowLoader = load_philarchive_oai_window,
     report_writer: ReportWriter = write_report_atomic,
 ) -> CatchUpResult:
     """Run all due gaps chronologically without consuming later-week records early."""
@@ -3042,6 +3078,7 @@ def run_weekly_catch_up(
                 dry_run=dry_run,
                 feed_loader=feed_loader,
                 resolver=resolver,
+                oai_loader=oai_loader,
                 report_writer=report_writer,
                 defer_uncertain_until_later_window=index < len(plan.missing_windows) - 1,
             )
