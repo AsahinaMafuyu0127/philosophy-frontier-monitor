@@ -144,6 +144,20 @@ Do not require the user to know PhilPapers category names in advance.
    window. Report the excluded count and the open-access-only coverage limit.
    Do not add paywalled or per-record PhilPapers scraping merely to chase the
    remaining fully undated, non-open records.
+   With the default private bibliographic cache enabled, place an OAI stock
+   record in the date-evidence-insufficient quarantine set only when it has no
+   feed timestamp, no feed or OAI bibliographic year, no DOI, and no explicit
+   manuscript, working-paper, preprint, accepted-manuscript, or forthcoming
+   type. Store only a namespace-prefixed hash of the PhilPapers source ID plus
+   first/last-seen times, refresh membership for at most 365 days, and disclose
+   only the current count in an ordinary pull. Do not send these records through
+   title or individual bibliographic lookup, the per-run remote-verification
+   deferral count, or human review.
+   Membership is neither an old-work nor relevance judgment. Automatically
+   remove a record and verify it when any excluded signal later appears, and
+   disclose that a genuinely new manuscript lacking every signal may be absent.
+   Honor `--no-bibliography-cache`; without the private cache, do not pretend the
+   persistent set exists.
    If OAI fails, do not use absence as exclusion evidence: retain the wider
    candidate set and disclose the source failure. Before any OpenAlex/Crossref
    batch or fallback,
@@ -203,7 +217,9 @@ Do not require the user to know PhilPapers category names in advance.
    [source-retry-policy.md](references/source-retry-policy.md): use bounded
    exponential backoff, honor a short `Retry-After`, never wait beyond the run
    budget or retry a permanent 4xx, and open a per-run source circuit after the
-   bounded attempt limit. Report the source, failure class, coverage impact, and
+   bounded attempt limit. A candidate-specific permanent 4xx affects that
+   candidate only and must not disable the source for later candidates; a later
+   source-wide failure may still open the circuit. Report the source, failure class, coverage impact, and
    safe retry time without URLs, query text, response bodies, or credentials.
    Before attributing a failed run to a provider, use `pfm doctor --live` (or
    narrow it with repeated `--source`) to distinguish DNS, TLS, HTTP, and
@@ -215,9 +231,11 @@ Do not require the user to know PhilPapers category names in advance.
    remainder is insufficient or unavailable rather than promising completion.
    Report both conservative logical-request upper bounds and post-run network
    telemetry; do not describe either as an exact bill because retries and
-   provider pricing remain external. With the default 1000-candidate and
-   50-fallback limits, the current DOI/title/fallback plan permits at most 220
-   OpenAlex and 50 Crossref logical requests before bounded retry attempts.
+   provider pricing remain external. Before network access, warn that the first
+   pull may take longer while it checks all non-quarantined candidates covered
+   by the default 300-fallback budget. With the default 1000-candidate and
+   300-fallback limits, the current DOI/title/fallback plan permits at most 470
+   OpenAlex and 300 Crossref logical requests before bounded retry attempts.
    By default, use the separate private bibliographic cache for per-DOI
    OpenAlex batch results, positive per-title OpenAlex batch candidates, and
    individual Crossref/OpenAlex fallbacks. DOI and individual positive metadata
@@ -237,6 +255,24 @@ Do not require the user to know PhilPapers category names in advance.
    batch request and sends the still-unresolved candidate through the bounded,
    rotating individual queue instead. Do not write this marker after a failed
    or circuit-skipped batch.
+   In the on-demand report, lead with the count of matched `confirmed_new` works,
+   followed by matched `confirmed_source_arrival` works. Expose the per-run
+   count as `remote_verification_not_reached` and label it "not reached by
+   remote verification in this run", never as a backlog:
+   it is a per-run budget boundary, not accumulated user work. Keep that count,
+   human review, automatic retry, and the count-only undated set as secondary
+   coverage qualifications; do not hide them or make them the headline result.
+   In both weekly and on-demand reports, divide matching works into three fixed
+   sections in this order: `recently published`, `recently arrived`, and
+   `recently changed`, with a horizontal divider between sections. Sort the
+   first by publication-date evidence newest first, and the latter two by
+   recent-availability or OAI-change evidence newest first. Keep
+   `recently changed` behind a visible Markdown show/hide control that is closed
+   by default; use `--show-recently-changed` only when the user asks for it to
+   start expanded, including before a Word or PowerPoint conversion. Place
+   source coverage immediately after the complete matching-paper block and
+   before verification-deferral or retry details. Never treat an OAI record
+   change as a publication date.
    Full inline Markdown can itself consume substantial model context. When the
    measured candidate count, a previous report, or a deliberately raised safety
    limit indicates a long result, explain `--report-delivery file` before the

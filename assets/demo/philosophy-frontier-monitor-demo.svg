@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <filter id="paper" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="3" seed="17" result="noise"/>
+      <feColorMatrix in="noise" type="saturate" values="0" result="mono"/>
+      <feComponentTransfer in="mono" result="faint"><feFuncA type="table" tableValues="0 0.055"/></feComponentTransfer>
+      <feBlend in="SourceGraphic" in2="faint" mode="multiply"/>
+    </filter>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#463827" flood-opacity="0.14"/>
+    </filter>
+    <style>
+      .serif { font-family: "Noto Serif SC", "Source Han Serif SC", SimSun, serif; }
+      .latin { font-family: Georgia, "Times New Roman", serif; }
+      .ink { fill: #30271f; } .muted { fill: #736657; } .wine { fill: #713c36; } .gold { fill: #9a7a3c; }
+    </style>
+  </defs>
+  <rect width="1600" height="900" fill="#f3ecd8" filter="url(#paper)"/>
+  <rect x="26" y="26" width="1548" height="848" rx="3" fill="none" stroke="#7a5e32" stroke-width="2"/>
+  <rect x="38" y="38" width="1524" height="824" rx="2" fill="none" stroke="#b59a63"/>
+  <path d="M70 72h420 M1110 72h420" stroke="#a98b4e"/>
+  <g transform="translate(800 72)" fill="none" stroke="#713c36" stroke-width="1.6">
+    <path d="M-268 0h210c18 0 23-17 23-29 0 12 5 29 23 29h12"/>
+    <path d="M268 0H58C40 0 35-17 35-29c0 12-5 29-23 29H0"/>
+    <circle r="5" fill="#713c36" stroke="none"/>
+  </g>
+  <g class="latin">
+    <text x="80" y="118" font-size="20" letter-spacing="5" class="wine">PHILOSOPHY FRONTIER MONITOR</text>
+    <text x="80" y="172" font-size="17" letter-spacing="2" class="muted">A CODEX SKILL FOR FACTUAL PHILOSOPHY-PAPER MONITORING</text>
+  </g>
+  <g class="serif">
+    <text x="80" y="263" font-size="58" font-weight="700" class="ink">从研究方向，</text>
+    <text x="80" y="335" font-size="58" font-weight="700" class="ink">到可核验的哲学论文周报</text>
+    <text x="84" y="391" font-size="24" class="muted">分类由研究者确认 · 结果不按模型评分删减 · 来源缺口同时披露</text>
+  </g>
+  <g transform="translate(1230 125)" filter="url(#shadow)">
+    <circle cx="150" cy="116" r="108" fill="#efe3c5" stroke="#713c36" stroke-width="2"/>
+    <circle cx="150" cy="116" r="92" fill="none" stroke="#a98b4e"/>
+    <path d="M83 122c31-28 58-38 67-30 9-8 36 2 67 30v52c-31-17-58-20-67-11-9-9-36-6-67 11z" fill="#f9f4e7" stroke="#713c36" stroke-width="2"/>
+    <path d="M150 93v70 M94 116c22-11 41-13 56-4 M206 116c-22-11-41-13-56-4" fill="none" stroke="#9a7a3c" stroke-width="1.5"/>
+    <path d="M137 54h26 M150 41v26" stroke="#713c36" stroke-width="2"/>
+    <text x="150" y="211" text-anchor="middle" font-size="13" letter-spacing="2" class="latin wine">LOCAL · OPEN · AUDITABLE</text>
+  </g>
+  <g class="serif" filter="url(#shadow)">
+    <g transform="translate(80 490)">
+      <rect width="338" height="218" rx="5" fill="#fbf7ea" stroke="#bda574"/><path d="M0 54h338" stroke="#d4c49c"/>
+      <text x="24" y="37" font-size="16" class="gold" letter-spacing="2">I</text><text x="54" y="38" font-size="23" font-weight="700" class="ink">说明研究方向</text>
+      <text x="26" y="88" font-size="18" class="muted">用中文或英文描述人物、问题、</text><text x="26" y="118" font-size="18" class="muted">文本、传统与明确的排除项。</text>
+      <path d="M26 151h286" stroke="#d8c9a8"/><text x="26" y="183" font-size="16" class="wine">自然语言是入口，不是隐藏筛选器</text>
+    </g>
+    <g transform="translate(448 490)">
+      <rect width="338" height="218" rx="5" fill="#fbf7ea" stroke="#bda574"/><path d="M0 54h338" stroke="#d4c49c"/>
+      <text x="24" y="37" font-size="16" class="gold" letter-spacing="2">II</text><text x="62" y="38" font-size="23" font-weight="700" class="ink">确认受控分类</text>
+      <text x="26" y="88" font-size="17" class="muted">Moral Responsibility · Free Will</text><text x="26" y="118" font-size="17" class="muted">Action Theory · 或你的研究分类</text>
+      <path d="M26 151h286" stroke="#d8c9a8"/><text x="26" y="183" font-size="16" class="wine">未确认的推理候选不会进入监测</text>
+    </g>
+    <g transform="translate(816 490)">
+      <rect width="338" height="218" rx="5" fill="#fbf7ea" stroke="#bda574"/><path d="M0 54h338" stroke="#d4c49c"/>
+      <text x="24" y="37" font-size="16" class="gold" letter-spacing="2">III</text><text x="68" y="38" font-size="23" font-weight="700" class="ink">核验来源与日期</text>
+      <text x="26" y="88" font-size="17" class="muted">PhilPapers · PhilArchive OAI</text><text x="26" y="118" font-size="17" class="muted">Crossref · OpenAlex</text>
+      <path d="M26 151h286" stroke="#d8c9a8"/><text x="26" y="183" font-size="16" class="wine">来源到达不冒充正式发表日期</text>
+    </g>
+    <g transform="translate(1184 490)">
+      <rect width="338" height="218" rx="5" fill="#fbf7ea" stroke="#bda574"/><path d="M0 54h338" stroke="#d4c49c"/>
+      <text x="24" y="37" font-size="16" class="gold" letter-spacing="2">IV</text><text x="66" y="38" font-size="23" font-weight="700" class="ink">收到事实性周报</text>
+      <text x="26" y="88" font-size="18" class="muted">题目 · 作者 · 作品类型 · 日期证据</text><text x="26" y="118" font-size="18" class="muted">命中分类 · 稳定链接 · 覆盖状态</text>
+      <path d="M26 151h286" stroke="#d8c9a8"/><text x="26" y="183" font-size="16" class="wine">中文与英文来自同一组确定结果</text>
+    </g>
+  </g>
+  <g class="serif">
+    <path d="M80 769h1442" stroke="#9a7a3c"/><text x="80" y="812" font-size="20" class="ink">研究者决定范围</text>
+    <circle cx="278" cy="805" r="3" fill="#713c36"/><text x="310" y="812" font-size="20" class="ink">程序呈现证据</text>
+    <circle cx="508" cy="805" r="3" fill="#713c36"/><text x="540" y="812" font-size="20" class="ink">不完整处保留为不完整</text>
+    <text x="1522" y="812" text-anchor="end" font-size="16" class="muted">github.com/AsahinaMafuyu0127/philosophy-frontier-monitor</text>
+  </g>
+</svg>

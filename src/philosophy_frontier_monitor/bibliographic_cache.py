@@ -24,6 +24,7 @@ NEGATIVE_CACHE_TTL = timedelta(minutes=15)
 TITLE_BATCH_POSITIVE_CACHE_TTL = timedelta(hours=1)
 TITLE_BATCH_ATTEMPT_CACHE_TTL = timedelta(hours=1)
 FALLBACK_ATTEMPT_RETENTION = timedelta(days=31)
+UNDATED_QUARANTINE_RETENTION = timedelta(days=365)
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +40,7 @@ class BibliographicCacheStats:
     writes: int
     expired: int
     scheduling_writes: int = 0
+    quarantine_writes: int = 0
 
 
 class BibliographicCache:
@@ -74,12 +76,22 @@ class BibliographicCache:
             )
             """
         )
+        self.connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS undated_candidate_quarantine (
+                source_id_hash TEXT PRIMARY KEY,
+                first_quarantined_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL
+            )
+            """
+        )
         self.connection.commit()
         self._hits = 0
         self._misses = 0
         self._writes = 0
         self._expired = 0
         self._scheduling_writes = 0
+        self._quarantine_writes = 0
 
     def __enter__(self) -> BibliographicCache:
         return self
@@ -98,6 +110,7 @@ class BibliographicCache:
             writes=self._writes,
             expired=self._expired,
             scheduling_writes=self._scheduling_writes,
+            quarantine_writes=self._quarantine_writes,
         )
 
     def lookup_crossref(
@@ -413,6 +426,86 @@ class BibliographicCache:
         )
         self.connection.commit()
         self._scheduling_writes += len(source_ids)
+
+    def is_undated_candidate_quarantined(
+        self,
+        source_id: str,
+        *,
+        now: datetime,
+    ) -> bool:
+        """Return whether a source record is in the persistent fully-undated set.
+
+        Only a namespace-prefixed hash is stored. Membership is a request-planning
+        decision, never evidence that the work is old or irrelevant.
+        """
+
+        _require_aware(now)
+        cutoff = now.astimezone(UTC) - UNDATED_QUARANTINE_RETENTION
+        row = self.connection.execute(
+            """
+            SELECT last_seen_at
+            FROM undated_candidate_quarantine
+            WHERE source_id_hash = ?
+            """,
+            (_identifier_hash("philpapers-undated", source_id),),
+        ).fetchone()
+        return row is not None and datetime.fromisoformat(row["last_seen_at"]) >= cutoff
+
+    def record_undated_candidates(
+        self,
+        source_ids: tuple[str, ...],
+        *,
+        now: datetime,
+    ) -> None:
+        """Persist current fully-undated membership without titles, authors, or URLs."""
+
+        _require_aware(now)
+        seen_at = now.astimezone(UTC)
+        changes_before = self.connection.total_changes
+        self.connection.execute(
+            "DELETE FROM undated_candidate_quarantine WHERE last_seen_at < ?",
+            ((seen_at - UNDATED_QUARANTINE_RETENTION).isoformat(),),
+        )
+        pruned = self.connection.total_changes - changes_before
+        if not source_ids:
+            self.connection.commit()
+            self._quarantine_writes += pruned
+            return
+        self.connection.executemany(
+            """
+            INSERT INTO undated_candidate_quarantine (
+                source_id_hash, first_quarantined_at, last_seen_at
+            ) VALUES (?, ?, ?)
+            ON CONFLICT(source_id_hash) DO UPDATE SET
+                last_seen_at = excluded.last_seen_at
+            """,
+            (
+                (
+                    _identifier_hash("philpapers-undated", source_id),
+                    seen_at.isoformat(),
+                    seen_at.isoformat(),
+                )
+                for source_id in source_ids
+            ),
+        )
+        self.connection.commit()
+        self._quarantine_writes += len(source_ids) + pruned
+
+    def clear_undated_candidates(self, source_ids: tuple[str, ...]) -> None:
+        """Remove records that now carry date, DOI, or explicit early-work evidence."""
+
+        if not source_ids:
+            return
+        hashes = tuple(_identifier_hash("philpapers-undated", value) for value in source_ids)
+        changes_before = self.connection.total_changes
+        self.connection.executemany(
+            "DELETE FROM undated_candidate_quarantine WHERE source_id_hash = ?",
+            ((value,) for value in hashes),
+        )
+        changed = self.connection.total_changes - changes_before
+        self.connection.commit()
+        if changed:
+            self._quarantine_writes += changed
 
     def _peek_key(
         self,

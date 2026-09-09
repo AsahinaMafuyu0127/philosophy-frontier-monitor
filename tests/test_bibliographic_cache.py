@@ -190,3 +190,50 @@ def test_fallback_attempt_history_is_hashed_and_expires_from_priority(
         assert row["source_id_hash"] != source_id
         assert "PRIVATE-ID" not in row["source_id_hash"]
         assert cache.fallback_last_attempt(source_id, now=NOW + timedelta(days=32)) is None
+
+
+def test_undated_quarantine_is_hashed_expires_and_can_be_cleared(workspace_tmp_path):
+    source_id = "https://philpapers.org/rec/PRIVATE-UNDATED-ID"
+    with BibliographicCache(workspace_tmp_path / "bibliography-cache.sqlite3") as cache:
+        cache.record_undated_candidates((source_id,), now=NOW)
+        row = cache.connection.execute(
+            "SELECT source_id_hash, first_quarantined_at, last_seen_at "
+            "FROM undated_candidate_quarantine"
+        ).fetchone()
+
+        assert cache.is_undated_candidate_quarantined(source_id, now=NOW)
+        assert not cache.is_undated_candidate_quarantined(
+            source_id,
+            now=NOW + timedelta(days=366),
+        )
+        assert row["source_id_hash"] != source_id
+        assert "PRIVATE-UNDATED-ID" not in row["source_id_hash"]
+        assert row["first_quarantined_at"] == NOW.isoformat()
+        assert row["last_seen_at"] == NOW.isoformat()
+        assert cache.stats.quarantine_writes == 1
+
+        cache.clear_undated_candidates((source_id,))
+
+        assert not cache.is_undated_candidate_quarantined(source_id, now=NOW)
+        assert cache.stats.quarantine_writes == 2
+
+
+def test_undated_quarantine_refresh_preserves_first_seen_time(workspace_tmp_path):
+    source_id = "https://philpapers.org/rec/UNDATED"
+    with BibliographicCache(workspace_tmp_path / "bibliography-cache.sqlite3") as cache:
+        cache.record_undated_candidates((source_id,), now=NOW)
+        cache.record_undated_candidates((source_id,), now=NOW + timedelta(days=30))
+        row = cache.connection.execute(
+            "SELECT first_quarantined_at, last_seen_at FROM undated_candidate_quarantine"
+        ).fetchone()
+
+        assert row["first_quarantined_at"] == NOW.isoformat()
+        assert row["last_seen_at"] == (NOW + timedelta(days=30)).isoformat()
+
+        cache.record_undated_candidates((source_id,), now=NOW + timedelta(days=400))
+        reset_row = cache.connection.execute(
+            "SELECT first_quarantined_at, last_seen_at FROM undated_candidate_quarantine"
+        ).fetchone()
+
+        assert reset_row["first_quarantined_at"] == (NOW + timedelta(days=400)).isoformat()
+        assert reset_row["last_seen_at"] == (NOW + timedelta(days=400)).isoformat()

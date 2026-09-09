@@ -134,6 +134,34 @@ def _emit_pull_now_storage_advice(*cache_paths: Path) -> None:
         return
 
 
+def _emit_pull_now_resource_advice(
+    max_fallback_candidates: int,
+    *,
+    undated_quarantine_enabled: bool,
+) -> None:
+    """Explain the longer first-pull budget and the fully-undated scope boundary."""
+
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    quarantine = (
+        "完全无 feed 时间、书目年份、DOI 和明确手稿／预印本类型的 OAI 库存记录会进入"
+        "私人散列隔离集合，本次不逐篇查询；以后出现上述新证据时自动重新进入核验。"
+        if undated_quarantine_enabled
+        else "已关闭书目缓存，无法持久保存无日期隔离集合；完全无日期记录仍可能进入逐篇核验。"
+    )
+    message = (
+        f"[pull-now] 资源提醒：第一次拉取将优先完成隔离集合以外的候选核验，逐篇远程核验"
+        f"上限为 {max_fallback_candidates}；运行时间和 OpenAlex／Crossref 请求量可能明显增加。"
+        f"{quarantine} Resource advice: the first pull may take longer and use more bibliographic "
+        "requests; fully undated OAI-only stock records are quarantined only when the private "
+        "bibliography cache is enabled."
+    )
+    try:
+        print(message, file=sys.stderr, flush=True)
+    except OSError:
+        return
+
+
 def _emit_oai_page_progress(completed_pages: int, harvested_records: int) -> None:
     """Show page progress when the OAI token does not advertise a total size."""
 
@@ -614,6 +642,7 @@ def _weekly_run(args: argparse.Namespace) -> int:
             window_start=window_start,
             window_end=window_end,
             dry_run=args.dry_run,
+            show_recently_changed=args.show_recently_changed,
             **({"oai_loader": oai_cache.load_window} if oai_cache is not None else {}),
         )
     payload: dict[str, Any] = {
@@ -679,6 +708,10 @@ def _pull_now(args: argparse.Namespace) -> int:
     cache_path = config.storage.state_database.parent / "bibliography-cache.sqlite3"
     oai_cache_path = _oai_cache_path(config)
     _emit_pull_now_storage_advice(cache_path, oai_cache_path)
+    _emit_pull_now_resource_advice(
+        args.max_fallback_candidates,
+        undated_quarantine_enabled=not args.no_bibliography_cache,
+    )
     with collect_request_telemetry() as events, ExitStack() as stack:
         bibliography_cache = (
             None
@@ -700,6 +733,7 @@ def _pull_now(args: argparse.Namespace) -> int:
             bibliography_cache=bibliography_cache,
             allow_development_fixture=args.allow_development_fixture,
             progress=_emit_pull_now_progress,
+            show_recently_changed=args.show_recently_changed,
             **({"oai_loader": oai_cache.load_window} if oai_cache is not None else {}),
         )
     delivery_payload = _deliver_on_demand_report(result, config, args.report_delivery)
@@ -728,6 +762,7 @@ def _pull_now(args: argparse.Namespace) -> int:
             "bibliography_cache_updated": (
                 result.stats["bibliography_cache_writes"] > 0
                 or result.stats["bibliography_cache_scheduling_writes"] > 0
+                or result.stats["bibliography_cache_quarantine_writes"] > 0
             ),
             "oai_cache_path": (None if args.no_oai_cache else str(oai_cache_path.resolve())),
             "oai_cache_is_weekly_state": False,
@@ -760,6 +795,7 @@ def _catch_up(args: argparse.Namespace) -> int:
                 now=as_of,
                 dry_run=args.dry_run,
                 max_windows=args.max_windows,
+                show_recently_changed=args.show_recently_changed,
                 **({"oai_loader": oai_cache.load_window} if oai_cache is not None else {}),
             )
         except CatchUpError as error:
@@ -1024,6 +1060,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="disable the private cross-run OAI harvest cache",
     )
+    weekly.add_argument(
+        "--show-recently-changed",
+        action="store_true",
+        help="render the recently-changed section expanded instead of collapsed by default",
+    )
     weekly.set_defaults(handler=_weekly_run)
 
     pull_now = subparsers.add_parser(
@@ -1046,11 +1087,11 @@ def build_parser() -> argparse.ArgumentParser:
     pull_now.add_argument(
         "--max-fallback-candidates",
         type=int,
-        default=50,
+        default=300,
         help=(
             "maximum candidates that may require remote individual old-work lookups after "
-            "DOI/title batches; fresh-cache candidates do not consume slots, and excess "
-            "candidates are reported as deferred"
+            "DOI/title batches; the higher default aims to finish all non-quarantined candidates "
+            "on a first pull, while fresh-cache candidates do not consume slots"
         ),
     )
     pull_now.add_argument(
@@ -1080,6 +1121,14 @@ def build_parser() -> argparse.ArgumentParser:
             "report directory and returns only its path and statistics"
         ),
     )
+    pull_now.add_argument(
+        "--show-recently-changed",
+        action="store_true",
+        help=(
+            "render the recently-changed section expanded instead of collapsed by default; "
+            "useful before conversion to Word or PowerPoint"
+        ),
+    )
     pull_now.set_defaults(handler=_pull_now)
 
     catch_up = subparsers.add_parser(
@@ -1102,6 +1151,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-oai-cache",
         action="store_true",
         help="disable the private cross-run OAI harvest cache",
+    )
+    catch_up.add_argument(
+        "--show-recently-changed",
+        action="store_true",
+        help="render the recently-changed section expanded instead of collapsed by default",
     )
     catch_up.set_defaults(handler=_catch_up)
     return parser

@@ -2,14 +2,94 @@
 
 English | [简体中文](README.md)
 
-A Codex Skill that monitors newly available philosophy papers by a researcher's confirmed areas
-of interest.
+**Factual weekly philosophy-paper monitoring, organized around the research areas you confirm.**
 
-> Stable capabilities: controlled-category onboarding, historical baselines, weekly incremental
-> monitoring, missed-run catch-up, user-requested on-demand pulls, conservative deduplication, and
-> factual bilingual reports.
+A researcher describes an area in ordinary Chinese or English. The Skill maps that description to
+verified PhilPapers taxonomy categories and activates only the categories the researcher confirms.
+Reports preserve titles, authors, date evidence, matched categories, source links, and coverage
+gaps. They do not rank paper quality or filter results by a model score.
 
-## Latest update: recoverable OAI caching and stable on-demand pulls
+![Four steps from a research interest to a weekly philosophy-paper report](assets/demo/philosophy-frontier-monitor-demo.png)
+
+[Read the complete public sample report](examples/public-demo-weekly-report.md) ·
+[Open the report-preview image](assets/demo/public-demo-weekly-report-2026-09-09.png) ·
+[Read the full installation guide](references/installation.en.md)
+
+### Public example: an actual pull from three real categories
+
+The report below is not a synthetic mock-up. On 9 September 2026, the project actually ran a
+seven-day `pull-now` using `Moral Responsibility` (4590), `Free Will` (347), and `Action Theory`
+(5992) from the complete PhilPapers taxonomy. Each category was monitored exactly as selected;
+descendants were not added. The example uses the read-only on-demand mode—which shares the weekly
+evidence rules—so that it does not pretend a scheduled run occurred or alter formal weekly state.
+
+The primary result of the actual run was **1 confirmed-new paper**, plus **91 recent PhilPapers
+source arrivals**. The latter entered the PhilPapers or PhilArchive source-change set for the
+selected categories, and that run's old-work check found no earlier work evidence; this is not a
+claim that a formal publication date was obtained. Together they make 92 deduplicated works.
+The matching-paper block is now divided into **recently published** (1), **recently arrived** (2),
+and **recently changed** (89), in that order. Each group is ordered newest first by the evidence
+appropriate to its meaning and separated by a rule. Recently changed is collapsed by default, but
+the report always leaves a visible show/hide control.
+
+Coverage qualifications remain visible without leading the page. This historical example predates
+the date-evidence-insufficient set: 266 candidates did not reach remote verification under that
+run's older per-item budget. This describes one run boundary, not a persistent 266-item backlog.
+The current version places qualifying fully undated records in the separate private hashed set, so
+they do not repeatedly enter this count. That historical run also had 18 human-review cases and 10
+automatic-retry cases. One OpenAlex HTTP 400 remains visible in source coverage, so the example does
+not claim complete coverage. The image shows page one: the confirmed publication and two source
+arrivals appear first, followed by the collapsed record-change group; source coverage immediately
+follows the complete matching-paper block. The
+[complete Markdown report](examples/public-demo-weekly-report.md) contains all 92 papers, source
+status, unfinished-verification disclosures, and Chinese and English sections generated from the
+same result set.
+
+![Classical ivory first-page preview of a report generated from three real PhilPapers categories](assets/demo/public-demo-weekly-report-2026-09-09.png)
+
+The CLI's native report format is Markdown. In a Codex environment with document or presentation
+generation capabilities, a user may also ask Codex to typeset the same report as **Word (.docx)**
+or **PowerPoint (.pptx)**. That is a post-report presentation conversion: it does not re-filter the
+papers, and it is not a native `pfm` CLI export format.
+In interactive Markdown, the record-change group can be expanded directly. Before conversion to
+Word or PowerPoint, add `--show-recently-changed` when that group should be expanded in the source
+report.
+
+### What makes it different
+
+- **You control the scope:** natural-language interests become real, reviewable categories before
+  anything is monitored.
+- **Complete reporting rather than quality ranking:** author reputation, journal prestige,
+  citation counts, and model judgements do not remove results.
+- **Evidence and gaps appear together:** the report distinguishes publication, recent
+  availability, source re-entry, and metadata updates, and does not disguise source failures as
+  zero results.
+- **Private configuration stays local:** research interests, credentials, SQLite state, caches,
+  and reports are excluded from the public repository by default.
+
+### Start installation
+
+You need Codex, Git, [`uv`](https://docs.astral.sh/uv/), and Python 3.12 or 3.13. In Codex, invoke:
+
+```text
+$skill-installer Install the Skill from the repository root at
+https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor;
+use path . and the install name philosophy-frontier-monitor.
+```
+
+Then, in a new conversation, ask:
+
+```text
+Use $philosophy-frontier-monitor to map my research interests to verified PhilPapers categories.
+Let me confirm the categories, then guide me through local setup, the historical baseline, and my
+first weekly report. Do not ask me to paste credentials into the conversation.
+```
+
+The current application release is **v0.3.0**; the internal evidence-pipeline version is **0.6.0**.
+Formal real-machine acceptance has been completed on Windows. macOS and Linux paths are supported,
+but have not yet received equivalent real scheduled-run validation.
+
+## Technical update: recoverable OAI caching and stable on-demand pulls
 
 Evidence pipeline `0.6.0` adds a recoverable cross-run SQLite cache for PhilArchive OAI harvesting.
 `pull-now`, `weekly-run`, and `catch-up` reuse completely harvested windows and request only uncovered
@@ -76,9 +156,21 @@ paper's publication date.
 
 Records lacking both a feed timestamp and a bibliographic year continue through on-demand
 verification only when a successful OAI window supplies positive record-change evidence. A miss is
-not a permanent old-work judgment. If OAI fails, the wider candidate set is restored and the
-coverage degradation is reported. The project does not extend to paywalled or per-record
-PhilPapers scraping merely to pursue the remaining fully undated, non-open records.
+not a permanent old-work judgment. OAI stock records that have no feed timestamp, bibliographic
+year, DOI, or explicit manuscript/preprint type enter a private, source-ID-hash-only
+date-evidence-insufficient set. Ordinary pulls disclose its count but spend no per-item lookup
+budget on it and do not include it in the per-run remote-verification deferral count or human
+review. A later signal automatically reactivates the record. This is not an old-work or relevance judgment, and a genuinely new
+manuscript lacking every listed signal may be absent from an ordinary on-demand report. If OAI
+fails, the wider candidate set is restored and the coverage degradation is reported. The project
+does not extend to paywalled or per-record PhilPapers scraping merely to pursue these records.
+
+Before network access, the CLI warns that a first pull may take longer. The default individual
+fallback budget is 300 candidates, intended to finish the non-quarantined candidates in the known
+three-category workload in one run. The 1,000-candidate safety limit still applies; this is not an
+unbounded completion promise for every possible profile. Under those limits the conservative plan
+allows at most 470 OpenAlex and 300 Crossref logical requests before bounded retry attempts, while
+cache hits and batch matches normally reduce the actual total.
 
 ### Cache storage advice
 

@@ -233,7 +233,7 @@ def test_weekly_merged_type_conflict_is_retained_for_retry(monkeypatch):
     assert result.stats["notified"] == 0
     assert result.stats["unresolved"] == 2
     assert result.stats["structured_work_type_conflicts"] == 2
-    assert result.stats["machine_deferred"] == 0
+    assert result.stats["remote_verification_not_reached"] == 0
     assert result.stats["human_review_required"] == 2
     assert result.stats["automatic_retry_required"] == 0
     assert "需要人工复核：2 条" in result.report_markdown
@@ -966,7 +966,7 @@ def test_weekly_run_opens_bibliographic_circuits_after_bounded_source_failure(mo
     assert result.stats["bibliographic_source_circuits_open"] == 2
     assert result.stats["bibliographic_source_circuit_skips"] == 2
     assert result.stats["unresolved"] == 2
-    assert result.stats["machine_deferred"] == 0
+    assert result.stats["remote_verification_not_reached"] == 0
     assert result.stats["human_review_required"] == 0
     assert result.stats["automatic_retry_required"] == 2
     assert "等待程序自动重试：2 条" in result.report_markdown

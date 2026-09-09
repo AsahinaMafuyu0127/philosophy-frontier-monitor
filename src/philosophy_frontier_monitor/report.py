@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, date, datetime, time
 from html import escape
 
 from .models import (
+    FreshnessStatus,
     InterestProfile,
     MatchDecision,
     MatchRecord,
@@ -211,6 +212,141 @@ def _category_names(category_ids: frozenset[str], snapshot: TaxonomySnapshot) ->
     )
 
 
+def _date_value_timestamp(value: date | datetime | str | None) -> float | None:
+    if isinstance(value, datetime):
+        aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+        return aware.astimezone(UTC).timestamp()
+    if isinstance(value, date):
+        return datetime.combine(value, time.min, tzinfo=UTC).timestamp()
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        aware = parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+        return aware.astimezone(UTC).timestamp()
+    return None
+
+
+def _report_sort_timestamp(work: WorkRecord, *, publication_first: bool) -> float:
+    evidence = work.publication_date if publication_first else work.availability_date
+    if evidence is not None:
+        timestamp = _date_value_timestamp(evidence.value)
+        if timestamp is not None:
+            return timestamp
+    return work.observed_at.astimezone(UTC).timestamp()
+
+
+def _sorted_match_group(
+    pairs: list[tuple[MatchRecord, WorkRecord]],
+    *,
+    publication_first: bool,
+) -> list[tuple[MatchRecord, WorkRecord]]:
+    return sorted(
+        pairs,
+        key=lambda pair: (
+            -_report_sort_timestamp(pair[1], publication_first=publication_first),
+            pair[1].title.casefold(),
+            pair[1].work_id,
+        ),
+    )
+
+
+def _group_notifying_matches(
+    notifying: list[MatchRecord],
+    works: dict[str, WorkRecord],
+) -> tuple[
+    list[tuple[MatchRecord, WorkRecord]],
+    list[tuple[MatchRecord, WorkRecord]],
+    list[tuple[MatchRecord, WorkRecord]],
+]:
+    published: list[tuple[MatchRecord, WorkRecord]] = []
+    arrived: list[tuple[MatchRecord, WorkRecord]] = []
+    changed: list[tuple[MatchRecord, WorkRecord]] = []
+    for match in notifying:
+        work = works.get(match.work_id)
+        if work is None:
+            raise ValueError(f"missing WorkRecord for match {match.match_id}")
+        pair = (match, work)
+        if work.freshness_status is FreshnessStatus.CONFIRMED_NEW:
+            published.append(pair)
+        elif work.freshness_event == "recently_changed_in_philarchive_oai":
+            changed.append(pair)
+        else:
+            arrived.append(pair)
+    return (
+        _sorted_match_group(published, publication_first=True),
+        _sorted_match_group(arrived, publication_first=False),
+        _sorted_match_group(changed, publication_first=False),
+    )
+
+
+def _append_work_lines(
+    lines: list[str],
+    pairs: list[tuple[MatchRecord, WorkRecord]],
+    snapshot: TaxonomySnapshot,
+    *,
+    start_index: int,
+    english: bool,
+) -> int:
+    index = start_index
+    for match, work in pairs:
+        authors = (
+            "; ".join(_safe_text(item) for item in work.authors)
+            if english
+            else "；".join(_safe_text(item) for item in work.authors)
+        ) or ("Not recorded" if english else "未记录")
+        matched_names = _category_names(match.matched_category_ids, snapshot)
+        paper_names = _category_names(match.paper_category_ids, snapshot)
+        identifier = f"https://doi.org/{work.doi}" if work.doi else work.stable_url
+        if english:
+            lines.extend(
+                [
+                    f"#### {index}. {_safe_text(work.title)}",
+                    "",
+                    f"- Authors: {authors}",
+                    "- Venue: "
+                    + (
+                        _safe_text(work.container_title) if work.container_title else "Not recorded"
+                    ),
+                    f"- Work type: {_safe_text(work.work_type)}",
+                    f"- Work-type evidence status: {work.work_type_status.value}",
+                    f"- Work-type evidence: {_work_type_evidence_text_en(work)}",
+                    "- Freshness event: "
+                    + (work.freshness_event or "Confirmed; subtype not recorded"),
+                    f"- Publication-date evidence: {_date_text_en(work)}",
+                    f"- Recent-availability evidence: {_availability_text_en(work)}",
+                    f"- Matching interest categories: {'; '.join(matched_names)}",
+                    f"- Verified paper categories: {'; '.join(paper_names)}",
+                    "- DOI or stable link: "
+                    + (_safe_text(identifier) if identifier else "Not recorded"),
+                    "",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    f"#### {index}. {_safe_text(work.title)}",
+                    "",
+                    f"- 作者：{authors}",
+                    "- 发表载体："
+                    + (_safe_text(work.container_title) if work.container_title else "未记录"),
+                    f"- 作品类型：{_safe_text(work.work_type)}",
+                    f"- 类型证据状态：{work.work_type_status.value}",
+                    f"- 类型证据：{_work_type_evidence_text(work)}",
+                    f"- 新出事件：{work.freshness_event or '已确认，但未记录事件子类'}",
+                    f"- 发表日期证据：{_date_text(work)}",
+                    f"- 新近可得证据：{_availability_text(work)}",
+                    f"- 命中的兴趣分类：{'; '.join(matched_names)}",
+                    f"- 已核验的论文分类：{'; '.join(paper_names)}",
+                    f"- DOI／稳定链接：{_safe_text(identifier) if identifier else '未记录'}",
+                    "",
+                ]
+            )
+        index += 1
+    return index
+
+
 def render_weekly_report(
     *,
     profile: InterestProfile,
@@ -222,14 +358,16 @@ def render_weekly_report(
     coverage: tuple[SourceCoverage, ...],
     unresolved_count: int = 0,
     unresolved_reason_counts: Mapping[str, int] | None = None,
-    machine_deferred_count: int = 0,
+    remote_verification_not_reached_count: int = 0,
     human_review_items: tuple[HumanReviewItem, ...] = (),
     include_english: bool = True,
+    show_recently_changed: bool = False,
 ) -> str:
     """Render only works whose deterministic decision is ``notify``."""
 
     selected_names = [item.category_name for item in profile.selected_categories]
     notifying = [item for item in matches if item.decision is MatchDecision.NOTIFY]
+    published, arrived, changed = _group_notifying_matches(notifying, works)
     lines = [
         "# 哲学前沿论文周报",
         "",
@@ -262,36 +400,70 @@ def render_weekly_report(
                     "",
                 ]
             )
+    lines.extend(
+        [
+            f"### Recently published｜确认新出（{len(published)} 篇）",
+            "",
+            "按可取得的发表日期证据从新到旧排列。",
+            "",
+        ]
+    )
+    next_index = _append_work_lines(lines, published, snapshot, start_index=1, english=False)
+    if not published:
+        lines.extend(["本次没有确认在检索窗口内新出的匹配论文。", ""])
+
+    lines.extend(
+        [
+            "---",
+            "",
+            f"### Recently arrived｜新近进入来源（{len(arrived)} 篇）",
+            "",
+            "按 PhilPapers／PhilArchive 的新近可得证据从新到旧排列；来源到达时间不等于"
+            "正式发表日期。",
+            "",
+        ]
+    )
+    next_index = _append_work_lines(lines, arrived, snapshot, start_index=next_index, english=False)
+    if not arrived:
+        lines.extend(["本次没有新近进入来源的匹配论文。", ""])
+
+    lines.extend(
+        [
+            "---",
+            "",
+            f"### Recently changed｜来源记录近期变化（{len(changed)} 篇）",
+            "",
+            "这部分按 PhilArchive OAI 记录变化时间从新到旧排列。记录变化只表示来源元数据"
+            "发生变化，不表示论文在该时刻发表。",
+            "",
+        ]
+    )
+    if changed:
+        details_tag = "<details open>" if show_recently_changed else "<details>"
+        default_text = "本报告默认展开" if show_recently_changed else "默认隐藏"
+        lines.extend(
+            [
+                details_tag,
+                "<summary>显示／隐藏 recently changed"
+                f"（{len(changed)} 篇；{default_text}）</summary>",
+                "",
+            ]
+        )
+        _append_work_lines(lines, changed, snapshot, start_index=next_index, english=False)
+        lines.extend(["</details>", ""])
     else:
-        for index, match in enumerate(notifying, start=1):
-            work = works.get(match.work_id)
-            if work is None:
-                raise ValueError(f"missing WorkRecord for match {match.match_id}")
-            authors = (
-                "；".join(_safe_text(item) for item in work.authors) if work.authors else "未记录"
+        lines.extend(["本次没有符合条件的来源记录近期变化。", ""])
+
+    lines.extend(["## 数据源覆盖", ""])
+    if not coverage:
+        lines.extend(["- 未提供来源运行记录；不能断言本次监测覆盖完整。", ""])
+    else:
+        for item in coverage:
+            lines.append(
+                f"- `{item.source}`：{item.status}；检查时间 `{item.checked_at.isoformat()}`；"
+                f"{item.detail}"
             )
-            matched_names = _category_names(match.matched_category_ids, snapshot)
-            paper_names = _category_names(match.paper_category_ids, snapshot)
-            identifier = f"https://doi.org/{work.doi}" if work.doi else work.stable_url
-            lines.extend(
-                [
-                    f"### {index}. {_safe_text(work.title)}",
-                    "",
-                    f"- 作者：{authors}",
-                    "- 发表载体："
-                    + (_safe_text(work.container_title) if work.container_title else "未记录"),
-                    f"- 作品类型：{_safe_text(work.work_type)}",
-                    f"- 类型证据状态：{work.work_type_status.value}",
-                    f"- 类型证据：{_work_type_evidence_text(work)}",
-                    f"- 新出事件：{work.freshness_event or '已确认，但未记录事件子类'}",
-                    f"- 发表日期证据：{_date_text(work)}",
-                    f"- 新近可得证据：{_availability_text(work)}",
-                    f"- 命中的兴趣分类：{'; '.join(matched_names)}",
-                    f"- 已核验的论文分类：{'; '.join(paper_names)}",
-                    f"- DOI／稳定链接：{_safe_text(identifier) if identifier else '未记录'}",
-                    "",
-                ]
-            )
+        lines.append("")
 
     if unresolved_count:
         human_review_count, automatic_retry_count = unresolved_workload_counts(
@@ -299,7 +471,10 @@ def render_weekly_report(
         )
         unclassified_count = max(
             0,
-            unresolved_count - machine_deferred_count - human_review_count - automatic_retry_count,
+            unresolved_count
+            - remote_verification_not_reached_count
+            - human_review_count
+            - automatic_retry_count,
         )
         lines.extend(
             [
@@ -310,11 +485,12 @@ def render_weekly_report(
                 "",
             ]
         )
-        if machine_deferred_count:
+        if remote_verification_not_reached_count:
             lines.extend(
                 [
-                    f"- 机器核验积压：{machine_deferred_count} 条。它们只是尚未轮到外部书目核验，"
-                    "不要求用户逐篇判断。",
+                    "- 本次未轮到远程核验："
+                    f"{remote_verification_not_reached_count} 条。它们受本次逐篇查询预算限制；"
+                    "这是本次运行的处理边界，不表示跨次积压，也不要求用户逐篇判断。",
                 ]
             )
         if human_review_count:
@@ -328,17 +504,6 @@ def render_weekly_report(
         if reason_lines:
             lines.extend(["具体原因：", "", *reason_lines, ""])
         lines.extend(_human_review_lines(human_review_items))
-
-    lines.extend(["## 数据源覆盖", ""])
-    if not coverage:
-        lines.extend(["- 未提供来源运行记录；不能断言本次监测覆盖完整。", ""])
-    else:
-        for item in coverage:
-            lines.append(
-                f"- `{item.source}`：{item.status}；检查时间 `{item.checked_at.isoformat()}`；"
-                f"{item.detail}"
-            )
-        lines.append("")
 
     lines.extend(
         [
@@ -370,8 +535,9 @@ def render_weekly_report(
         coverage=coverage,
         unresolved_count=unresolved_count,
         unresolved_reason_counts=unresolved_reason_counts,
-        machine_deferred_count=machine_deferred_count,
+        remote_verification_not_reached_count=remote_verification_not_reached_count,
         human_review_items=human_review_items,
+        show_recently_changed=show_recently_changed,
     )
     return f"{chinese}\n\n---\n\n{english}"
 
@@ -387,13 +553,15 @@ def _render_weekly_report_en(
     coverage: tuple[SourceCoverage, ...],
     unresolved_count: int = 0,
     unresolved_reason_counts: Mapping[str, int] | None = None,
-    machine_deferred_count: int = 0,
+    remote_verification_not_reached_count: int = 0,
     human_review_items: tuple[HumanReviewItem, ...] = (),
+    show_recently_changed: bool = False,
 ) -> str:
     """Render the English version of a weekly report from the same evidence."""
 
     selected_names = [item.category_name for item in profile.selected_categories]
     notifying = [item for item in matches if item.decision is MatchDecision.NOTIFY]
+    published, arrived, changed = _group_notifying_matches(notifying, works)
     lines = [
         "# Philosophy Frontier Weekly Report",
         "",
@@ -431,40 +599,72 @@ def _render_weekly_report_en(
                     "",
                 ]
             )
+    lines.extend(
+        [
+            f"### Recently published ({len(published)})",
+            "",
+            "Ordered newest first by the available publication-date evidence.",
+            "",
+        ]
+    )
+    next_index = _append_work_lines(lines, published, snapshot, start_index=1, english=True)
+    if not published:
+        lines.extend(["No matching paper was confirmed as published within the window.", ""])
+
+    lines.extend(
+        [
+            "---",
+            "",
+            f"### Recently arrived ({len(arrived)})",
+            "",
+            "Ordered newest first by PhilPapers or PhilArchive recent-availability evidence. "
+            "A source-arrival time is not a formal publication date.",
+            "",
+        ]
+    )
+    next_index = _append_work_lines(lines, arrived, snapshot, start_index=next_index, english=True)
+    if not arrived:
+        lines.extend(["No matching paper recently entered the monitored sources.", ""])
+
+    lines.extend(
+        [
+            "---",
+            "",
+            f"### Recently changed ({len(changed)})",
+            "",
+            "Ordered newest first by PhilArchive OAI record-change time. A record change means "
+            "that source metadata changed, not that the paper was published at that time.",
+            "",
+        ]
+    )
+    if changed:
+        details_tag = "<details open>" if show_recently_changed else "<details>"
+        default_text = "expanded in this report" if show_recently_changed else "hidden by default"
+        lines.extend(
+            [
+                details_tag,
+                f"<summary>Show/hide recently changed ({len(changed)}; {default_text})</summary>",
+                "",
+            ]
+        )
+        _append_work_lines(lines, changed, snapshot, start_index=next_index, english=True)
+        lines.extend(["</details>", ""])
     else:
-        for index, match in enumerate(notifying, start=1):
-            work = works.get(match.work_id)
-            if work is None:
-                raise ValueError(f"missing WorkRecord for match {match.match_id}")
-            authors = "; ".join(_safe_text(item) for item in work.authors) or "Not recorded"
-            matched_names = _category_names(match.matched_category_ids, snapshot)
-            paper_names = _category_names(match.paper_category_ids, snapshot)
-            identifier = f"https://doi.org/{work.doi}" if work.doi else work.stable_url
-            lines.extend(
-                [
-                    f"### {index}. {_safe_text(work.title)}",
-                    "",
-                    f"- Authors: {authors}",
-                    "- Venue: "
-                    + (
-                        _safe_text(work.container_title)
-                        if work.container_title
-                        else "Not recorded"
-                    ),
-                    f"- Work type: {_safe_text(work.work_type)}",
-                    f"- Work-type evidence status: {work.work_type_status.value}",
-                    f"- Work-type evidence: {_work_type_evidence_text_en(work)}",
-                    "- Freshness event: "
-                    + (work.freshness_event or "Confirmed; subtype not recorded"),
-                    f"- Publication-date evidence: {_date_text_en(work)}",
-                    f"- Recent-availability evidence: {_availability_text_en(work)}",
-                    f"- Matching interest categories: {'; '.join(matched_names)}",
-                    f"- Verified paper categories: {'; '.join(paper_names)}",
-                    "- DOI or stable link: "
-                    + (_safe_text(identifier) if identifier else "Not recorded"),
-                    "",
-                ]
+        lines.extend(["No matching source record changed recently.", ""])
+
+    lines.extend(["## Source coverage", ""])
+    if not coverage:
+        lines.extend(
+            ["- No source-run record was supplied; coverage cannot be claimed complete.", ""]
+        )
+    else:
+        for item in coverage:
+            detail = item.detail_en or item.detail
+            lines.append(
+                f"- `{item.source}`: {item.status}; checked at "
+                f"`{item.checked_at.isoformat()}`; {_safe_text(detail)}"
             )
+        lines.append("")
 
     if unresolved_count:
         human_review_count, automatic_retry_count = unresolved_workload_counts(
@@ -472,7 +672,10 @@ def _render_weekly_report_en(
         )
         unclassified_count = max(
             0,
-            unresolved_count - machine_deferred_count - human_review_count - automatic_retry_count,
+            unresolved_count
+            - remote_verification_not_reached_count
+            - human_review_count
+            - automatic_retry_count,
         )
         lines.extend(
             [
@@ -484,11 +687,12 @@ def _render_weekly_report_en(
                 "",
             ]
         )
-        if machine_deferred_count:
+        if remote_verification_not_reached_count:
             lines.append(
-                f"- Machine-verification backlog: {machine_deferred_count}. These records have not "
-                "yet reached external bibliographic verification and do not require item-by-item "
-                "user judgment."
+                "- Not reached by remote verification in this run: "
+                f"{remote_verification_not_reached_count}. "
+                "The per-item query budget bounded this run; this is not a cross-run backlog and "
+                "does not require item-by-item user judgment."
             )
         if human_review_count:
             lines.append(f"- Human review required: {human_review_count}.")
@@ -526,20 +730,6 @@ def _render_weekly_report_en(
                 )
             lines.append("")
 
-    lines.extend(["## Source coverage", ""])
-    if not coverage:
-        lines.extend(
-            ["- No source-run record was supplied; coverage cannot be claimed complete.", ""]
-        )
-    else:
-        for item in coverage:
-            detail = item.detail_en or item.detail
-            lines.append(
-                f"- `{item.source}`: {item.status}; checked at "
-                f"`{item.checked_at.isoformat()}`; {_safe_text(detail)}"
-            )
-        lines.append("")
-
     lines.extend(
         [
             "## Method",
@@ -574,9 +764,14 @@ def render_on_demand_report(
     coverage: tuple[SourceCoverage, ...],
     unresolved_count: int = 0,
     unresolved_reason_counts: Mapping[str, int] | None = None,
-    machine_deferred_count: int = 0,
+    remote_verification_not_reached_count: int = 0,
     human_review_items: tuple[HumanReviewItem, ...] = (),
     oai_narrowing_applied: bool = False,
+    undated_quarantine_count: int = 0,
+    undated_quarantine_new: int = 0,
+    matched_confirmed_new: int = 0,
+    matched_confirmed_source_arrivals: int = 0,
+    show_recently_changed: bool = False,
 ) -> str:
     """Render a state-independent rolling report for an explicit user request."""
 
@@ -590,6 +785,7 @@ def render_on_demand_report(
         coverage=coverage,
         unresolved_count=0,
         include_english=False,
+        show_recently_changed=show_recently_changed,
     )
     lines = weekly.splitlines()
     lines[0] = "# 哲学前沿论文即时拉取报告"
@@ -616,13 +812,30 @@ def render_on_demand_report(
             ]
         )
     lines[9:9] = notice
+    match_index = next(index for index, line in enumerate(lines) if line.startswith("## 匹配论文"))
+    lines[match_index:match_index] = [
+        "## 本次结果概览",
+        "",
+        f"### 确认新出：{matched_confirmed_new} 篇",
+        "",
+        "具有独立的窗口内首次公开或正式发表日期证据。",
+        "",
+        f"### PhilPapers 新近来源：{matched_confirmed_source_arrivals} 篇",
+        "",
+        "新近进入已选分类对应的 PhilPapers／PhilArchive 来源变化集合，且本次旧作检查没有"
+        "发现更早作品证据；这不等于已经取得正式发表日期。",
+        "",
+    ]
     if unresolved_count:
         human_review_count, automatic_retry_count = unresolved_workload_counts(
             unresolved_reason_counts
         )
         unclassified_count = max(
             0,
-            unresolved_count - machine_deferred_count - human_review_count - automatic_retry_count,
+            unresolved_count
+            - remote_verification_not_reached_count
+            - human_review_count
+            - automatic_retry_count,
         )
         method_index = lines.index("## 方法说明")
         workload_lines = [
@@ -633,11 +846,12 @@ def render_on_demand_report(
             "本次不推送，也不写入周报的限次重试队列。下次主动拉取时可以重新核验。",
             "",
         ]
-        if machine_deferred_count:
+        if remote_verification_not_reached_count:
             workload_lines.extend(
                 [
-                    f"- 机器核验积压：{machine_deferred_count} 条。它们受本次逐篇查询预算限制，"
-                    "尚未轮到外部书目核验，不要求用户逐篇判断。",
+                    "- 本次未轮到远程核验："
+                    f"{remote_verification_not_reached_count} 条。它们受本次逐篇查询预算限制；"
+                    "这是本次运行的处理边界，不表示跨次积压，也不要求用户逐篇判断。",
                 ]
             )
         if human_review_count:
@@ -659,6 +873,21 @@ def render_on_demand_report(
             )
         workload_lines.extend(_human_review_lines(human_review_items))
         lines[method_index:method_index] = workload_lines
+    if undated_quarantine_count:
+        method_index = lines.index("## 方法说明")
+        lines[method_index:method_index] = [
+            "## 无日期记录集合",
+            "",
+            f"本次有 {undated_quarantine_count} 条 OAI 库存记录同时缺少 feed 时间、书目年份、"
+            "DOI 和明确的手稿／预印本类型；其中 "
+            f"{undated_quarantine_new} 条是本次首次进入私人散列隔离集合。它们没有消耗逐篇"
+            "书目查询额度，也不计入“本次未轮到远程核验”数量或人工复核。",
+            "",
+            "该集合只表示日期证据不足，不表示作品已被证明为旧作或与兴趣无关。以后记录出现"
+            "年份、DOI、feed 时间或明确的早期稿本类型时，程序会自动移出集合并重新核验。"
+            "因此，没有这些字段的新手稿可能不会出现在普通即时报告中。",
+            "",
+        ]
     chinese = "\n".join(lines)
     english = _render_on_demand_report_en(
         profile=profile,
@@ -670,9 +899,14 @@ def render_on_demand_report(
         coverage=coverage,
         unresolved_count=unresolved_count,
         unresolved_reason_counts=unresolved_reason_counts,
-        machine_deferred_count=machine_deferred_count,
+        remote_verification_not_reached_count=remote_verification_not_reached_count,
         human_review_items=human_review_items,
         oai_narrowing_applied=oai_narrowing_applied,
+        undated_quarantine_count=undated_quarantine_count,
+        undated_quarantine_new=undated_quarantine_new,
+        matched_confirmed_new=matched_confirmed_new,
+        matched_confirmed_source_arrivals=matched_confirmed_source_arrivals,
+        show_recently_changed=show_recently_changed,
     )
     return f"{chinese}\n\n---\n\n{english}"
 
@@ -688,9 +922,14 @@ def _render_on_demand_report_en(
     coverage: tuple[SourceCoverage, ...],
     unresolved_count: int = 0,
     unresolved_reason_counts: Mapping[str, int] | None = None,
-    machine_deferred_count: int = 0,
+    remote_verification_not_reached_count: int = 0,
     human_review_items: tuple[HumanReviewItem, ...] = (),
     oai_narrowing_applied: bool = False,
+    undated_quarantine_count: int = 0,
+    undated_quarantine_new: int = 0,
+    matched_confirmed_new: int = 0,
+    matched_confirmed_source_arrivals: int = 0,
+    show_recently_changed: bool = False,
 ) -> str:
     """Render the English version of a state-independent on-demand report."""
 
@@ -703,6 +942,7 @@ def _render_on_demand_report_en(
         window_end=window_end,
         coverage=coverage,
         unresolved_count=0,
+        show_recently_changed=show_recently_changed,
     )
     lines = weekly.splitlines()
     lines[0] = "# Philosophy Frontier On-Demand Report"
@@ -739,6 +979,24 @@ def _render_on_demand_report_en(
             ]
         )
     lines[9:9] = notice
+    match_index = next(
+        index for index, line in enumerate(lines) if line.startswith("## Matching papers")
+    )
+    lines[match_index:match_index] = [
+        "## Results at a glance",
+        "",
+        f"### Confirmed new: {matched_confirmed_new}",
+        "",
+        "These works have independent evidence of first availability or formal publication "
+        "within the window.",
+        "",
+        f"### Recent PhilPapers source arrivals: {matched_confirmed_source_arrivals}",
+        "",
+        "These works recently entered the PhilPapers or PhilArchive source-change set for the "
+        "selected categories, and the current old-work check found no earlier work evidence. "
+        "This is not a claim that a formal publication date was obtained.",
+        "",
+    ]
 
     if unresolved_count:
         human_review_count, automatic_retry_count = unresolved_workload_counts(
@@ -746,7 +1004,10 @@ def _render_on_demand_report_en(
         )
         unclassified_count = max(
             0,
-            unresolved_count - machine_deferred_count - human_review_count - automatic_retry_count,
+            unresolved_count
+            - remote_verification_not_reached_count
+            - human_review_count
+            - automatic_retry_count,
         )
         method_index = lines.index("## Method")
         workload_lines = [
@@ -758,11 +1019,12 @@ def _render_on_demand_report_en(
             "explicit pull may verify them again.",
             "",
         ]
-        if machine_deferred_count:
+        if remote_verification_not_reached_count:
             workload_lines.append(
-                f"- Machine-verification backlog: {machine_deferred_count}. The per-item query "
-                "budget prevented them from reaching external bibliographic verification in this "
-                "run; they do not require item-by-item user judgment."
+                "- Not reached by remote verification in this run: "
+                f"{remote_verification_not_reached_count}. "
+                "The per-item query budget bounded this run; this is not a cross-run backlog and "
+                "does not require item-by-item user judgment."
             )
         if human_review_count:
             workload_lines.append(f"- Human review required: {human_review_count}.")
@@ -802,4 +1064,21 @@ def _render_on_demand_report_en(
                 )
             workload_lines.append("")
         lines[method_index:method_index] = workload_lines
+    if undated_quarantine_count:
+        method_index = lines.index("## Method")
+        lines[method_index:method_index] = [
+            "## Fully undated record set",
+            "",
+            f"This run placed {undated_quarantine_count} OAI stock records lacking a feed "
+            "timestamp, bibliographic year, DOI, and explicit manuscript or preprint type in "
+            f"the private hashed quarantine set; {undated_quarantine_new} entered it for the "
+            "first time in this run. They consumed no per-item bibliographic lookup budget and "
+            "are not counted as not reached by remote verification or as human review.",
+            "",
+            "Membership means only that date evidence is insufficient; it is not an old-work or "
+            "relevance judgment. A later year, DOI, feed timestamp, or explicit early-work type "
+            "automatically returns the record to verification. A new manuscript lacking all of "
+            "those fields may therefore be absent from the ordinary on-demand report.",
+            "",
+        ]
     return "\n".join(lines)

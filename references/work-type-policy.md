@@ -69,6 +69,10 @@ PhilArchive OAI 当前使用 OpenAIRE `info:eu-repo` publication type URI。arti
 review 的范围说明参见
 [COAR Resource Types: review](https://vocabularies.coar-repositories.org/resource_types/c_efa0/)。
 
+上述 `preprint`、`manuscript`、`working-paper`、`accepted-manuscript` 或 `forthcoming` 明确信号也
+是日期证据不足集合的解除条件：即使记录没有年份、DOI 或 feed 时间，也必须继续进行新近来源与
+旧作核验，不能仅因缺少正式发表日期而进入集合。
+
 ## 4. 一致、冲突、未知与缺失
 
 - 多个来源映射到同一规范类型：`confirmed`；

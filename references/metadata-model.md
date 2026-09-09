@@ -670,6 +670,13 @@ fallback_attempt_log(
   attempted_at,    -- 最近一次完成逐篇核验尝试的 UTC 时间
   PRIMARY KEY(source_id_hash)
 )
+
+undated_candidate_quarantine(
+  source_id_hash,       -- 另一命名空间下的 PhilPapers 来源记录 ID SHA-256
+  first_quarantined_at, -- 首次进入日期证据不足集合的 UTC 时间
+  last_seen_at,         -- 最近一次仍满足集合条件的 UTC 时间
+  PRIMARY KEY(source_id_hash)
+)
 ```
 
 `source` 区分逐篇 Crossref、逐篇 OpenAlex、OpenAlex 单 DOI 批量键、OpenAlex 单题名正候选键和
@@ -685,6 +692,9 @@ fallback_attempt_log(
 `fallback_attempt_log` 最多保留 31 天，只用于让跨次冷启动优先处理从未尝试或最久未尝试的延期
 候选。它不表示“查无记录”，不改变证据结论，也不能抑制即时报告或周报；因传输失败或来源熔断
 而没有完成核验的候选不写入该表。
+`undated_candidate_quarantine` 最多保留 365 天，只用于跳过同时缺少 feed 时间、书目年份、DOI 和
+明确早期稿本类型的 OAI 库存记录。它不保存原 ID、URL、题名、作者或兴趣画像，也不证明作品是旧作
+或不相关；任一日期／标识／稿本信号后来出现时删除对应散列，并让候选重新进入普通核验。
 
 `pull-now`、`weekly-run` 和 `catch-up` 默认另行使用 Git 忽略目录中的 `oai-cache.sqlite3`。它不与
 周报 schema 建立外键，也不保存兴趣画像、通知或书目题名。最小结构为：

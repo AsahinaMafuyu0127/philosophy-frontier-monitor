@@ -82,6 +82,13 @@ A production checkpoint advances only after the report is written and the comple
 transaction succeeds. Every Markdown report contains a complete Chinese section and a complete
 English section derived from the same works, evidence, source status, and counts.
 
+Within each language, matching papers appear in three fixed sections: recently published,
+recently arrived, and recently changed. The first is ordered by publication evidence; the other
+two are ordered by recent-availability or OAI record-change evidence. Recently changed is visibly
+switchable but collapsed by default, and source coverage follows the complete matching-paper block.
+Use `--show-recently-changed` with `weekly-run`, `catch-up`, or `pull-now` when the source Markdown
+should begin with that section expanded, such as before conversion to Word or PowerPoint.
+
 ## 6. Run an on-demand pull
 
 An on-demand pull is explicit, read-only with respect to weekly state, and uses a rolling window of
@@ -105,6 +112,15 @@ For long reports, write one private bilingual Markdown file instead of returning
   --report-delivery file
 ```
 
+To write a conversion-ready report with the optional record-change group expanded:
+
+```powershell
+.\.venv\Scripts\pfm.exe pull-now `
+  --config config\watchlist.yaml `
+  --report-delivery file `
+  --show-recently-changed
+```
+
 `pull-now` does not create weekly notifications or advance the baseline, run history, retry queue,
 or feed checkpoints. A paper may therefore appear again in the next eligible weekly report.
 
@@ -118,8 +134,9 @@ unless the user explicitly requests it.
 
 The report separates three unfinished-work categories:
 
-- **Machine-verification backlog:** bounded per-item request budget was exhausted; no user judgment
-  is requested yet.
+- **Not reached by remote verification in this run:** the bounded per-item request budget ended
+  before these candidates were processed. This is a per-run boundary, not a persistent backlog,
+  and no user judgment is requested.
 - **Human review required:** structured identifiers, work types, or semantic identity evidence
   conflict and cannot be resolved deterministically.
 - **Awaiting automatic retry:** a source failed or deferred the request; the program should retry

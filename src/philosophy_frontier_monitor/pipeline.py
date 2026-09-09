@@ -24,6 +24,7 @@ import httpx
 from .bibliographic_cache import BibliographicCache, BibliographicCacheStats
 from .config import ConfirmedCategoryConfig, FeedConfig, WatchlistConfig
 from .freshness import assess_freshness
+from .http_retry import BoundedRequestError
 from .identity import (
     IdentityMatchLevel,
     IdentityReviewRequired,
@@ -148,7 +149,15 @@ EXPLICIT_UNSUPPORTED_TITLE_HINTS = (
     ),
 )
 MAX_ON_DEMAND_CANDIDATES = 1000
-MAX_ON_DEMAND_FALLBACK_CANDIDATES = 50
+MAX_ON_DEMAND_FALLBACK_CANDIDATES = 300
+EARLY_WORK_TYPE_MARKERS = (
+    "accepted-manuscript",
+    "forthcoming",
+    "manuscript",
+    "preprint",
+    "working-paper",
+    "workingpaper",
+)
 WORK_TYPE_FAILURE_DETAILS = {
     WorkTypeStatus.CONFLICT: (
         "structured_work_type_conflict",
@@ -849,13 +858,9 @@ def _oai_coverage_detail_en(snapshot: OAIWindowSnapshot) -> str:
     if snapshot.cache_resumed_sessions:
         recovery.append(f"resumed {snapshot.cache_resumed_sessions} interrupted sessions")
     if snapshot.cache_expired_token_restarts:
-        recovery.append(
-            f"safely restarted {snapshot.cache_expired_token_restarts} expired tokens"
-        )
+        recovery.append(f"safely restarted {snapshot.cache_expired_token_restarts} expired tokens")
     if snapshot.cache_invalid_token_restarts:
-        recovery.append(
-            f"safely restarted {snapshot.cache_invalid_token_restarts} invalid tokens"
-        )
+        recovery.append(f"safely restarted {snapshot.cache_invalid_token_restarts} invalid tokens")
     return f"{detail}; {'; '.join(recovery)}" if recovery else detail
 
 
@@ -929,6 +934,30 @@ def enrich_candidates_with_oai(
 
 def _candidate_year_hints(candidate: MergedCandidate) -> frozenset[int]:
     return frozenset((*candidate.feed_year_hints, *candidate.oai_year_hints))
+
+
+def _fully_undated_oai_inventory_candidate(candidate: MergedCandidate) -> bool:
+    """Identify OAI-only stock records eligible for the persistent undated set.
+
+    This is a resource policy, not an old-work judgment. Records with a DOI,
+    any bibliographic year, a feed timestamp, or an explicit early-work form
+    remain active so new manuscripts and preprints are not silently discarded.
+    """
+
+    type_hints = tuple(
+        value.casefold().replace("_", "-")
+        for value in (*candidate.work_type_hints, *candidate.oai_work_type_hints)
+    )
+    has_early_work_hint = any(
+        marker in value for value in type_hints for marker in EARLY_WORK_TYPE_MARKERS
+    )
+    return bool(
+        candidate.oai_datestamps
+        and not candidate.feed_dates
+        and not _candidate_year_hints(candidate)
+        and not candidate.doi_hints
+        and not has_early_work_hint
+    )
 
 
 def _feed_updates(snapshots: tuple[FeedSnapshot, ...]) -> tuple[FeedStateUpdate, ...]:
@@ -1289,6 +1318,13 @@ def _enrich_native_arrival(
     )
 
 
+def _bibliographic_error_opens_circuit(error: Exception) -> bool:
+    """Keep candidate-specific permanent HTTP failures from disabling a source."""
+
+    cause = error.__cause__
+    return not (isinstance(cause, BoundedRequestError) and cause.failure_kind == "permanent_http")
+
+
 def resolve_bibliography(
     candidate: MergedCandidate,
     snapshot: TaxonomySnapshot,
@@ -1300,6 +1336,7 @@ def resolve_bibliography(
     crossref_client: httpx.Client | None = None,
     openalex_client: httpx.Client | None = None,
     bibliography_cache: BibliographicCache | None = None,
+    source_failures: dict[str, str] | None = None,
     unavailable_sources: dict[str, str] | None = None,
     circuit_skip_counts: dict[str, int] | None = None,
 ) -> ResolutionResult:
@@ -1346,8 +1383,14 @@ def resolve_bibliography(
         except CrossrefError as error:
             detail = str(error)
             lookup_failures.append(detail)
-            if unavailable_sources is not None:
+            opens_circuit = _bibliographic_error_opens_circuit(error)
+            if unavailable_sources is not None and opens_circuit:
                 unavailable_sources.setdefault("crossref", detail)
+            if source_failures is not None:
+                if opens_circuit:
+                    source_failures["crossref"] = detail
+                else:
+                    source_failures.setdefault("crossref", detail)
         else:
             if bibliography_cache is not None:
                 bibliography_cache.store_crossref(
@@ -1392,8 +1435,14 @@ def resolve_bibliography(
             except OpenAlexError as error:
                 detail = str(error)
                 lookup_failures.append(detail)
-                if unavailable_sources is not None:
+                opens_circuit = _bibliographic_error_opens_circuit(error)
+                if unavailable_sources is not None and opens_circuit:
                     unavailable_sources.setdefault("openalex", detail)
+                if source_failures is not None:
+                    if opens_circuit:
+                        source_failures["openalex"] = detail
+                    else:
+                        source_failures.setdefault("openalex", detail)
             else:
                 if bibliography_cache is not None:
                     bibliography_cache.store_openalex(
@@ -1916,6 +1965,7 @@ def _resolve_candidates_with_connection_reuse(
     *,
     resolver: CandidateResolver,
     bibliography_cache: BibliographicCache | None = None,
+    source_failures: dict[str, str] | None = None,
     unavailable_sources: dict[str, str] | None = None,
     circuit_skip_counts: dict[str, int] | None = None,
     progress: Callable[[int, int], None] | None = None,
@@ -1942,6 +1992,7 @@ def _resolve_candidates_with_connection_reuse(
                     crossref_client=crossref_client,
                     openalex_client=openalex_client,
                     bibliography_cache=bibliography_cache,
+                    source_failures=source_failures,
                     unavailable_sources=unavailable_sources,
                     circuit_skip_counts=circuit_skip_counts,
                 )
@@ -1997,6 +2048,7 @@ def run_on_demand(
     bibliography_cache: BibliographicCache | None = None,
     allow_development_fixture: bool = False,
     progress: ProgressReporter | None = None,
+    show_recently_changed: bool = False,
 ) -> OnDemandRunResult:
     """Produce a read-only rolling report independent of weekly state.
 
@@ -2012,6 +2064,7 @@ def run_on_demand(
         else BibliographicCacheStats(0, 0, 0, 0)
     )
     bibliographic_source_failures: dict[str, str] = {}
+    unavailable_bibliographic_sources: dict[str, str] = {}
     circuit_skip_counts: dict[str, int] = {}
     openalex_batch_failures = 0
     window_start, window_end = on_demand_window(
@@ -2114,9 +2167,44 @@ def run_on_demand(
     explicit_unsupported_source_ids = {
         result.candidate.source_id for result in explicit_unsupported_results
     }
-    bibliographic_candidates = tuple(
+    pre_quarantine_candidates = tuple(
         item for item in candidates if item.source_id not in explicit_unsupported_source_ids
     )
+    undated_quarantine_candidates: list[MergedCandidate] = []
+    undated_quarantine_new = 0
+    undated_quarantine_reused = 0
+    bibliographic_candidate_list: list[MergedCandidate] = []
+    candidates_with_new_evidence: list[str] = []
+    for item in pre_quarantine_candidates:
+        if bibliography_cache is None or not _fully_undated_oai_inventory_candidate(item):
+            bibliographic_candidate_list.append(item)
+            if bibliography_cache is not None:
+                candidates_with_new_evidence.append(item.source_id)
+            continue
+        display = split_display_bibliography(item.display_title)
+        if bibliography_cache.can_resolve_fallback_without_remote(
+            display.title,
+            display.author_text,
+            now=requested_at,
+        ):
+            bibliographic_candidate_list.append(item)
+            candidates_with_new_evidence.append(item.source_id)
+            continue
+        if bibliography_cache.is_undated_candidate_quarantined(
+            item.source_id,
+            now=requested_at,
+        ):
+            undated_quarantine_reused += 1
+        else:
+            undated_quarantine_new += 1
+        undated_quarantine_candidates.append(item)
+    if bibliography_cache is not None:
+        bibliography_cache.clear_undated_candidates(tuple(candidates_with_new_evidence))
+        bibliography_cache.record_undated_candidates(
+            tuple(item.source_id for item in undated_quarantine_candidates),
+            now=requested_at,
+        )
+    bibliographic_candidates = tuple(bibliographic_candidate_list)
 
     doi_values = tuple(
         sorted({item.doi_hints[0] for item in bibliographic_candidates if len(item.doi_hints) == 1})
@@ -2149,6 +2237,7 @@ def run_on_demand(
             )
         except OpenAlexError as error:
             bibliographic_source_failures.setdefault("openalex", str(error))
+            unavailable_bibliographic_sources.setdefault("openalex", str(error))
             openalex_batch_failures += 1
         else:
             doi_batch_succeeded = True
@@ -2224,7 +2313,7 @@ def run_on_demand(
     fresh_title_works: tuple[OpenAlexWork, ...] = ()
     title_batch_api_values = 0
     title_batch_succeeded = not title_queries_to_query
-    if title_queries_to_query and "openalex" not in bibliographic_source_failures:
+    if title_queries_to_query and "openalex" not in unavailable_bibliographic_sources:
         title_batch_api_values = len(title_queries_to_query)
         try:
             fresh_title_works = batch_title_resolver(
@@ -2234,6 +2323,7 @@ def run_on_demand(
             )
         except OpenAlexError as error:
             bibliographic_source_failures.setdefault("openalex", str(error))
+            unavailable_bibliographic_sources.setdefault("openalex", str(error))
             openalex_batch_failures += 1
         else:
             title_batch_succeeded = True
@@ -2363,7 +2453,8 @@ def run_on_demand(
         requested_at,
         resolver=resolver,
         bibliography_cache=bibliography_cache,
-        unavailable_sources=bibliographic_source_failures,
+        source_failures=bibliographic_source_failures,
+        unavailable_sources=unavailable_bibliographic_sources,
         circuit_skip_counts=circuit_skip_counts,
         progress=(
             (lambda completed, total: progress("fallback", completed, total))
@@ -2440,6 +2531,15 @@ def run_on_demand(
             works.values(), key=lambda item: (normalize_title(item.title), item.work_id)
         )
     )
+    matched_work_ids = {item.work_id for item in matches if item.decision is MatchDecision.NOTIFY}
+    matched_confirmed_new = sum(
+        works[work_id].freshness_status is FreshnessStatus.CONFIRMED_NEW
+        for work_id in matched_work_ids
+    )
+    matched_confirmed_source_arrivals = sum(
+        works[work_id].freshness_status is FreshnessStatus.CONFIRMED_SOURCE_ARRIVAL
+        for work_id in matched_work_ids
+    )
     coverage = tuple(
         SourceCoverage(
             source=item.feed_key,
@@ -2499,9 +2599,14 @@ def run_on_demand(
         coverage=coverage,
         unresolved_count=unresolved_count,
         unresolved_reason_counts=unresolved_reason_counts,
-        machine_deferred_count=fallback_deferred_count,
+        remote_verification_not_reached_count=fallback_deferred_count,
         human_review_items=tuple(human_review_items),
         oai_narrowing_applied=oai_snapshot is not None,
+        undated_quarantine_count=len(undated_quarantine_candidates),
+        undated_quarantine_new=undated_quarantine_new,
+        matched_confirmed_new=matched_confirmed_new,
+        matched_confirmed_source_arrivals=matched_confirmed_source_arrivals,
+        show_recently_changed=show_recently_changed,
     )
     human_review_required, automatic_retry_required = unresolved_workload_counts(
         unresolved_reason_counts
@@ -2533,6 +2638,9 @@ def run_on_demand(
         "candidate_records_without_any_feed_date_hint": sum(
             not item.feed_dates and not item.feed_year_hints for item in candidates
         ),
+        "undated_quarantine_current": len(undated_quarantine_candidates),
+        "undated_quarantine_new": undated_quarantine_new,
+        "undated_quarantine_reused": undated_quarantine_reused,
         "explicit_unsupported_candidates": len(explicit_unsupported_results),
         "structured_work_type_conflicts": unresolved_reason_counts["structured_work_type_conflict"],
         "unknown_structured_work_types": unresolved_reason_counts["unknown_structured_work_type"],
@@ -2565,7 +2673,7 @@ def run_on_demand(
             for reason in fallback_reason_by_source_id.values()
         ),
         "openalex_batch_failures": openalex_batch_failures,
-        "bibliographic_source_circuits_open": len(bibliographic_source_failures),
+        "bibliographic_source_circuits_open": len(unavailable_bibliographic_sources),
         "bibliographic_source_circuit_skips": sum(circuit_skip_counts.values()),
         "philpapers_native_resolved_candidates": sum(
             result.work is not None
@@ -2627,7 +2735,9 @@ def run_on_demand(
             for item in works.values()
         ),
         "matched": sum(item.decision is MatchDecision.NOTIFY for item in matches),
-        "machine_deferred": fallback_deferred_count,
+        "matched_confirmed_new": matched_confirmed_new,
+        "matched_confirmed_source_arrivals": matched_confirmed_source_arrivals,
+        "remote_verification_not_reached": fallback_deferred_count,
         "human_review_required": human_review_required,
         "automatic_retry_required": automatic_retry_required,
         "unresolved": unresolved_count,
@@ -2647,6 +2757,9 @@ def run_on_demand(
             "bibliography_cache_expired": cache_stats_after.expired - cache_stats_before.expired,
             "bibliography_cache_scheduling_writes": (
                 cache_stats_after.scheduling_writes - cache_stats_before.scheduling_writes
+            ),
+            "bibliography_cache_quarantine_writes": (
+                cache_stats_after.quarantine_writes - cache_stats_before.quarantine_writes
             ),
         }
     )
@@ -2675,6 +2788,7 @@ def run_weekly(
     report_writer: ReportWriter = write_report_atomic,
     before_commit: Callable[[], None] | None = None,
     defer_uncertain_until_later_window: bool = False,
+    show_recently_changed: bool = False,
 ) -> WeeklyRunResult:
     """Run one complete week; mutate state only after the report is on disk."""
 
@@ -2748,6 +2862,7 @@ def run_weekly(
         to_process.setdefault(key, _retry_candidate(retry, current_by_key, started_at))
 
     bibliographic_source_failures: dict[str, str] = {}
+    unavailable_bibliographic_sources: dict[str, str] = {}
     circuit_skip_counts: dict[str, int] = {}
     resolution_results = _resolve_candidates_with_connection_reuse(
         tuple(sorted(to_process.values(), key=lambda item: item.source_id)),
@@ -2757,7 +2872,8 @@ def run_weekly(
         window_end,
         started_at,
         resolver=resolver,
-        unavailable_sources=bibliographic_source_failures,
+        source_failures=bibliographic_source_failures,
+        unavailable_sources=unavailable_bibliographic_sources,
         circuit_skip_counts=circuit_skip_counts,
     )
 
@@ -2966,6 +3082,7 @@ def run_weekly(
         unresolved_count=len(unresolved_updates),
         unresolved_reason_counts=unresolved_reason_counts,
         human_review_items=tuple(human_review_items),
+        show_recently_changed=show_recently_changed,
     )
     stats = {
         "feed_entries": sum(len(item.entries) for item in feed_snapshots),
@@ -2996,13 +3113,13 @@ def run_weekly(
         ),
         "notified": len(notifications),
         "unresolved": len(unresolved_updates),
-        "machine_deferred": 0,
+        "remote_verification_not_reached": 0,
         "human_review_required": human_review_required,
         "automatic_retry_required": automatic_retry_required,
         "structured_work_type_conflicts": unresolved_reason_counts["structured_work_type_conflict"],
         "unknown_structured_work_types": unresolved_reason_counts["unknown_structured_work_type"],
         "deferred_to_later_window": len(deferred_keys),
-        "bibliographic_source_circuits_open": len(bibliographic_source_failures),
+        "bibliographic_source_circuits_open": len(unavailable_bibliographic_sources),
         "bibliographic_source_circuit_skips": sum(circuit_skip_counts.values()),
     }
     stats.update(_oai_cache_stats(oai_snapshot))
@@ -3066,6 +3183,7 @@ def run_weekly_catch_up(
     resolver: CandidateResolver = resolve_bibliography,
     oai_loader: OAIWindowLoader = load_philarchive_oai_window,
     report_writer: ReportWriter = write_report_atomic,
+    show_recently_changed: bool = False,
 ) -> CatchUpResult:
     """Run all due gaps chronologically without consuming later-week records early."""
 
@@ -3142,6 +3260,7 @@ def run_weekly_catch_up(
                 oai_loader=oai_loader,
                 report_writer=report_writer,
                 defer_uncertain_until_later_window=index < len(plan.missing_windows) - 1,
+                show_recently_changed=show_recently_changed,
             )
         except Exception as error:
             raise CatchUpError(

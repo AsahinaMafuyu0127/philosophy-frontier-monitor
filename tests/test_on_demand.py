@@ -10,10 +10,12 @@ from philosophy_frontier_monitor.bibliographic_cache import BibliographicCache
 from philosophy_frontier_monitor.cli import (
     _deliver_on_demand_report,
     _emit_pull_now_progress,
+    _emit_pull_now_resource_advice,
     _emit_pull_now_storage_advice,
     build_parser,
 )
 from philosophy_frontier_monitor.config import FeedConfig, load_watchlist
+from philosophy_frontier_monitor.http_retry import BoundedRequestError
 from philosophy_frontier_monitor.models import (
     CategoryAssignment,
     CategoryStatus,
@@ -212,6 +214,126 @@ def test_oai_failure_keeps_the_wider_candidate_set_and_reports_degradation():
     assert result.stats["oai_harvest_failed"] == 1
     assert result.stats["oai_candidates_excluded_without_feed_time_or_year"] == 0
     assert "OAI 增量收割失败" in result.report_markdown
+
+
+def test_fully_undated_oai_stock_is_quarantined_and_reused_without_lookups():
+    config = replace(
+        CONFIG,
+        philarchive_oai=replace(CONFIG.philarchive_oai, enabled=True),
+    )
+    fallback_calls: list[str] = []
+    title_batch_calls: list[tuple[str, ...]] = []
+
+    def oai_loader(start, end, _endpoint):
+        return OAIWindowSnapshot(
+            window_start=start,
+            window_end=end,
+            checked_at=REQUEST_TIME,
+            records_by_key={
+                "undated": OAIRecord(
+                    identifier="oai:philarchive.org/rec/UNDATED",
+                    source_datestamp="2026-09-08T00:00:00Z",
+                    deleted=False,
+                    fields={"type": ("info:eu-repo/semantics/article",)},
+                )
+            },
+            harvested_records=1,
+            records_in_exact_window=1,
+            deleted_records=0,
+            unkeyed_records=0,
+            duplicate_keys=0,
+            overlap_records_excluded=0,
+        )
+
+    def forbidden_resolver(candidate, *_args):
+        fallback_calls.append(candidate.source_id)
+        raise AssertionError("quarantined candidate must not reach fallback resolution")
+
+    def title_batch(titles, _config, _attempted_at):
+        title_batch_calls.append(titles)
+        return ()
+
+    with BibliographicCache(":memory:") as bibliography_cache:
+        kwargs = {
+            "feed_loader": loader_with(entry("UNDATED", published_text=None)),
+            "oai_loader": oai_loader,
+            "resolver": forbidden_resolver,
+            "batch_title_resolver": title_batch,
+            "bibliography_cache": bibliography_cache,
+            "allow_development_fixture": True,
+        }
+        first = run_on_demand(config, now=REQUEST_TIME, **kwargs)
+        second = run_on_demand(config, now=REQUEST_TIME, **kwargs)
+
+    assert fallback_calls == []
+    assert title_batch_calls == []
+    assert first.stats["undated_quarantine_current"] == 1
+    assert first.stats["undated_quarantine_new"] == 1
+    assert first.stats["undated_quarantine_reused"] == 0
+    assert second.stats["undated_quarantine_current"] == 1
+    assert second.stats["undated_quarantine_new"] == 0
+    assert second.stats["undated_quarantine_reused"] == 1
+    assert first.stats["fallback_queried"] == 0
+    assert first.stats["remote_verification_not_reached"] == 0
+    assert first.stats["human_review_required"] == 0
+    assert first.stats["unresolved"] == 0
+    assert "## 无日期记录集合" in first.report_markdown
+    assert "不计入“本次未轮到远程核验”数量或人工复核" in first.report_markdown
+
+
+def test_undated_quarantine_reactivates_when_a_bibliographic_year_appears():
+    config = replace(
+        CONFIG,
+        philarchive_oai=replace(CONFIG.philarchive_oai, enabled=True),
+    )
+    fallback_calls: list[str] = []
+    oai_years: tuple[str, ...] = ()
+
+    def oai_loader(start, end, _endpoint):
+        return OAIWindowSnapshot(
+            window_start=start,
+            window_end=end,
+            checked_at=REQUEST_TIME,
+            records_by_key={
+                "reactivate": OAIRecord(
+                    identifier="oai:philarchive.org/rec/REACTIVATE",
+                    source_datestamp="2026-09-08T00:00:00Z",
+                    deleted=False,
+                    fields={
+                        "date": oai_years,
+                        "type": ("info:eu-repo/semantics/article",),
+                    },
+                )
+            },
+            harvested_records=1,
+            records_in_exact_window=1,
+            deleted_records=0,
+            unkeyed_records=0,
+            duplicate_keys=0,
+            overlap_records_excluded=0,
+        )
+
+    with BibliographicCache(":memory:") as bibliography_cache:
+        kwargs = {
+            "feed_loader": loader_with(entry("REACTIVATE", published_text=None)),
+            "oai_loader": oai_loader,
+            "resolver": resolver_for({"REACTIVATE": date(2026, 9, 8)}, fallback_calls),
+            "batch_title_resolver": no_title_batch,
+            "bibliography_cache": bibliography_cache,
+            "allow_development_fixture": True,
+        }
+        first = run_on_demand(config, now=REQUEST_TIME, **kwargs)
+        oai_years = ("2026",)
+        second = run_on_demand(config, now=REQUEST_TIME, **kwargs)
+        row_count = bibliography_cache.connection.execute(
+            "SELECT COUNT(*) FROM undated_candidate_quarantine"
+        ).fetchone()[0]
+
+    assert first.stats["undated_quarantine_current"] == 1
+    assert second.stats["undated_quarantine_current"] == 0
+    assert second.stats["matched"] == 1
+    assert fallback_calls == ["REACTIVATE"]
+    assert row_count == 0
 
 
 class FakeNetworkClient:
@@ -424,6 +546,44 @@ def test_bibliographic_failure_opens_one_run_circuit_and_avoids_request_storm(mo
     assert result.stats["bibliographic_source_circuit_skips"] == 2
     assert result.stats["unresolved"] == 2
     assert "crossref-bibliography" in result.report_markdown
+    assert "openalex-bibliography" in result.report_markdown
+
+
+def test_candidate_specific_permanent_4xx_does_not_open_source_circuit(monkeypatch):
+    openalex_calls: list[str] = []
+
+    def no_crossref(*_args, **_kwargs):
+        return None
+
+    def permanent_openalex_failure(title, **_kwargs):
+        openalex_calls.append(title)
+        bounded = BoundedRequestError(
+            source="OpenAlex",
+            failure_kind="permanent_http",
+            attempts=1,
+            stop_reason="non_retryable_status",
+            status_code=400,
+        )
+        raise pipeline.OpenAlexError(f"OpenAlex lookup failed: {bounded}") from bounded
+
+    monkeypatch.setattr(pipeline, "find_crossref_work", no_crossref)
+    monkeypatch.setattr(pipeline, "find_openalex_work", permanent_openalex_failure)
+
+    result = run_on_demand(
+        CONFIG,
+        now=REQUEST_TIME,
+        feed_loader=loader_with(
+            entry("PERMANENT-A", published_text=None),
+            entry("PERMANENT-B", published_text=None),
+        ),
+        batch_title_resolver=no_title_batch,
+        allow_development_fixture=True,
+    )
+
+    assert openalex_calls == ["Paper PERMANENT-A", "Paper PERMANENT-B"]
+    assert result.stats["bibliographic_source_circuits_open"] == 0
+    assert result.stats["bibliographic_source_circuit_skips"] == 0
+    assert result.stats["automatic_retry_required"] == 2
     assert "openalex-bibliography" in result.report_markdown
 
 
@@ -838,7 +998,7 @@ def test_on_demand_fallback_limit_defers_excess_without_failing_the_report():
     assert result.stats["fallback_deferred_without_doi_hint"] == 1
     assert result.stats["fallback_deferred_without_feed_date_or_year_hint"] == 1
     assert result.stats["fallback_deferred_after_no_openalex_title_candidate"] == 1
-    assert result.stats["machine_deferred"] == 1
+    assert result.stats["remote_verification_not_reached"] == 1
     assert result.stats["human_review_required"] == 0
     assert result.stats["automatic_retry_required"] == 0
     assert result.stats["unresolved"] == 1
@@ -1056,7 +1216,7 @@ def test_on_demand_keeps_single_title_batch_type_conflict_out_of_fallback():
 
     assert result.stats["title_batch_terminal_unresolved_candidates"] == 1
     assert result.stats["structured_work_type_conflicts"] == 1
-    assert result.stats["machine_deferred"] == 0
+    assert result.stats["remote_verification_not_reached"] == 0
     assert result.stats["human_review_required"] == 1
     assert result.stats["automatic_retry_required"] == 0
     assert result.stats["fallback_candidates"] == 0
@@ -1206,14 +1366,19 @@ def test_cli_progress_uses_stderr_and_keeps_stdout_clean(capsys):
 def test_cli_exposes_pull_now_as_a_distinct_command():
     args = build_parser().parse_args(["pull-now", "--days", "7"])
     file_args = build_parser().parse_args(["pull-now", "--days", "7", "--report-delivery", "file"])
+    expanded_args = build_parser().parse_args(
+        ["pull-now", "--days", "7", "--show-recently-changed"]
+    )
 
     assert args.command == "pull-now"
     assert args.days == 7
     assert args.max_candidates == 1000
-    assert args.max_fallback_candidates == 50
+    assert args.max_fallback_candidates == 300
     assert args.no_bibliography_cache is False
     assert args.report_delivery == "inline"
+    assert args.show_recently_changed is False
     assert file_args.report_delivery == "file"
+    assert expanded_args.show_recently_changed is True
 
 
 def test_pull_now_storage_advice_warns_for_windows_system_drive(capsys):
@@ -1231,6 +1396,16 @@ def test_pull_now_storage_advice_is_always_emitted_off_system_drive(capsys):
     advice = capsys.readouterr().err
     assert "存储建议" in advice
     assert "prefer a spacious non-system drive" in advice
+
+
+def test_pull_now_resource_advice_discloses_longer_first_pull_and_quarantine(capsys):
+    _emit_pull_now_resource_advice(300, undated_quarantine_enabled=True)
+
+    advice = capsys.readouterr().err
+    assert "第一次拉取" in advice
+    assert "上限为 300" in advice
+    assert "私人散列隔离集合" in advice
+    assert "出现上述新证据时自动重新进入核验" in advice
 
 
 def test_cli_file_delivery_writes_full_private_report_and_returns_no_markdown(

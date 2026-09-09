@@ -246,7 +246,7 @@ def test_interrupted_pages_resume_from_persisted_token(workspace_tmp_path, monke
                 text=oai_response(
                     ("ONE", "2026-09-07T00:00:00Z"),
                     token="resume-page-2",
-                    expiration="2026-09-09T00:00:00Z",
+                    expiration="2099-09-09T00:00:00Z",
                     cursor=0,
                     complete_list_size=2,
                 ),
@@ -311,7 +311,7 @@ def test_newer_rolling_window_finishes_older_session_before_fetching_tail(
                 text=oai_response(
                     ("ONE", "2026-09-07T00:00:00Z"),
                     token="resume-old-window",
-                    expiration="2026-09-09T00:00:00Z",
+                    expiration="2099-09-09T00:00:00Z",
                 ),
                 request=request,
             )
@@ -414,7 +414,7 @@ def test_bad_persisted_token_restarts_original_gap(workspace_tmp_path, monkeypat
                 text=oai_response(
                     ("OLD", "2026-09-07T00:00:00Z"),
                     token="invalid-on-resume",
-                    expiration="2026-09-09T00:00:00Z",
+                    expiration="2099-09-09T00:00:00Z",
                 ),
                 request=request,
             )
