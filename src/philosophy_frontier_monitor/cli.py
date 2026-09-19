@@ -35,6 +35,8 @@ from .pipeline import (
 )
 from .release_check import audit_release
 from .scope_estimate import estimate_interest_scope
+from .search import SearchOptions, run_paper_search
+from .search_report import render_paper_search
 from .sources.philpapers_rss import discover_feed_request, fetch_feed, parse_feed
 from .sources.philpapers_taxonomy import (
     fetch_and_write_taxonomy,
@@ -44,6 +46,7 @@ from .sources.philpapers_taxonomy import (
 from .state import StateStore
 from .taxonomy import expand_selected_categories, load_taxonomy, require_production_taxonomy
 from .taxonomy_audit import audit_taxonomy_change
+from .work_types import SUPPORTED_CANONICAL_WORK_TYPES
 
 
 def _emit(payload: Any) -> None:
@@ -772,6 +775,41 @@ def _pull_now(args: argparse.Namespace) -> int:
     return 0
 
 
+def _search(args: argparse.Namespace) -> int:
+    config = load_watchlist(args.config)
+    options = SearchOptions(
+        category_ids=tuple(args.category or ()),
+        match=args.match,
+        year_from=args.year_from,
+        year_to=args.year_to,
+        work_types=tuple(args.work_type or ()),
+        limit=args.limit,
+        offset=args.offset,
+        max_candidates=args.max_candidates,
+        max_fallbacks=args.max_fallbacks,
+    )
+    with collect_request_telemetry() as events:
+        result = run_paper_search(config, options=options, progress=_emit_search_progress)
+    _emit(
+        {
+            "ok": True,
+            "operation": "search",
+            **asdict(result),
+            "report_markdown": render_paper_search(result),
+            "network_telemetry": summarize_request_telemetry(events),
+            "state_advanced": False,
+            "weekly_notifications_written": False,
+        }
+    )
+    return 0
+
+
+def _emit_search_progress(stage: str, completed: int, total: int) -> None:
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    print(f"[search:{stage}] {completed}/{total}", file=sys.stderr, flush=True)
+
+
 def _catch_up(args: argparse.Namespace) -> int:
     config = load_watchlist(args.config)
     if not config.storage.state_database.is_file():
@@ -1130,6 +1168,28 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     pull_now.set_defaults(handler=_pull_now)
+
+    search = subparsers.add_parser(
+        "search",
+        help="search existing papers by configured interests with optional citation data",
+    )
+    search.add_argument("--config", default=str(_default_watchlist()))
+    search.add_argument(
+        "--category", action="append", help="temporarily select an active category ID"
+    )
+    search.add_argument("--match", choices=("any", "all"), default="any")
+    search.add_argument("--year-from", type=int)
+    search.add_argument("--year-to", type=int)
+    search.add_argument(
+        "--work-type", action="append", choices=sorted(SUPPORTED_CANONICAL_WORK_TYPES)
+    )
+    search.add_argument(
+        "--limit", type=int, help="result limit (default: all without year bounds, otherwise 20)"
+    )
+    search.add_argument("--offset", type=int, default=0)
+    search.add_argument("--max-candidates", type=int, default=1000)
+    search.add_argument("--max-fallbacks", type=int, default=100)
+    search.set_defaults(handler=_search)
 
     catch_up = subparsers.add_parser(
         "catch-up",

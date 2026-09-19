@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from philosophy_frontier_monitor import release_check
 from philosophy_frontier_monitor.release_check import (
     REQUIRED_IGNORE_RULES,
     REQUIRED_PUBLIC_FILES,
@@ -110,3 +111,21 @@ def test_release_check_blocks_complete_philpapers_taxonomy_outside_private_cache
 
     assert item.status == "blocker"
     assert item.details == ("tests/fixtures/taxonomy.json",)
+
+
+@pytest.mark.parametrize("tracked", [False, True])
+def test_git_history_bundle_is_private_and_blocked_if_tracked(release_root, monkeypatch, tracked):
+    root = make_project(release_root)
+    bundle = root / "repository-history.bundle"
+    bundle.write_bytes(b"private repository history")
+    public_files = tuple(
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.is_file() and path != bundle
+    )
+    tracked_files = public_files + ((bundle.name,) if tracked else ())
+    monkeypatch.setattr(release_check, "_git_repository", lambda root: (True, root, tracked_files))
+    audit = audit_release(root)
+    assert check(audit, "untracked_public_files").status == "pass"
+    assert check(audit, "tracked_private_files").status == ("blocker" if tracked else "pass")
+    assert bundle.read_bytes() == b"private repository history"

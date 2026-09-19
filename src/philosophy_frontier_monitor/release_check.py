@@ -206,7 +206,7 @@ def _is_private_path(relative_path: str) -> bool:
         or path.startswith("reports/")
         or name == ".env"
         or (name.startswith(".env.") and name != ".env.example")
-        or suffix in {".db", ".key", ".p12", ".pem", ".sqlite", ".sqlite3"}
+        or suffix in {".bundle", ".db", ".key", ".p12", ".pem", ".sqlite", ".sqlite3"}
     )
 
 

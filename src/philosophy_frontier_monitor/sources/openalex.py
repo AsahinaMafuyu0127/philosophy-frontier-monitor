@@ -39,6 +39,13 @@ class OpenAlexWork:
     work_type: str | None
     stable_url: str
     raw: dict[str, Any]
+    retrieved_at: datetime | None = None
+
+    @property
+    def cited_by_count(self) -> int | None:
+        """Missing or malformed citation data is unknown, never zero."""
+        value = self.raw.get("cited_by_count")
+        return value if type(value) is int and value >= 0 else None
 
 
 def _add_access_parameters(params: dict[str, str], mailto: str | None) -> None:
@@ -89,8 +96,9 @@ def parse_openalex_work(item: dict[str, Any], *, retrieved_at: datetime) -> Open
         authors=authors,
         publication_date=publication_date,
         work_type=work_type,
-        stable_url=item.get("primary_location", {}).get("landing_page_url") or openalex_id,
+        stable_url=(item.get("primary_location") or {}).get("landing_page_url") or openalex_id,
         raw=item,
+        retrieved_at=retrieved_at,
     )
 
 
@@ -173,7 +181,9 @@ def find_works_by_dois(
             params = {
                 "filter": "doi:" + "|".join(batch),
                 "per_page": str(len(batch)),
-                "select": ("id,doi,title,publication_date,type,authorships,primary_location"),
+                "select": (
+                    "id,doi,title,publication_date,type,authorships,primary_location,cited_by_count"
+                ),
             }
             _add_access_parameters(params, mailto)
             response = request_with_retry(
@@ -241,7 +251,9 @@ def find_works_by_titles(
             params = {
                 "filter": "title.search.exact:" + "|".join(batch),
                 "per_page": "100",
-                "select": ("id,doi,title,publication_date,type,authorships,primary_location"),
+                "select": (
+                    "id,doi,title,publication_date,type,authorships,primary_location,cited_by_count"
+                ),
             }
             _add_access_parameters(params, mailto)
             response = request_with_retry(

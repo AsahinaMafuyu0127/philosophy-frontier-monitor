@@ -11,6 +11,7 @@ __pycache__/
 config/watchlist.yaml
 var/
 reports/
+*.bundle
 
 # Local environment and credentials
 .env

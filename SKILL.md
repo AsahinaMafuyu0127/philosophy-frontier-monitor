@@ -1,13 +1,35 @@
 ---
 name: philosophy-frontier-monitor
-description: Onboard a researcher's natural-language philosophy interests, map them to verified PhilPapers categories, and maintain recurring weekly or user-requested rolling new-paper reports with missed-run catch-up. Use when a user asks how to use, configure, update, inspect, run, or schedule philosophy-paper monitoring by research direction. Do not use for judging paper quality, ranking papers, or general literature reviews.
+description: Map philosophy research interests to verified PhilPapers categories, search existing papers from the confirmed interest configuration with available citation counts, and maintain weekly or on-demand new-paper reports. Use for interest-based paper search, monitoring, configuration, and scheduling. Do not use for judging scholarly quality or searching books, chapters, or general bibliographies.
 ---
 
 # Philosophy Frontier Monitor
 
-Use this skill to maintain a transparent, category-based watchlist for newly
-published philosophy papers. The researcher, not the skill, judges scholarly
-quality and importance.
+Use this skill to search existing philosophy papers and maintain a transparent,
+category-based watchlist for newly published papers. The researcher judges
+scholarly quality and importance; available citation counts only order search results.
+
+## Choose the requested mode
+
+- **Search existing papers by interests or tags:** read
+  [paper-search.md](references/paper-search.md) and use `pfm search`. Reuse the
+  private confirmed interest configuration. Search has no new-publication gate,
+  baseline requirement, or weekly catch-up side effect. Existing interests are
+  enough; do not block search on an optional public-account onboarding decision.
+  Only supported paper forms may enter results. Missing citation data must not
+  remove a verified paper or be represented as zero.
+  With year bounds, exclude records without a feed year hint before bibliographic
+  lookups. Without year bounds, include all verified matching papers even when
+  feed dates, year hints, or publication dates are missing; do not impose the
+  default yearly-result page size or invent a recent-year window. In user
+  reports, mention unresolved paper types or bibliographic identities without
+  counts. Offer existing source links for optional user review; do not initiate
+  another search or investigation to resolve those records.
+- **Monitor new papers:** follow the onboarding and monitoring workflow below.
+  `pull-now` remains a recent-paper request, separate from historical search.
+
+For an explicit search, do not execute the monitoring workflow's automatic
+catch-up instruction. Search does not change subscriptions, weekly state, or caches.
 
 ## Installation and runtime root
 
@@ -57,11 +79,32 @@ account access is not a reason to stop that mapping.
 Obtain or reuse:
 
 - the researcher's natural-language research direction;
-- the reporting timezone, weekday, and local delivery time. Default to Monday
-  at 08:00 in the user's known local timezone;
+- the reporting weekday and local delivery time; detect the timezone as described
+  below. Default to Monday at 08:00 only when no schedule has been specified;
 - any explicitly requested category exclusions.
 
 Do not require the user to know PhilPapers category names in advance.
+
+### Local time and final scheduling confirmation
+
+Interpret an unqualified time such as "早上八点" as 08:00 in the user's local
+timezone. Detect it from the current session's user timezone first; when absent,
+read the user's local OS timezone (Windows: `Get-TimeZone`; Linux: `timedatectl
+show --property=Timezone --value`; macOS: the `/etc/localtime` zoneinfo target).
+An explicit user-selected reporting zone takes precedence. A cloud/container
+host's timezone, UI language, or a UTC offset alone does not establish the user's
+timezone. Use a valid IANA zone for the watchlist; Windows zone names need a
+verified IANA mapping, including daylight-saving rules.
+
+Do not ask for the timezone during interest collection or when the user states
+the delivery time. Prepare the schedule, then include the detected zone together
+with the weekday and time in the final task-creation confirmation, for example:
+"每周一早上 8:00，按检测到的北京时间（Asia/Shanghai）执行。" Reuse an existing
+confirmation of that exact schedule; do not add another approval step. If the
+user's zone cannot be determined reliably, resolve it in that same final
+confirmation, before creating the task. Read
+[monitoring-policy.md](references/monitoring-policy.md#52-默认调度与错过运行)
+for existing schedules and configuration consistency.
 
 ## Workflow
 
@@ -306,7 +349,10 @@ Do not require the user to know PhilPapers category names in advance.
     compatible schedule semantics are unavailable.
 15. Enable an external weekly scheduler only after a manual baseline, dry run,
     live run, and failure-recovery test have all passed. The default schedule is
-    Monday 08:00 in the user's timezone. If that run is missed because the
+    Monday 08:00 in the user's automatically detected timezone. Confirm the
+    timezone only as part of the final schedule review described above, then
+    ensure the task and watchlist use the same schedule semantics.
+    If that run is missed because the
     computer or Codex is unavailable, the desired contract is to run at the
     later opportunity when Codex can run. No login-instant guarantee is required.
     Do not assume a scheduler provides missed-run replay: on every later

@@ -1,5 +1,15 @@
 # Philosophy Frontier Monitor
 
+Search existing papers from confirmed interests with `pfm search --config config/watchlist.yaml`.
+Historical search has no recent-publication gate and accepts supported paper forms only; books,
+chapters and book reviews are excluded. Available OpenAlex citation counts sort descending, with
+missing values labelled and placed last. Temporary active-category selection, year/type filters,
+and result pagination do not change subscriptions or weekly state. Coverage is the current category
+feed inventory, not the complete historical index. Without year bounds, all verified matches are
+returned by default, including undated feed records. Only year-bounded searches exclude records
+without feed year hints; an explicit result limit still enables pagination.
+See the [search contract](references/paper-search.md).
+
 English | [简体中文](README.md)
 
 **Factual weekly philosophy-paper monitoring, organized around the research areas you confirm.**
