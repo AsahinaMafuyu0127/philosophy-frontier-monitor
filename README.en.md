@@ -99,6 +99,42 @@ The current application release is **v0.3.0**; the internal evidence-pipeline ve
 Formal real-machine acceptance has been completed on Windows. macOS and Linux paths are supported,
 but have not yet received equivalent real scheduled-run validation.
 
+<a id="technical-update-2026-09-19"></a>
+
+## Technical update: interest-based paper search and local-time scheduling (2026-09-19)
+
+This `main` branch update adds the independent `pfm search` command. It searches existing papers
+using confirmed interests and PhilPapers feed membership, with any/all tag matching and optional
+year and paper-type filters. Search requires no monitoring baseline and does not change subscriptions
+or weekly notification history. The feature was pushed in
+[commit `9249da6`](https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor/commit/9249da600c79a63c2f55a973bcd98c60cd2361dd);
+no separate version tag or GitHub Release has been created for it.
+
+**Without year bounds**, missing feed dates, year hints, or publication dates do not exclude a
+verified paper, and all verified matches are returned by default. Explicit result limits still
+enable pagination. **With year bounds**, records without feed year hints are excluded before
+bibliographic lookup; the final year filter uses bibliographic publication-date evidence.
+
+Available OpenAlex citation counts sort descending, with missing values labelled and placed last;
+zero remains distinct from missing. Books, chapters, book reviews, and other non-paper forms are
+excluded. Reports mention unresolved paper types or bibliographic identities without counts and
+may provide existing source links for optional user review. The skill does not launch follow-up
+investigations for these records. Conflicting DOI evidence remains unresolved even when an external
+lookup returns just one match.
+
+For scheduling, the skill reads the user's timezone from the session or, when absent, the local OS.
+An unqualified time such as “8 a.m.” is interpreted locally. The weekday, time, and timezone are
+confirmed together at final task creation; existing subscriptions retain their confirmed timezone.
+
+The feature commit passed **319 tests**, lint and formatting checks, skill validation, and the
+release audit. Git history bundles are protected as private files. Search coverage remains limited
+to papers available and verified from the selected category feeds, not the complete PhilPapers
+index. See the [search contract](references/paper-search.md) and [changelog](CHANGELOG.md).
+
+Future project updates must also appear in the technical updates on both README pages, while
+preserving earlier entries. This requirement is recorded in the
+[contribution rules](CONTRIBUTING.md#网页技术更新与变更记录).
+
 ## Technical update: recoverable OAI caching and stable on-demand pulls
 
 Evidence pipeline `0.6.0` adds a recoverable cross-run SQLite cache for PhilArchive OAI harvesting.
