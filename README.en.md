@@ -42,18 +42,11 @@ and **recently changed** (89), in that order. Each group is ordered newest first
 appropriate to its meaning and separated by a rule. Recently changed is collapsed by default, but
 the report always leaves a visible show/hide control.
 
-Coverage qualifications remain visible without leading the page. This historical example predates
-the date-evidence-insufficient set: 266 candidates did not reach remote verification under that
-run's older per-item budget. This describes one run boundary, not a persistent 266-item backlog.
-The current version places qualifying fully undated records in the separate private hashed set, so
-they do not repeatedly enter this count. That historical run also had 18 human-review cases and 10
-automatic-retry cases. One OpenAlex HTTP 400 remains visible in source coverage, so the example does
-not claim complete coverage. The image shows page one: the confirmed publication and two source
-arrivals appear first, followed by the collapsed record-change group; source coverage immediately
-follows the complete matching-paper block. The
-[complete Markdown report](examples/public-demo-weekly-report.md) contains all 92 papers, source
-status, unfinished-verification disclosures, and Chinese and English sections generated from the
-same result set.
+An additional **18 records require human review**.
+
+The image shows the report's first page. The
+[complete Markdown report](examples/public-demo-weekly-report.md) contains all 92 papers in Chinese
+and English. Review records and technical notes can be expanded there if the reader wants details.
 
 ![Classical ivory first-page preview of a report generated from three real PhilPapers categories](assets/demo/public-demo-weekly-report-2026-09-09.png)
 
@@ -98,6 +91,16 @@ first weekly report. Do not ask me to paste credentials into the conversation.
 The current application release is **v0.3.0**; the internal evidence-pipeline version is **0.6.0**.
 Formal real-machine acceptance has been completed on Windows. macOS and Linux paths are supported,
 but have not yet received equivalent real scheduled-run validation.
+
+<a id="technical-update-2026-09-20"></a>
+
+## Technical update: human-review notice in the public example (2026-09-20)
+
+The public example's coverage note now states only that 18 records require human review. Both
+README pages and the preview image reflect this change. Review details and technical notes in the
+full example are collapsed by default and can be expanded voluntarily; the original paper records
+and verification facts are preserved. This documentation and presentation update includes checks
+of paper content, collapsible sections, and links, plus a rendered-image review.
 
 <a id="technical-update-2026-09-19"></a>
 
