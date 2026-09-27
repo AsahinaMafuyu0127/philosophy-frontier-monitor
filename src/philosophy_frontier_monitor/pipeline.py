@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import sqlite3
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -18,10 +19,20 @@ from email.utils import parsedate_to_datetime
 from html import unescape
 from pathlib import Path
 from urllib.parse import unquote, urlparse, urlunparse
+from zoneinfo import ZoneInfo
 
 import httpx
 
 from .bibliographic_cache import BibliographicCache, BibliographicCacheStats
+from .cnki_review import (
+    BibliographicPeer,
+    CnkiAssessment,
+    CnkiOverlap,
+    CnkiReviewError,
+    assess_cnki_overlaps,
+    assess_cnki_records,
+    load_reviewed_evidence,
+)
 from .config import ConfirmedCategoryConfig, FeedConfig, WatchlistConfig
 from .freshness import assess_freshness
 from .http_retry import BoundedRequestError
@@ -51,6 +62,7 @@ from .models import (
     WorkTypeStatus,
 )
 from .normalize import normalize_doi, normalize_title
+from .official_journals import distinct_issue_leads, issues_in_window, list_issues
 from .report import (
     HUMAN_REVIEW_REASON_CODES,
     HumanReviewItem,
@@ -59,6 +71,7 @@ from .report import (
     render_weekly_report,
     unresolved_workload_counts,
 )
+from .sources.cnki_space import CnkiIssue, CnkiRecord, CnkiScan, scan_cnki_space
 from .sources.crossref import DEFAULT_USER_AGENT as CROSSREF_USER_AGENT
 from .sources.crossref import CrossrefError, CrossrefWork
 from .sources.crossref import find_exact_work as find_crossref_work
@@ -95,6 +108,14 @@ from .sources.philpapers_rss import (
     fetch_feed,
     parse_feed,
     split_display_bibliography,
+)
+from .sources.wanfang import (
+    WanfangDiscoveryScan,
+    WanfangRecord,
+    WanfangScan,
+    publication_month,
+    scan_wanfang_cnki,
+    scan_wanfang_discovery,
 )
 from .state import (
     FeedStateUpdate,
@@ -297,7 +318,7 @@ OAIWindowLoader = Callable[[datetime, datetime, str], OAIWindowSnapshot]
 def previous_completed_week(
     *,
     now: datetime,
-    timezone,
+    timezone: ZoneInfo,
     report_weekday: int,
 ) -> tuple[datetime, datetime]:
     """Return the previous completed local-week window as UTC instants."""
@@ -1955,6 +1976,331 @@ def on_demand_window(
     return local_start.astimezone(UTC), local_end.astimezone(UTC)
 
 
+def _load_cnki_issues(
+    config: WatchlistConfig,
+    *,
+    window_start: datetime,
+    window_end: datetime,
+    checked_at: datetime,
+    loader: Callable[..., CnkiScan],
+) -> CnkiScan | None:
+    if not config.cnki_space.enabled:
+        return None
+    first_year = window_start.astimezone(config.timezone).year
+    last_year = (window_end - timedelta(microseconds=1)).astimezone(config.timezone).year
+    years = tuple(range(first_year, last_year + 1))
+    try:
+        return loader(
+            config.cnki_space.terms,
+            years=years,
+            max_pages=config.cnki_space.max_pages,
+            checked_at=checked_at,
+        )
+    except Exception as error:  # Optional source must not abort PhilPapers.
+        return CnkiScan(
+            issues=(),
+            records=(),
+            checked_at=checked_at,
+            status="failed",
+            requested_pages=0,
+            result_pages=0,
+            incomplete_queries=(),
+            failures=(f"adapter:{type(error).__name__}",),
+        )
+
+
+def _cnki_coverage(
+    scan: CnkiScan,
+    *,
+    recent_issues: tuple[CnkiIssue, ...] | None = None,
+    missing_month: int = 0,
+    outside_window: int = 0,
+) -> SourceCoverage:
+    recent_detail = (
+        f"即时窗口显示 {len(recent_issues)} 项；缺少明确月份 {missing_month} 项；"
+        f"月份在窗口外 {outside_window} 项。"
+        if recent_issues is not None
+        else ""
+    )
+    recent_detail_en = (
+        f"On-demand window shows {len(recent_issues)} issues; {missing_month} lack an "
+        f"explicit month and {outside_window} fall outside the window. "
+        if recent_issues is not None
+        else ""
+    )
+    return SourceCoverage(
+        source="cnki-space-issues",
+        status=scan.status,
+        checked_at=scan.checked_at,
+        detail=(
+            f"有限题录检索：完成 {scan.result_pages}/{scan.requested_pages} 页；"
+            f"期次线索 {len(scan.issues)}；截断 {len(scan.incomplete_queries)} 项；"
+            f"失败 {len(scan.failures)} 项。{recent_detail}未验证知网全库覆盖。"
+        ),
+        detail_en=(
+            f"bounded metadata search: {scan.result_pages}/{scan.requested_pages} pages; "
+            f"{len(scan.issues)} issue leads; {len(scan.incomplete_queries)} truncated scopes; "
+            f"{len(scan.failures)} failed scopes. {recent_detail_en}"
+            "Full CNKI coverage is unverified."
+        ),
+    )
+
+
+def _cnki_issues_in_on_demand_window(
+    issues: tuple[CnkiIssue, ...],
+    *,
+    window_start: datetime,
+    window_end: datetime,
+    timezone,
+) -> tuple[tuple[CnkiIssue, ...], int, int]:
+    """Keep only explicitly month-labelled issues overlapping the local window.
+
+    Month precision cannot prove that an individual article first appeared on a
+    particular day. An issue number alone supplies no month evidence.
+    """
+
+    selected: list[CnkiIssue] = []
+    missing_month = 0
+    outside_window = 0
+    local_start = window_start.astimezone(timezone)
+    local_end = window_end.astimezone(timezone)
+    for issue in issues:
+        month = issue.label_month
+        if month is None:
+            missing_month += 1
+            continue
+        month_start = datetime(issue.year, month, 1, tzinfo=timezone)
+        if month == 12:
+            next_month = datetime(issue.year + 1, 1, 1, tzinfo=timezone)
+        else:
+            next_month = datetime(issue.year, month + 1, 1, tzinfo=timezone)
+        if month_start < local_end and next_month > local_start:
+            selected.append(issue)
+        else:
+            outside_window += 1
+    return tuple(selected), missing_month, outside_window
+
+
+def _official_issues_for_window(
+    config: WatchlistConfig,
+    window_start: datetime,
+    window_end: datetime,
+    *,
+    first_observed_only: bool = False,
+):
+    db_path = config.storage.state_database.parent / "official-journals.sqlite3"
+    local_start = window_start.astimezone(config.timezone).date()
+    local_last = (window_end.astimezone(config.timezone) - timedelta(microseconds=1)).date()
+    all_reviewed = list_issues(db_path, reviewed_only=True)
+    candidates = issues_in_window(all_reviewed, local_start, local_last)
+    if not first_observed_only:
+        return distinct_issue_leads(candidates)
+    first_review_by_issue = {
+        (issue.journal_id, issue.year, issue.issue): min(
+            datetime.fromisoformat(other.reviewed_at or other.observed_at)
+            for other in all_reviewed
+            if (other.journal_id, other.year, other.issue)
+            == (issue.journal_id, issue.year, issue.issue)
+        )
+        for issue in candidates
+    }
+    return distinct_issue_leads(tuple(
+        issue
+        for issue in candidates
+        if window_start
+        <= first_review_by_issue[(issue.journal_id, issue.year, issue.issue)]
+        < window_end
+    ))
+
+
+def _official_months_for_cnki(
+    issues: tuple[CnkiIssue, ...], official_issues
+) -> tuple[CnkiIssue, ...]:
+    months = {
+        (item.title, item.year, item.issue): int(item.label_month[-2:])
+        for item in official_issues
+        if item.label_month is not None
+    }
+    return tuple(
+        replace(issue, label_month=months.get((issue.venue, issue.year, issue.issue)))
+        if issue.label_month is None and (issue.venue, issue.year, issue.issue) in months
+        else issue
+        for issue in issues
+    )
+
+
+def _wanfang_records_in_window(
+    records: tuple[WanfangRecord, ...], *, window_start: datetime, window_end: datetime, timezone
+) -> tuple[tuple[WanfangRecord, ...], int, int]:
+    selected: list[WanfangRecord] = []
+    missing_month = outside_window = 0
+    local_start = window_start.astimezone(timezone)
+    local_end = window_end.astimezone(timezone)
+    for record in records:
+        labelled = publication_month(record)
+        if labelled is None:
+            missing_month += 1
+            continue
+        year, month = labelled
+        month_start = datetime(year, month, 1, tzinfo=timezone)
+        next_month = (
+            datetime(year + 1, 1, 1, tzinfo=timezone)
+            if month == 12
+            else datetime(year, month + 1, 1, tzinfo=timezone)
+        )
+        if month_start < local_end and next_month > local_start:
+            selected.append(record)
+        else:
+            outside_window += 1
+    return tuple(selected), missing_month, outside_window
+
+
+def _load_wanfang_discovery(
+    config: WatchlistConfig,
+    *,
+    window_start: datetime | None,
+    window_end: datetime | None,
+    checked_at: datetime,
+    loader: Callable[..., WanfangDiscoveryScan],
+) -> WanfangDiscoveryScan | None:
+    if not config.wanfang.discover:
+        return None
+    years: tuple[int | None, ...] = (None,)
+    if window_start is not None and window_end is not None:
+        first_year = window_start.astimezone(config.timezone).year
+        last_year = (window_end - timedelta(microseconds=1)).astimezone(config.timezone).year
+        years = tuple(range(first_year, last_year + 1))
+    try:
+        return loader(
+            config.cnki_space.terms,
+            years=years,
+            max_terms=config.wanfang.max_discovery_terms,
+            max_pages=config.wanfang.max_discovery_pages,
+            checked_at=checked_at,
+            key_file=config.wanfang.key_file,
+        )
+    except Exception as error:
+        return WanfangDiscoveryScan(
+            (), checked_at, "failed", 0, 0, 0, (f"adapter:{type(error).__name__}",)
+        )
+
+
+def _wanfang_discovery_coverage(
+    scan: WanfangDiscoveryScan, *, displayed: int, missing_month: int, outside_window: int
+) -> SourceCoverage:
+    return SourceCoverage(
+        source="wanfang-discovery",
+        status=scan.status,
+        checked_at=scan.checked_at,
+        detail=(
+            f"有限中文期刊题录检索：完成 {scan.result_pages}/{scan.requested_pages} 页；"
+            f"候选 {len(scan.records)} 条；窗口可列 {displayed} 条；"
+            f"缺少可信月份 {missing_month} 条；窗外 {outside_window} 条；"
+            f"截断 {scan.incomplete_queries} 项；失败 {len(scan.failures)} 项。"
+            "万方标示出版时间不等于首次发表日，未验证全库覆盖。"
+        ),
+        detail_en=(
+            f"Bounded Chinese-journal search: {scan.result_pages}/{scan.requested_pages} pages; "
+            f"{len(scan.records)} leads, {displayed} displayed, {missing_month} without a "
+            f"reliable month, {outside_window} outside the window, "
+            f"{scan.incomplete_queries} truncated scopes, {len(scan.failures)} failed scopes. "
+            "Wanfang's publication label is not a first-publication date; "
+            "full coverage is unverified."
+        ),
+    )
+
+
+def _wanfang_crosscheck(
+    config: WatchlistConfig,
+    records: tuple[CnkiRecord, ...],
+    *,
+    checked_at: datetime,
+    loader: Callable[..., WanfangScan],
+) -> tuple[WanfangScan | None, SourceCoverage | None]:
+    if not config.wanfang.enabled:
+        return None, None
+    if not records:
+        scan = WanfangScan((), checked_at, "success", 0, 0, 0)
+    else:
+        try:
+            scan = loader(
+                records,
+                max_checks=config.wanfang.max_checks,
+                checked_at=checked_at,
+                key_file=config.wanfang.key_file,
+            )
+        except Exception as error:  # Optional source failure cannot abort PhilPapers.
+            scan = WanfangScan((), checked_at, "failed", 0, len(records), 0, type(error).__name__)
+    return scan, SourceCoverage(
+        source="wanfang-cnki-crosscheck",
+        status=scan.status,
+        checked_at=checked_at,
+        detail=(
+            f"有限逐篇查询 {scan.attempted}/{scan.total_candidates} 条；"
+            f"分页未完 {scan.incomplete} 条；"
+            f"失败代码 {scan.failure or '无'}。未核对到不等于未收录；不证明首次发表。"
+        ),
+        detail_en=(
+            f"Bounded article queries {scan.attempted}/{scan.total_candidates}; "
+            f"incomplete pagination {scan.incomplete}; failure code {scan.failure or 'none'}. "
+            "No match does not prove absence or first publication."
+        ),
+    )
+
+
+def _cnki_review_assessments(
+    config: WatchlistConfig, scan: CnkiScan
+) -> tuple[tuple[CnkiAssessment, ...], SourceCoverage | None]:
+    path = config.cnki_space.reviewed_evidence
+    if path is None:
+        return (), None
+    try:
+        assessments = assess_cnki_records(scan.records, load_reviewed_evidence(path))
+    except CnkiReviewError as error:
+        return (), SourceCoverage(
+            source="cnki-reviewed-evidence",
+            status="failed",
+            checked_at=scan.checked_at,
+            detail=f"私人逐篇证据文件无法使用（{error}）；题录仍待核验。",
+            detail_en=(
+                f"Private reviewed evidence unavailable ({error}); metadata remains unverified."
+            ),
+        )
+    corroborated = sum(item.status == "corroborated" for item in assessments)
+    return assessments, SourceCoverage(
+        source="cnki-reviewed-evidence",
+        status="success",
+        checked_at=scan.checked_at,
+        detail=(
+            f"人工核对的题录 {corroborated} 条；只核对来源明确给出的字段，"
+            "不构成新论文或兴趣匹配确认。"
+        ),
+        detail_en=(
+            f"{corroborated} bibliographies manually corroborated; this does not confirm "
+            "new-paper status or interest-category membership."
+        ),
+    )
+
+
+def _cnki_work_overlaps(scan: CnkiScan, works: dict[str, WorkRecord]) -> tuple[CnkiOverlap, ...]:
+    peers = []
+    for work in works.values():
+        source_urls = tuple(
+            source_id
+            for source, source_id in work.source_ids
+            if source == SOURCE_NAME and source_id.startswith("https://philpapers.org/rec/")
+        )
+        if not source_urls:
+            continue
+        year = None
+        if work.publication_date is not None:
+            year_text = str(work.publication_date.value)[:4]
+            if year_text.isdecimal():
+                year = int(year_text)
+        peers.append(BibliographicPeer(work.title, work.authors, year, source_urls[0]))
+    return assess_cnki_overlaps(scan.records, tuple(peers))
+
+
 def _resolve_candidates_with_connection_reuse(
     candidates: tuple[MergedCandidate, ...],
     snapshot: TaxonomySnapshot,
@@ -2049,6 +2395,9 @@ def run_on_demand(
     allow_development_fixture: bool = False,
     progress: ProgressReporter | None = None,
     show_recently_changed: bool = False,
+    cnki_loader: Callable[..., CnkiScan] = scan_cnki_space,
+    wanfang_loader: Callable[..., WanfangScan] = scan_wanfang_cnki,
+    wanfang_discovery_loader: Callable[..., WanfangDiscoveryScan] = scan_wanfang_discovery,
 ) -> OnDemandRunResult:
     """Produce a read-only rolling report independent of weekly state.
 
@@ -2589,6 +2938,105 @@ def run_on_demand(
         )
         for source, detail in sorted(bibliographic_source_failures.items())
     )
+    try:
+        official_issues = _official_issues_for_window(config, window_start, window_end)
+    except (OSError, ValueError, sqlite3.DatabaseError):
+        official_issues = ()
+        coverage += (
+            SourceCoverage(
+                source="official-journals",
+                status="failed",
+                checked_at=requested_at,
+                detail="本地官方期次证据库读取失败；不能据此认为期刊无新期。",
+                detail_en=(
+                    "The local official issue store could not be read; absence is not established."
+                ),
+            ),
+        )
+    else:
+        coverage += (
+            SourceCoverage(
+                source="official-journals",
+                status="local_only",
+                checked_at=requested_at,
+                detail=(
+                    f"读取本地已复核期次 {len(official_issues)} 条；"
+                    "本次未逐站巡查期刊官网或公众号。"
+                ),
+                detail_en=(
+                    f"Read {len(official_issues)} reviewed local issue leads; "
+                    "journal sites and official WeChat were not checked live."
+                ),
+            ),
+        )
+    cnki_scan = _load_cnki_issues(
+        config,
+        window_start=window_start,
+        window_end=window_end,
+        checked_at=requested_at,
+        loader=cnki_loader,
+    )
+    if cnki_scan is not None:
+        cnki_scan = replace(
+            cnki_scan,
+            issues=_official_months_for_cnki(cnki_scan.issues, official_issues),
+        )
+        recent_issues, missing_month, outside_window = _cnki_issues_in_on_demand_window(
+            cnki_scan.issues,
+            window_start=window_start,
+            window_end=window_end,
+            timezone=config.timezone,
+        )
+        recent_records = tuple(record for issue in recent_issues for record in issue.records)
+        recent_scan = replace(cnki_scan, issues=recent_issues, records=recent_records)
+        coverage += (
+            _cnki_coverage(
+                cnki_scan,
+                recent_issues=recent_issues,
+                missing_month=missing_month,
+                outside_window=outside_window,
+            ),
+        )
+        cnki_assessments, review_coverage = _cnki_review_assessments(config, recent_scan)
+        cnki_overlaps = _cnki_work_overlaps(recent_scan, works)
+        wanfang_scan, wanfang_coverage = _wanfang_crosscheck(
+            config, recent_records, checked_at=requested_at, loader=wanfang_loader
+        )
+        if wanfang_coverage is not None:
+            coverage += (wanfang_coverage,)
+        if review_coverage is not None:
+            coverage += (review_coverage,)
+    else:
+        recent_issues = ()
+        missing_month = 0
+        outside_window = 0
+        cnki_assessments = ()
+        cnki_overlaps = ()
+        wanfang_scan = None
+    wanfang_discovery = _load_wanfang_discovery(
+        config,
+        window_start=window_start,
+        window_end=window_end,
+        checked_at=requested_at,
+        loader=wanfang_discovery_loader,
+    )
+    if wanfang_discovery is not None:
+        recent_wanfang, wanfang_missing_month, wanfang_outside_window = _wanfang_records_in_window(
+            wanfang_discovery.records,
+            window_start=window_start,
+            window_end=window_end,
+            timezone=config.timezone,
+        )
+        coverage += (
+            _wanfang_discovery_coverage(
+                wanfang_discovery,
+                displayed=len(recent_wanfang),
+                missing_month=wanfang_missing_month,
+                outside_window=wanfang_outside_window,
+            ),
+        )
+    else:
+        recent_wanfang = ()
     report_markdown = render_on_demand_report(
         profile=profile,
         snapshot=snapshot,
@@ -2607,11 +3055,22 @@ def run_on_demand(
         matched_confirmed_new=matched_confirmed_new,
         matched_confirmed_source_arrivals=matched_confirmed_source_arrivals,
         show_recently_changed=show_recently_changed,
+        official_issues=official_issues,
+        cnki_issues=recent_issues if cnki_scan is not None else None,
+        cnki_assessments=cnki_assessments,
+        cnki_overlaps=cnki_overlaps,
+        wanfang_checks=wanfang_scan.checks if wanfang_scan is not None else (),
+        wanfang_discovery_records=recent_wanfang if wanfang_discovery is not None else None,
     )
     human_review_required, automatic_retry_required = unresolved_workload_counts(
         unresolved_reason_counts
     )
     stats = {
+        "cnki_issue_candidates": len(cnki_scan.issues) if cnki_scan is not None else 0,
+        "cnki_recent_issue_candidates": len(recent_issues),
+        "cnki_issue_month_unknown": missing_month,
+        "cnki_issue_outside_window": outside_window,
+        "cnki_source_failed": int(cnki_scan is not None and cnki_scan.status == "failed"),
         "feed_entries": sum(len(item.entries) for item in feed_snapshots),
         "unique_current_records": len(current_candidates),
         "candidate_records": len(candidates),
@@ -2789,6 +3248,9 @@ def run_weekly(
     before_commit: Callable[[], None] | None = None,
     defer_uncertain_until_later_window: bool = False,
     show_recently_changed: bool = False,
+    cnki_loader: Callable[..., CnkiScan] = scan_cnki_space,
+    wanfang_loader: Callable[..., WanfangScan] = scan_wanfang_cnki,
+    wanfang_discovery_loader: Callable[..., WanfangDiscoveryScan] = scan_wanfang_discovery,
 ) -> WeeklyRunResult:
     """Run one complete week; mutate state only after the report is on disk."""
 
@@ -3071,6 +3533,114 @@ def run_weekly(
         )
         for source, detail in sorted(bibliographic_source_failures.items())
     )
+    try:
+        official_issues = _official_issues_for_window(
+            config, window_start, window_end, first_observed_only=True
+        )
+    except (OSError, ValueError, sqlite3.DatabaseError):
+        official_issues = ()
+        coverage += (
+            SourceCoverage(
+                source="official-journals",
+                status="failed",
+                checked_at=started_at,
+                detail="本地官方期次证据库读取失败；不能据此认为期刊无新期。",
+                detail_en=(
+                    "The local official issue store could not be read; absence is not established."
+                ),
+            ),
+        )
+    else:
+        coverage += (
+            SourceCoverage(
+                source="official-journals",
+                status="local_only",
+                checked_at=started_at,
+                detail=(
+                    f"读取本地本周首次核实期次 {len(official_issues)} 条；"
+                    "本次未逐站巡查期刊官网或公众号。"
+                ),
+                detail_en=(
+                    f"Read {len(official_issues)} issues first reviewed this week; "
+                    "journal sites and official WeChat were not checked live."
+                ),
+            ),
+        )
+    cnki_scan = _load_cnki_issues(
+        config,
+        window_start=window_start,
+        window_end=window_end,
+        checked_at=started_at,
+        loader=cnki_loader,
+    )
+    cnki_baseline = cnki_scan is not None and state.get_checkpoint("cnki-space-issues") is None
+    if cnki_scan is None:
+        cnki_report_issues = None
+    elif cnki_baseline:
+        cnki_report_issues = cnki_scan.issues
+    else:
+        known_issue_keys = state.known_cnki_issue_keys({issue.key for issue in cnki_scan.issues})
+        cnki_report_issues = tuple(
+            issue for issue in cnki_scan.issues if issue.key not in known_issue_keys
+        )
+    if cnki_scan is not None:
+        coverage += (_cnki_coverage(cnki_scan),)
+        cnki_assessments, review_coverage = _cnki_review_assessments(config, cnki_scan)
+        cnki_overlaps = _cnki_work_overlaps(cnki_scan, works)
+        wanfang_records = tuple(
+            record for issue in cnki_report_issues or () for record in issue.records
+        )
+        wanfang_scan, wanfang_coverage = _wanfang_crosscheck(
+            config, wanfang_records, checked_at=started_at, loader=wanfang_loader
+        )
+        if wanfang_coverage is not None:
+            coverage += (wanfang_coverage,)
+        if review_coverage is not None:
+            coverage += (review_coverage,)
+    else:
+        cnki_assessments = ()
+        cnki_overlaps = ()
+        wanfang_scan = None
+    wanfang_discovery = _load_wanfang_discovery(
+        config,
+        window_start=window_start,
+        window_end=window_end,
+        checked_at=started_at,
+        loader=wanfang_discovery_loader,
+    )
+    wanfang_baseline = (
+        wanfang_discovery is not None
+        and wanfang_discovery.result_pages > 0
+        and state.get_checkpoint("wanfang-discovery") is None
+    )
+    if wanfang_discovery is not None:
+        wanfang_window, wanfang_missing_month, wanfang_outside_window = _wanfang_records_in_window(
+            wanfang_discovery.records,
+            window_start=window_start,
+            window_end=window_end,
+            timezone=config.timezone,
+        )
+        known_wanfang_ids = state.known_wanfang_record_ids(
+            {record.record_id for record in wanfang_window}
+        )
+        wanfang_report_records = (
+            wanfang_window
+            if wanfang_baseline
+            else tuple(
+                record for record in wanfang_window if record.record_id not in known_wanfang_ids
+            )
+        )
+        coverage += (
+            _wanfang_discovery_coverage(
+                wanfang_discovery,
+                displayed=len(wanfang_report_records),
+                missing_month=wanfang_missing_month,
+                outside_window=wanfang_outside_window,
+            ),
+        )
+    else:
+        wanfang_window = ()
+        wanfang_report_records = None
     report_markdown = render_weekly_report(
         profile=profile,
         snapshot=snapshot,
@@ -3083,8 +3653,19 @@ def run_weekly(
         unresolved_reason_counts=unresolved_reason_counts,
         human_review_items=tuple(human_review_items),
         show_recently_changed=show_recently_changed,
+        official_issues=official_issues,
+        cnki_issues=cnki_report_issues,
+        cnki_baseline=cnki_baseline,
+        cnki_assessments=cnki_assessments,
+        cnki_overlaps=cnki_overlaps,
+        wanfang_checks=wanfang_scan.checks if wanfang_scan is not None else (),
+        wanfang_discovery_records=wanfang_report_records,
+        wanfang_discovery_baseline=wanfang_baseline,
     )
     stats = {
+        "cnki_issue_candidates": len(cnki_scan.issues) if cnki_scan is not None else 0,
+        "cnki_new_issue_observations": 0 if cnki_baseline else len(cnki_report_issues or ()),
+        "cnki_source_failed": int(cnki_scan is not None and cnki_scan.status == "failed"),
         "feed_entries": sum(len(item.entries) for item in feed_snapshots),
         "unique_current_records": len(current_candidates),
         "new_source_records": len(new_candidates),
@@ -3159,6 +3740,14 @@ def run_weekly(
             unresolved=tuple(unresolved_updates),
             notifications=tuple(notifications),
             interest_profile_snapshot=profile_snapshot,
+            cnki_issues=cnki_scan.issues if cnki_scan is not None else (),
+            cnki_scan_completed=(cnki_scan is not None and not cnki_scan.failures),
+            wanfang_discovery_ids=tuple(record.record_id for record in wanfang_window),
+            wanfang_discovery_completed=(
+                wanfang_discovery is not None
+                and wanfang_discovery.result_pages > 0
+                and not wanfang_discovery.failures
+            ),
         )
 
     return WeeklyRunResult(

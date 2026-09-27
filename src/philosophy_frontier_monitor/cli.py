@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import sqlite3
 import sys
 from contextlib import ExitStack
 from dataclasses import asdict
@@ -23,7 +24,29 @@ from .http_retry import (
     summarize_request_telemetry,
 )
 from .interest import build_interest_profile
+from .journal_collection import (
+    SUPPORTED as SUPPORTED_PUBLISHER_TOCS,
+)
+from .journal_collection import (
+    check_publisher_articles,
+    collect_publisher,
+    issue_coverage_summary,
+    measurement_summary,
+    observation_summary,
+    review_publisher_article,
+    run_publisher_cycle,
+)
 from .oai_cache import OAIHarvestCache
+from .official_journals import (
+    CATALOG_PATH,
+    DEFAULT_DB_PATH,
+    catalog_as_dicts,
+    distinct_issue_leads,
+    list_issues,
+    new_observation,
+    record_issue,
+    review_observed_issue,
+)
 from .pipeline import (
     CatchUpError,
     OnDemandRunResult,
@@ -775,6 +798,20 @@ def _pull_now(args: argparse.Namespace) -> int:
     return 0
 
 
+def _search_official_issues(
+    db_path: Path, year_from: int | None, year_to: int | None
+) -> tuple[tuple, str]:
+    try:
+        issues = distinct_issue_leads(tuple(
+            issue for issue in list_issues(db_path, reviewed_only=True)
+            if (year_from is None or issue.year >= year_from)
+            and (year_to is None or issue.year <= year_to)
+        ))
+    except (OSError, ValueError, sqlite3.DatabaseError):
+        return (), "failed"
+    return issues, "local_only"
+
+
 def _search(args: argparse.Namespace) -> int:
     config = load_watchlist(args.config)
     options = SearchOptions(
@@ -790,17 +827,156 @@ def _search(args: argparse.Namespace) -> int:
     )
     with collect_request_telemetry() as events:
         result = run_paper_search(config, options=options, progress=_emit_search_progress)
+    official_issues, official_issue_status = _search_official_issues(
+        config.storage.state_database.parent / "official-journals.sqlite3",
+        args.year_from, args.year_to,
+    )
+    report = render_paper_search(
+        result, official_issues=official_issues,
+        official_issue_status=official_issue_status,
+    )
     _emit(
         {
             "ok": True,
             "operation": "search",
             **asdict(result),
-            "report_markdown": render_paper_search(result),
+            "report_markdown": report,
+            "official_issue_leads": len(official_issues),
+            "official_issue_status": official_issue_status,
             "network_telemetry": summarize_request_telemetry(events),
             "state_advanced": False,
             "weekly_notifications_written": False,
         }
     )
+    return 0
+
+
+def _journal_watch(args: argparse.Namespace) -> int:
+    catalog_path = Path(args.catalog)
+    db_path = Path(args.db)
+    if args.action == "catalog":
+        journals = catalog_as_dicts(catalog_path)
+        for journal in journals:
+            journal["toc_collection"] = (
+                "automatic" if journal["id"] in SUPPORTED_PUBLISHER_TOCS else "manual"
+            )
+        _emit(
+            {"ok": True, "operation": "journal-watch", "journals": journals}
+        )
+        return 0
+    if args.action == "list":
+        _emit(
+            {
+                "ok": True,
+                "operation": "journal-watch",
+                "issues": [asdict(issue) for issue in list_issues(db_path)],
+            }
+        )
+        return 0
+    if args.action == "pending":
+        _emit(
+            {"ok": True, "operation": "journal-watch",
+             "pending": [asdict(issue) for issue in list_issues(db_path)
+                         if issue.status == "pending"]}
+        )
+        return 0
+    if args.action == "review":
+        if not all((args.journal, args.year, args.issue, args.evidence_url)):
+            raise ValueError("review requires journal, year, issue and exact evidence URL")
+        if not args.confirm_evidence:
+            raise ValueError("review requires --confirm-evidence after inspecting the source")
+        reviewed = review_observed_issue(
+            db_path, args.journal, args.year, args.issue, args.evidence_url,
+            label_month=args.label_month,
+            issue_published_on=args.issue_published_on,
+            announcement_on=args.announcement_on, catalog_path=catalog_path,
+        )
+        _emit({"ok": True, "operation": "journal-watch", "issue": asdict(reviewed)})
+        return 0
+    if args.action == "scan":
+        if not args.journal:
+            raise ValueError("scan requires --journal")
+        result = collect_publisher(
+            args.journal, db_path, catalog_path=catalog_path, max_pages=args.max_pages
+        )
+        _emit({"ok": True, "operation": "journal-watch", "scan": result})
+        return 0
+    if args.action == "check":
+        if not args.journal:
+            raise ValueError("check requires --journal")
+        key_file = Path(args.key_file) if args.with_wanfang and args.key_file else None
+        if args.with_wanfang and key_file is None and Path(args.config).is_file():
+            key_file = load_watchlist(Path(args.config)).wanfang.key_file
+        result = check_publisher_articles(
+            args.journal, db_path, catalog_path=catalog_path,
+            max_checks=args.max_checks, min_interval_hours=args.min_interval_hours,
+            with_wanfang=args.with_wanfang, key_file=key_file,
+        )
+        _emit({"ok": True, "operation": "journal-watch", "check": result})
+        return 0
+    if args.action == "run":
+        key_file = Path(args.key_file) if args.with_wanfang and args.key_file else None
+        if args.with_wanfang and key_file is None and Path(args.config).is_file():
+            key_file = load_watchlist(Path(args.config)).wanfang.key_file
+        result = run_publisher_cycle(
+            db_path, catalog_path=catalog_path,
+            total_checks=args.max_total_checks, checks_per_site=args.max_checks_per_site,
+            min_interval_hours=args.min_interval_hours, with_wanfang=args.with_wanfang,
+            key_file=key_file,
+        )
+        _emit({"ok": True, "operation": "journal-watch", "cycle": result})
+        return 0
+    if args.action == "summary":
+        _emit({"ok": True, "operation": "journal-watch",
+               "measurements": measurement_summary(db_path, args.journal),
+               "observations": observation_summary(db_path, args.journal)})
+        return 0
+    if args.action == "audit":
+        if args.articles and not all((args.journal, args.year, args.issue)):
+            raise ValueError("article-level audit requires journal, year and issue")
+        _emit({"ok": True, "operation": "journal-watch",
+               "issue_coverage": issue_coverage_summary(
+                   db_path, journal_id=args.journal, year=args.year, issue=args.issue,
+                   include_articles=args.articles,
+               )})
+        return 0
+    if args.action == "classify":
+        if not all((args.journal, args.year, args.issue, args.title,
+                    args.article_url, args.work_type, args.interest)):
+            raise ValueError("classify requires exact article, work type and interest decision")
+        if not args.confirm_evidence:
+            raise ValueError("classify requires --confirm-evidence after source review")
+        result = review_publisher_article(
+            db_path, args.journal, args.year, args.issue, args.title,
+            args.article_url, work_type=args.work_type, interest=args.interest,
+            basis_url=args.basis_url, catalog_path=catalog_path,
+        )
+        _emit({"ok": True, "operation": "journal-watch", "article_review": result})
+        return 0
+    if not all((args.journal, args.year, args.issue, args.evidence_url, args.evidence_kind)):
+        raise ValueError("observe requires journal, year, issue, evidence URL and evidence kind")
+    issue = new_observation(
+        args.journal,
+        args.year,
+        args.issue,
+        args.evidence_url,
+        args.evidence_kind,
+        label_month=args.label_month,
+        issue_published_on=args.issue_published_on,
+        announcement_on=args.announcement_on,
+        status=args.status,
+        catalog_path=catalog_path,
+    )
+    record_issue(db_path, issue, catalog_path=catalog_path)
+    saved = next(
+        item
+        for item in list_issues(db_path)
+        if item.journal_id == issue.journal_id
+        and item.year == issue.year
+        and item.issue == issue.issue
+        and item.evidence_url == issue.evidence_url
+    )
+    _emit({"ok": True, "operation": "journal-watch", "issue": asdict(saved)})
     return 0
 
 
@@ -909,6 +1085,49 @@ def _catch_up(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pfm", description="Philosophy Frontier Monitor")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    journal_watch = subparsers.add_parser(
+        "journal-watch",
+        help="inspect the curated publisher catalog and record reviewed issue evidence",
+    )
+    journal_watch.add_argument(
+        "action", choices=("catalog", "list", "pending", "review", "observe",
+                           "scan", "check", "run", "summary", "audit", "classify")
+    )
+    journal_watch.add_argument("--catalog", default=str(CATALOG_PATH))
+    journal_watch.add_argument("--db", default=str(DEFAULT_DB_PATH))
+    journal_watch.add_argument("--journal")
+    journal_watch.add_argument("--year", type=int)
+    journal_watch.add_argument("--issue")
+    journal_watch.add_argument("--title")
+    journal_watch.add_argument("--article-url")
+    journal_watch.add_argument("--basis-url")
+    journal_watch.add_argument("--work-type", choices=("research", "other", "uncertain"))
+    journal_watch.add_argument(
+        "--interest", choices=("relevant", "irrelevant", "uncertain", "unreviewed")
+    )
+    journal_watch.add_argument("--articles", action="store_true")
+    journal_watch.add_argument("--evidence-url")
+    journal_watch.add_argument(
+        "--evidence-kind", choices=("journal-site", "publisher-site", "official-wechat")
+    )
+    journal_watch.add_argument("--label-month")
+    journal_watch.add_argument("--issue-published-on")
+    journal_watch.add_argument("--announcement-on")
+    journal_watch.add_argument("--status", choices=("pending", "reviewed"), default="pending")
+    journal_watch.add_argument("--confirm-evidence", action="store_true")
+    journal_watch.add_argument("--max-pages", type=int, default=3)
+    journal_watch.add_argument("--max-checks", type=int, default=5)
+    journal_watch.add_argument("--min-interval-hours", type=int, default=24)
+    journal_watch.add_argument("--max-total-checks", type=int, default=0)
+    journal_watch.add_argument("--max-checks-per-site", type=int, default=2)
+    journal_watch.add_argument(
+        "--with-wanfang", action="store_true",
+        help="also query Wanfang for each checked article; off by default",
+    )
+    journal_watch.add_argument("--key-file")
+    journal_watch.add_argument("--config", default="config/watchlist.yaml")
+    journal_watch.set_defaults(handler=_journal_watch)
 
     doctor = subparsers.add_parser("doctor", help="validate the local project and optional feed")
     doctor.add_argument("--taxonomy", default=str(_default_fixture()))

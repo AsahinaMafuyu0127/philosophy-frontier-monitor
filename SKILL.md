@@ -28,6 +28,102 @@ scholarly quality and importance; available citation counts only order search re
 - **Monitor new papers:** follow the onboarding and monitoring workflow below.
   `pull-now` remains a recent-paper request, separate from historical search.
 
+For Chinese-journal source expansion, read
+[chinese-source-expansion.md](references/chinese-source-expansion.md). When the
+question concerns a journal in [official-journals.yaml](config/official-journals.yaml),
+start with its editorial or publisher channel and a verified official announcement
+for issue and date evidence. `pfm journal-watch catalog` lists the monitored
+channels; `pfm journal-watch list` shows locally recorded issue evidence.
+The bounded Chinese metadata and reviewed-issue leads workflow is a stable,
+explicitly enabled capability in search, pull-now, and weekly-run. It does not
+confirm that individual Chinese papers are newly published or establish complete
+coverage of Chinese philosophy journals.
+`pfm journal-watch run` scans all currently verified publisher
+directories without article cross-checks by default. An explicit
+`--max-total-checks` above zero starts bounded repeat checks;
+`pfm journal-watch pending` lists automatically observed issues awaiting human
+source review. After opening the exact publisher URL and checking its stated
+month or announcement date, use `pfm journal-watch review` with that URL,
+explicit date fields, and `--confirm-evidence`. A parsed publisher announcement
+date alone remains pending until this review. Preserve the first observation;
+later scans cannot downgrade it. If a different official page supplies the
+date, record that page as separate evidence instead of attributing it to the
+directory URL.
+`pfm journal-watch summary`
+reports source-specific first hits and censored non-hits from the ignored local
+store. Nine automated channels are a verified subset of the catalog; one
+reads a bounded publisher-hosted PDF table of contents in memory;
+unautomated journals cannot be assumed to lack new issues.
+`pfm journal-watch catalog` marks each channel's TOC collection as
+`automatic` or `manual`; the per-site reasons for manual status are in the
+publisher observation reference.
+`pfm journal-watch audit` reports per-issue publisher-record denominators,
+human-reviewed research-paper and interest counts, and source query status.
+Research and interest denominators remain unknown while any required manual
+decision is unreviewed or uncertain. Source-specific research visibility needs
+a scoped complete hit or miss for every reviewed research article in that issue;
+failed, truncated, and unchecked queries remain unresolved.
+`--articles` requires one exact journal/year/issue and shows each query's
+fetched and reported page scope. The `classify` action records an exact
+article URL and a manually checked type/interest decision in the ignored
+local store; never infer these from a journal title or keyword. A complete
+publisher TOC count is not a count of research papers or interested papers,
+and a small sample of CNKI hits does not prove database-wide recall.
+This publisher observation is an optional maintainer evaluation of directory
+stability and database search visibility, not a prerequisite for another user's
+`search`, `pull-now`, or `weekly-run`. Those modes do not require a multiweek
+observation baseline. `journal-watch check` and `run` check CNKI by default;
+Wanfang article cross-checks require explicit `--with-wanfang`. The ordinary
+watchlist's `sources.wanfang.enabled` also defaults to false and is independent
+of the journal-watch option. A private opt-in must not be copied into public
+defaults or assumed for another user.
+Only `reviewed` observations enter search, pull-now, or weekly issue leads.
+Weekly reports mention an issue only in the window of its first review; a
+month label alone must not repeat the same issue in every week of that month.
+Treat an official WeChat posting date as an announcement date, not a journal
+publication date, and never infer a month from monthly frequency plus issue number.
+CNKI Space and Wanfang remain supplementary discovery and bibliography checks.
+When the
+private watchlist enables `sources.cnki_space`, `search`, `pull-now`, and
+`weekly-run` perform bounded CNKI Space metadata discovery using the public
+search method documented by the third-party cnki-search MCP. Its candidates and
+issue observations remain separate from verified PhilPapers matches. An issue
+labelled only with a year and issue number may be mentioned as first observed
+this week; do not invent a month or day or call the papers first published this
+week. Disclose blocked or truncated searches, and do not present this limited
+source as the complete CNKI KNS collection.
+For `pull-now`, show Chinese journal leads only when a reviewed official issue
+record or the database source explicitly labels a month that overlaps the
+selected rolling window. Withhold
+year-only or issue-number-only leads from that section, disclose their count,
+and do not infer that zero displayed leads means no recent Chinese papers.
+The month label is not an article's verified first-publication day; leave
+broader historical discovery to an explicit `search` request.
+An optional Git-ignored `sources.cnki_space.reviewed_evidence` file holds
+manually checked journal or catalog bibliographies. The source page must support
+the stated title, authors, journal, year, issue, and any publication-time China
+affiliation. The report may label those particular fields corroborated while
+keeping the record out of confirmed-new-paper totals. Exact bibliography overlap
+with a PhilPapers record inspected in the same run is a review aid, not an
+automatic cross-source merge or evidence of complete PhilPapers coverage.
+If the private watchlist enables `sources.wanfang`, bounded calls to the
+subscribed AI HUB Query endpoint check CNKI leads against Wanfang Chinese
+journal metadata. Read the AppKey only from `WFDATA_APP_KEY` in the local
+process environment or the configured Git-ignored `key_file`.
+When `sources.wanfang.discover` is also true, use the same subscribed Query
+endpoint for independently discovered Chinese-journal metadata in all three
+modes. Keep its term and page limits, report truncation, and separate these
+leads from verified papers. In `pull-now`, display only a source-labelled
+publication month overlapping the rolling window; reject year-only and
+January-first placeholder dates as insufficient month evidence. The source
+date may describe an issue and never by itself proves first publication.
+Weekly discovery first creates a bounded record-ID baseline; later reports
+show only previously unseen IDs in the eligible window. The private subscription
+may have trial quota, so do not silently increase discovery limits.
+An absent key, a failed query, incomplete pagination, or no same-title result
+must be disclosed and must never become an absence claim. Matching bibliography
+does not establish a first publication date or confirmed interest-category match.
+
 For an explicit search, do not execute the monitoring workflow's automatic
 catch-up instruction. Search does not change subscriptions, weekly state, or caches.
 

@@ -12,8 +12,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .models import Notification
+from .sources.cnki_space import CnkiIssue
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 6
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,6 +228,21 @@ class StateStore:
                         REFERENCES source_records(source, source_id)
                         ON DELETE CASCADE
                 );
+                CREATE TABLE IF NOT EXISTS cnki_issues (
+                    issue_key TEXT PRIMARY KEY,
+                    venue TEXT NOT NULL,
+                    year INTEGER NOT NULL,
+                    issue TEXT NOT NULL,
+                    label_month INTEGER,
+                    first_seen_at TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL,
+                    example_url TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS wanfang_discovery_records (
+                    record_id TEXT PRIMARY KEY,
+                    first_seen_at TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS unresolved_records (
                     source TEXT NOT NULL,
                     source_id TEXT NOT NULL,
@@ -352,6 +368,52 @@ class StateStore:
             cursor=row["cursor"],
             window_end=datetime.fromisoformat(row["window_end"]),
             completed_at=datetime.fromisoformat(row["completed_at"]),
+        )
+
+    def known_cnki_issue_keys(self, keys: set[str]) -> set[str]:
+        if not keys:
+            return set()
+        known: set[str] = set()
+        for key in keys:
+            if self.connection.execute(
+                "SELECT 1 FROM cnki_issues WHERE issue_key = ?", (key,)
+            ).fetchone():
+                known.add(key)
+        return known
+
+    def known_wanfang_record_ids(self, ids: set[str]) -> set[str]:
+        if not ids:
+            return set()
+        known: set[str] = set()
+        for record_id in ids:
+            if self.connection.execute(
+                "SELECT 1 FROM wanfang_discovery_records WHERE record_id = ?", (record_id,)
+            ).fetchone():
+                known.add(record_id)
+        return known
+
+    def _upsert_cnki_issue(self, issue: CnkiIssue) -> None:
+        self.connection.execute(
+            """
+            INSERT INTO cnki_issues(
+                issue_key, venue, year, issue, label_month,
+                first_seen_at, last_seen_at, example_url
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(issue_key) DO UPDATE SET
+                last_seen_at = excluded.last_seen_at,
+                example_url = excluded.example_url,
+                label_month = COALESCE(excluded.label_month, cnki_issues.label_month)
+            """,
+            (
+                issue.key,
+                issue.venue,
+                issue.year,
+                issue.issue,
+                issue.label_month,
+                issue.observed_at.isoformat(),
+                issue.observed_at.isoformat(),
+                issue.records[0].url,
+            ),
         )
 
     def has_successful_run(
@@ -862,11 +924,48 @@ class StateStore:
         unresolved: tuple[UnresolvedUpdate, ...],
         notifications: tuple[Notification, ...],
         interest_profile_snapshot: InterestProfileSnapshot | None = None,
+        cnki_issues: tuple[CnkiIssue, ...] = (),
+        cnki_scan_completed: bool = False,
+        wanfang_discovery_ids: tuple[str, ...] = (),
+        wanfang_discovery_completed: bool = False,
     ) -> None:
         """Commit a completed report and every associated state change together."""
 
         unresolved_keys = {(item.source, item.source_id) for item in unresolved}
         with self.transaction():
+            for issue in cnki_issues:
+                self._upsert_cnki_issue(issue)
+            for record_id in wanfang_discovery_ids:
+                self.connection.execute(
+                    """
+                    INSERT INTO wanfang_discovery_records(record_id, first_seen_at, last_seen_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(record_id) DO UPDATE SET last_seen_at = excluded.last_seen_at
+                    """,
+                    (record_id, completed_at.isoformat(), completed_at.isoformat()),
+                )
+            if wanfang_discovery_completed:
+                self.connection.execute(
+                    """
+                    INSERT INTO checkpoints(source, cursor, window_end, completed_at)
+                    VALUES ('wanfang-discovery', NULL, ?, ?)
+                    ON CONFLICT(source) DO UPDATE SET
+                        window_end = excluded.window_end,
+                        completed_at = excluded.completed_at
+                    """,
+                    (window_end.isoformat(), completed_at.isoformat()),
+                )
+            if cnki_scan_completed:
+                self.connection.execute(
+                    """
+                    INSERT INTO checkpoints(source, cursor, window_end, completed_at)
+                    VALUES ('cnki-space-issues', NULL, ?, ?)
+                    ON CONFLICT(source) DO UPDATE SET
+                        window_end = excluded.window_end,
+                        completed_at = excluded.completed_at
+                    """,
+                    (window_end.isoformat(), completed_at.isoformat()),
+                )
             if interest_profile_snapshot is not None:
                 self._register_interest_profile(
                     interest_profile_snapshot,

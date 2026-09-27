@@ -10,6 +10,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
 
+from .sources.cnki_space import CnkiSearchTerm
+
 
 class ConfigError(ValueError):
     pass
@@ -65,6 +67,24 @@ class PhilArchiveOAIConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class CnkiSpaceConfig:
+    enabled: bool
+    terms: tuple[CnkiSearchTerm, ...]
+    max_pages: int
+    reviewed_evidence: Path | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WanfangConfig:
+    enabled: bool = False
+    max_checks: int = 5
+    key_file: Path | None = None
+    discover: bool = False
+    max_discovery_terms: int = 2
+    max_discovery_pages: int = 1
+
+
+@dataclass(frozen=True, slots=True)
 class StorageConfig:
     state_database: Path
     report_directory: Path
@@ -106,11 +126,13 @@ class WatchlistConfig:
     allow_fixture_for_dry_run: bool
     feeds: tuple[FeedConfig, ...]
     philarchive_oai: PhilArchiveOAIConfig
+    cnki_space: CnkiSpaceConfig
     crossref_mailto: str | None
     openalex_mailto: str | None
     max_unresolved_attempts: int
     unresolved_retry_days: int
     storage: StorageConfig
+    wanfang: WanfangConfig = WanfangConfig()
 
 
 WEEKDAYS = {
@@ -464,6 +486,77 @@ def load_watchlist(path: str | Path) -> WatchlistConfig:
     philarchive_oai = _require_mapping(
         sources.get("philarchive_oai", {}), "sources.philarchive_oai"
     )
+    cnki_payload = _require_mapping(sources.get("cnki_space", {}), "sources.cnki_space")
+    cnki_enabled = cnki_payload.get("enabled", False)
+    if not isinstance(cnki_enabled, bool):
+        raise ConfigError("sources.cnki_space.enabled must be a boolean")
+    cnki_terms_payload = cnki_payload.get("terms", [])
+    if not isinstance(cnki_terms_payload, list) or len(cnki_terms_payload) > 12:
+        raise ConfigError("sources.cnki_space.terms must be a list of at most 12 terms")
+    cnki_terms = []
+    for index, raw_term in enumerate(cnki_terms_payload):
+        term = _require_mapping(raw_term, f"sources.cnki_space.terms[{index}]")
+        query = _require_text(term.get("query"), f"sources.cnki_space.terms[{index}].query")
+        field = str(term.get("field", "title"))
+        if field not in {"title", "theme"} or len(query) > 80:
+            raise ConfigError("CNKI terms need title/theme fields and queries up to 80 characters")
+        cnki_terms.append(CnkiSearchTerm(query=query, field=field))
+    if cnki_enabled and not cnki_terms:
+        raise ConfigError("enabled CNKI Space search requires at least one term")
+    cnki_max_pages = cnki_payload.get("max_pages", 1)
+    if isinstance(cnki_max_pages, bool) or not isinstance(cnki_max_pages, int):
+        raise ConfigError("sources.cnki_space.max_pages must be an integer")
+    if not 1 <= cnki_max_pages <= 5:
+        raise ConfigError("sources.cnki_space.max_pages must be between 1 and 5")
+    raw_reviewed_evidence = cnki_payload.get("reviewed_evidence")
+    reviewed_evidence = (
+        _resolve_project_path(
+            raw_reviewed_evidence,
+            project_root=project_root,
+            field="sources.cnki_space.reviewed_evidence",
+        )
+        if raw_reviewed_evidence is not None
+        else None
+    )
+    wanfang_payload = _require_mapping(sources.get("wanfang", {}), "sources.wanfang")
+    wanfang_enabled = wanfang_payload.get("enabled", False)
+    wanfang_max_checks = wanfang_payload.get("max_checks", 5)
+    wanfang_discover = wanfang_payload.get("discover", False)
+    wanfang_max_discovery_terms = wanfang_payload.get("max_discovery_terms", 2)
+    wanfang_max_discovery_pages = wanfang_payload.get("max_discovery_pages", 1)
+    raw_wanfang_key_file = wanfang_payload.get("key_file")
+    wanfang_key_file = (
+        _resolve_project_path(
+            raw_wanfang_key_file,
+            project_root=project_root,
+            field="sources.wanfang.key_file",
+        )
+        if raw_wanfang_key_file is not None
+        else None
+    )
+    if not isinstance(wanfang_enabled, bool):
+        raise ConfigError("sources.wanfang.enabled must be a boolean")
+    if not isinstance(wanfang_discover, bool):
+        raise ConfigError("sources.wanfang.discover must be a boolean")
+    if wanfang_discover and not wanfang_enabled:
+        raise ConfigError("Wanfang discovery requires sources.wanfang.enabled")
+    if (
+        isinstance(wanfang_max_discovery_terms, bool)
+        or not isinstance(wanfang_max_discovery_terms, int)
+        or not 1 <= wanfang_max_discovery_terms <= 3
+        or isinstance(wanfang_max_discovery_pages, bool)
+        or not isinstance(wanfang_max_discovery_pages, int)
+        or not 1 <= wanfang_max_discovery_pages <= 2
+    ):
+        raise ConfigError("Wanfang discovery bounds must be 1..3 terms and 1..2 pages")
+    if (
+        isinstance(wanfang_max_checks, bool)
+        or not isinstance(wanfang_max_checks, int)
+        or not 1 <= wanfang_max_checks <= 10
+    ):
+        raise ConfigError("sources.wanfang.max_checks must be between 1 and 10")
+    if wanfang_enabled and not cnki_enabled:
+        raise ConfigError("Wanfang cross-check requires sources.cnki_space.enabled")
     crossref = _require_mapping(sources.get("crossref", {}), "sources.crossref")
     openalex = _require_mapping(sources.get("openalex", {}), "sources.openalex")
     retry = _require_mapping(root.get("retry", {}), "retry")
@@ -516,6 +609,20 @@ def load_watchlist(path: str | Path) -> WatchlistConfig:
                 philarchive_oai.get("endpoint", "https://philarchive.org/oai.pl"),
                 "sources.philarchive_oai.endpoint",
             ),
+        ),
+        cnki_space=CnkiSpaceConfig(
+            enabled=cnki_enabled,
+            terms=tuple(cnki_terms),
+            max_pages=cnki_max_pages,
+            reviewed_evidence=reviewed_evidence,
+        ),
+        wanfang=WanfangConfig(
+            enabled=wanfang_enabled,
+            max_checks=wanfang_max_checks,
+            key_file=wanfang_key_file,
+            discover=wanfang_discover,
+            max_discovery_terms=wanfang_max_discovery_terms,
+            max_discovery_pages=wanfang_max_discovery_pages,
         ),
         crossref_mailto=_optional_mailto(crossref.get("mailto"), "sources.crossref.mailto"),
         openalex_mailto=_optional_mailto(openalex.get("mailto"), "sources.openalex.mailto"),

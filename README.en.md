@@ -88,9 +88,200 @@ Let me confirm the categories, then guide me through local setup, the historical
 first weekly report. Do not ask me to paste credentials into the conversation.
 ```
 
-The current application release is **v0.3.0**; the internal evidence-pipeline version is **0.6.0**.
+The latest tagged application release is **v0.3.0**; the internal evidence-pipeline version is **0.6.0**. `main` includes subsequent updates.
 Formal real-machine acceptance has been completed on Windows. macOS and Linux paths are supported,
 but have not yet received equivalent real scheduled-run validation.
+
+<a id="technical-update-2026-09-28-journal-p2"></a>
+
+## Technical update: ninth publisher TOC and stricter arrival evidence (2026-09-28)
+
+Stability decision: the [Chinese-journal acceptance criteria](references/chinese-journal-stabilization.md) are met for the **bounded Chinese leads service**. This `main` branch update treats it as a stable opt-in capability: `search` returns sourced Chinese metadata candidates, `pull-now` displays only leads with an explicit issue month overlapping its recent window, and `weekly-run` baselines and deduplicates reviewed new issues while disclosing source failures. Automatically collected publisher TOCs still need human evidence review before entering those modes; candidates do not become confirmed newly published papers. The public example leaves Chinese sources off. This contract does not promise comprehensive coverage, a fixed database arrival time, or an interest-paper recall rate. This code push does not create a version tag or GitHub Release.
+
+Bounded collection now includes the [*Confucius Studies* publisher category](https://www.chinakongzi.org/category/kongziyanjiu_qikan/). It reads only the index and the latest [official issue page](https://www.chinakongzi.org/content/6147_589032.html), checking the issue number, 15 author-title entries, and corresponding article headings later on that page. The page's 2026-08-13 date is an announcement day retained as pending evidence. It does not explicitly label the issue month, so issue 4 cannot be converted into an August issue or evidence that its papers were first published in August. Nine of the fifteen registered journals now have independently scannable TOCs (eight textual, one PDF); six still require site-specific manual checks.
+
+Same-article arrival summaries now use a `miss` as the last complete non-hit only when its query scope was saved and marked complete. Older misses without that scope and truncated queries cannot create a falsely precise arrival interval; their original observation rows remain intact. The issue-level `audit` adds `complete_misses` to separate complete non-hits from raw status counts. The [article observation protocol](references/publisher-article-observation.md) explains this accounting and the remaining source limits.
+
+The P2 issue audit now has separate denominators for complete publisher TOC records, manually confirmed research articles, and manually confirmed interest-relevant articles. The narrower denominator stays unknown while any type or interest decision is unreviewed or uncertain. A source-specific research visibility denominator requires a scoped, complete query for every confirmed research article in that issue. `journal-watch catalog` now marks each TOC as `automatic` or `manual`. A [site-by-site review of the six remaining journals](references/publisher-article-observation.md#2026-09-28-六站入口复核与自动采集决定) records their official evidence and re-entry conditions. *Social Sciences in China* has issue pages and an issue 8 official WeChat TOC pointer, but direct access and source-use conditions do not yet support automatic collection here; *Ethics Studies* returns 502, *Religious Studies* has image TOCs, and the other three registered entries lack current complete publisher TOCs. They remain available for manual review; absence from automated collection is not evidence of no new issue. The [source-use notice](THIRD_PARTY_NOTICES.md#中文期刊发布渠道及补充检索) now states access, cadence, retained fields, and public-display limits; Wanfang remains off by default.
+
+On 28 September 2026, a new Git-ignored isolated database scanned one issue from each of nine journals: 132 TOC records, no site failures, and no article-database queries in the default cycle. The first bounded check matched one *Confucius Studies* article on the public CNKI surface. An explicit Wanfang Query check in a separate isolated copy compared a second article: CNKI matched and Wanfang did not, each after a complete one-page query. The publisher's space inside that author's Chinese name had caused a false review status; it is now parsed correctly and covered by a regression test. Only two articles from this issue were checked; the other 13 and all articles from the other journals remain unchecked in this round. Wanfang stays off by default. This sample cannot establish database-wide recall, database-wide omission, or a fixed indexing time. All 402 tests, Ruff, Skill validation, and the read-only release audit passed. This is a `main` branch code and documentation update, without a new tag or GitHub Release.
+
+<a id="technical-update-2026-09-27-journal-p2"></a>
+
+## Technical update: issue-level denominators and an eighth publisher directory (2026-09-27)
+
+Building on the accepted P0/P1 Chinese-leads workflow, `pfm journal-watch audit` now gives an issue-level reference denominator only when a complete publisher TOC scan passed the site's page and entry checks and its saved title set still matches that scan. Older and truncated records keep an unknown denominator. The article view records each latest check on public CNKI search or the optional Wanfang Query, including its actual query scope and pages fetched. `classify` lets a reviewer use the registered publisher link to assess work type and local research relevance separately. Unreviewed entries are not counted as research papers or interest matches. This local audit does not promote entries into the verified-paper sections of search, pull-now, or weekly reports.
+
+An eighth publisher source joins the seven textual TOCs: bounded parsing of the [*Modern Philosophy* directory at Sun Yat-sen University](https://mphilosophy.sysu.edu.cn/cat/124). Its [2026 issue 2 announcement](https://mphilosophy.sysu.edu.cn/article/25746) is dated 29 June, while the attached Chinese TOC PDF explicitly calls it the March issue. The system keeps the issue month and announcement day as two distinct pending evidence links; it does not treat the announcement as first publication of each article. PDF reads are limited to the registered HTTPS host, size and page bounds, content type, file header, and an issue-entry count check. Parsing is in memory; the PDF itself is not stored. Seven other registered publishers still need site-specific manual review.
+
+In a Git-ignored isolated database on 27 September 2026, one complete issue from each of eight journals yielded 117 publisher TOC records. Directory-only scans made no database queries. Eight separate bounded title searches, one per journal, all matched on the public CNKI search surface. The other 109 entries were not checked in that round; Wanfang remained off, and no article-level work-type or interest review was completed. This is not a database-wide recall or arrival-time estimate. All 398 tests, Ruff, Skill validation, and the read-only release audit passed. See the [article observation protocol](references/publisher-article-observation.md) and [stabilization criteria](references/chinese-journal-stabilization.md) for commands, evidence, and use boundaries. This local branch update has not been pushed, tagged, or released.
+
+<a id="technical-update-2026-09-27-official-journals"></a>
+
+## Technical update: publisher TOCs and article arrival observations (2026-09-27)
+
+The P0/P1 work in the [Chinese-journal stabilization criteria](references/chinese-journal-stabilization.md) is now accepted for the bounded leads workflow. Search labels a failed read of the local publisher evidence store and continues. Automatically collected issues appear in `pfm journal-watch pending`; after checking the exact publisher page, `review --confirm-evidence` promotes the observation. Even a parsed announcement date remains pending until source review. First observation and first review times remain separate, later scans cannot revoke a review, and multiple official links for one issue produce one user-facing lead, reported in the week of its earliest review. Isolated three-mode tests cover enablement, disabled sources, rolling-month selection, weekly baseline, and deduplication. Failure tests cover rate limits, non-HTML responses, redirects, truncated pagination, and site isolation. Fresh isolated database trials found 12 entries in issue 8 of the *Philosophical Research* portal (still pending) and 11 in issue 4 of the [*Zhouyi Studies* publisher directory](https://zhouyi.sdu.edu.cn/info/1033/2558.htm). After checking that the page explicitly states an announcement date of 2026-08-21, only that isolated issue was reviewed. The date does not establish first publication of any article. Chinese metadata candidates remain separate from matched papers; article-level verification and full Chinese-journal coverage remain unfinished. This is an unpushed local branch update, without a new tag or release.
+
+Final checks passed: 391 tests, Ruff, skill validation, and the read-only release audit. The live source trial covered only the two sites above; it does not establish sustained access across all seven collectors or recall of all Chinese philosophy papers.
+
+The [Chinese-source policy](references/chinese-source-expansion.md) now corrects an older statement that the *Philosophical Trends* portal stopped at issue 7 and publisher TOCs were still entirely manual. The seven-site collection saw issue 8; the user-supplied issue 9 WeChat post remains unread and pending. This correction does not promote collected TOCs to reviewed papers.
+
+The new [Chinese-journal stabilization criteria](references/chinese-journal-stabilization.md) separate a bounded Chinese-leads service that can be accepted earlier from a verified-new-paper service that still needs article-level evidence. They require fresh-install acceptance of all three modes, a publisher-evidence review path, honest source-failure handling, and scoped coverage samples. The eight-week same-article study supplies source-arrival evidence; it is not the sole stability gate. This remains an unpushed branch update.
+
+Bounded site-specific collectors now read complete textual tables of contents for seven journals: *Journal of Dialectics of Nature*, *Zhouyi Studies*, *Philosophical Research*, *Philosophical Trends*, *Philosophical Analysis*, *Studies in Dialectics of Nature*, and *Studies in Philosophy of Science and Technology*. `pfm journal-watch run` scans all seven sequentially and only scans publisher directories by default. An explicit positive article-check budget checks the public CNKI Space search surface; the subscribed Wanfang Query endpoint additionally requires `--with-wanfang`. Total and per-site article checks are bounded, and one site failure does not stop the others. Observations remain in a Git-ignored local database. Publisher scans provide leads about new issues; repeat checks of the same article are optional source evaluation. Other users can use search, pull-now, or weekly reports without establishing an observation baseline. A complete search miss followed by an identified hit bounds search visibility; an initial hit and continuing misses are censored observations and do not prove database-wide absence.
+
+The seven latest issues yielded 14, 11, 12, 12, 16, 17, and 18 author-bearing TOC entries, 100 in total. The first round checked five entries from each of the original three journals and one from each of the four added journals: all 19 were visible through public CNKI search, while the earlier explicitly enabled exact-title Wanfang queries matched two and did not match 17. These are bounded observations, not a database-wide miss rate. Repeat checks currently have an initial review point at roughly eight weeks; any Wanfang delay study needs a separate explicit opt-in and scope. The *Philosophical Trends* editorial portal still shows issue 8; the user-supplied WeChat link for issue 9 remains a pending lead because its body could not be read. Eight other catalog entries retain site-specific manual review. All 379 tests, Ruff, and the read-only release check passed; no multi-day arrival interval has yet been measured. See the [observation protocol](references/publisher-article-observation.md). This change was not pushed and did not create a version tag or GitHub Release.
+
+## Technical update: publisher-first Chinese journal issue registry (2026-09-27)
+
+Issue discovery and date evidence for monitored Chinese journals now start with
+their editors' or publishers' websites, editorial portals, and verified official
+WeChat announcements. CNKI Space and Wanfang provide supplementary discovery and
+bibliographic crosschecks. A [catalog of 15 journals](config/official-journals.yaml)
+and a private Git-ignored SQLite issue store have been added. `pfm journal-watch catalog`
+lists channels; `pfm journal-watch list` shows local observations. Manual entries
+retain an official evidence URL and separate issue label month, issue publication
+date, announcement date, and first observation. Only reviewed entries appear in
+search, on-demand, and weekly issue leads. A reviewed official month may fill a
+missing CNKI month for the same journal, year, and issue; conflicting source
+months are not overwritten.
+Weekly reports mention an issue only in its first review week, avoiding repeated
+weekly notices for the same monthly issue.
+
+The journal portal calls *Zhexue Dongtai* monthly, but the supplied
+[issue 9 WeChat post](https://mp.weixin.qq.com/s/eeYI8s6Y_f9J3zbJ73XgSg) could not be read
+in this environment. It remains a pending lead, without an inferred post date
+or September issue label. The catalog records the publisher's 2026 schedules
+for *Zhexue Yanjiu* (the 25th of each month) and *Shijie Zhexue* (the 2nd of
+odd-numbered months), but a schedule
+does not establish an actual issue date. The registry still requires manual
+review; it does not yet harvest article tables of contents across journals or
+verify individual interest matches. Issue leads do not count as confirmed new
+papers. Local verification covered the 15-journal catalog, private-store write and read,
+368 tests, Ruff, skill validation, and the release audit. Continuous automated
+journal checks were not run. This is a
+local branch update, with no push, version tag, or GitHub Release. See the
+[source and entry policy](references/chinese-source-expansion.md#24-官方期刊监控库与证据录入).
+
+<a id="technical-update-2026-09-27-audit"></a>
+
+## Technical update: journal issue-month audit baseline (2026-09-27)
+
+A private, Git-ignored sample audit now compares journal-hosted issue evidence with
+bounded CNKI Space and subscribed Wanfang Query searches, preserving the observation
+time. CNKI Space returned all eight sampled articles but none with an explicit month;
+Wanfang returned three exact bibliographic matches and one title-suffix variant, while
+four had no same-work match in the bounded queries. Two articles from a journal issue
+explicitly labelled September would still fail the current CNKI month gate even if
+the private discovery terms found them. This audit did not test recall of those terms.
+A search miss does
+not establish absence from the entire database, and a single snapshot cannot measure
+actual indexing delay. A journal's issue date and Wanfang's abstract-online date are
+also distinct from an article's first-publication date.
+
+The [source evidence and trial decision](references/chinese-source-expansion.md#23-重点期刊原站目录的月份证据与抽样基线)
+document the original journal links, access limits, and date semantics. Broad automated
+journal-site intake remains deferred. A small trial using a stable issue page with an
+explicit month is the next candidate, followed by repeated observations before expansion.
+This branch-only audit and documentation update has no new tag, GitHub Release, or push.
+
+<a id="technical-update-2026-09-23"></a>
+
+## Technical update: independent Wanfang discovery with a personal subscription (2026-09-27)
+
+An optional Wanfang discovery path now queries the subscribed AI HUB Query endpoint for
+Chinese journal metadata directly, without requiring a matching CNKI Space hit. It uses
+private Chinese terms and explicit term, year, and page limits. Historical search lists
+these as separate leads; on-demand pulls show only leads whose source-labelled publication
+month overlaps the rolling window; the first weekly scan establishes a baseline for eligible
+record IDs, and later reports show IDs not previously listed in that window. A later article in an
+already observed issue can therefore appear as a new observation. Set
+`sources.wanfang.discover: true` in the private watchlist to opt in. The default is two
+terms and one page per term and year; calls can consume personal trial quota. See the
+[Chinese-source expansion note](references/chinese-source-expansion.md).
+
+A bounded live trial on 2026-09-27 confirmed year-limited search and publication-date sorting
+with the existing subscription. It also found issue 4 labelled January 1 and a publication
+label later than the query date. Wanfang's `PublishDate` is therefore kept as source metadata,
+not treated as an article's first-publication day; January 1 is rejected as reliable month
+evidence. Chinese leads remain separate from verified PhilPapers papers, and blocked or
+truncated searches are disclosed. Crossref, DOAJ, and journal-hosted contents can supplement
+coverage, but none currently demonstrates complete coverage of Chinese philosophy journals
+without a database-wide agreement. New regressions cover independent discovery, placeholder
+dates, the on-demand window, and weekly record-ID increments. This branch update has no new
+tag or GitHub Release.
+
+## Technical update: CNKI Space leads and Chinese journal issue observations (2026-09-23)
+
+This branch update keeps the long-term target as the **union of global PhilPapers candidates
+and supplementary Chinese database candidates**, without filtering existing PhilPapers results
+by author affiliation. A private watchlist can now enable `sources.cnki_space` and specify
+user-approved Chinese terms and a page limit. The adapter follows the public search method
+documented by the third-party [cnki-search MCP](https://github.com/Biogod2020/cnki-search),
+using an ordinary HTTP client rather than running its server or impersonating a browser.
+See the [Chinese-source expansion note](references/chinese-source-expansion.md) for configuration
+and evidence rules.
+
+All three modes can now display Chinese-source leads. `search` lists unverified Chinese
+metadata separately from confirmed papers and excludes it from verified totals and citation
+sorting. `pull-now` reads only issue leads with an explicit source-labelled month overlapping
+its rolling window, without changing weekly state. The first weekly scan
+establishes an issue baseline; later reports list only issue keys not previously observed,
+committing those observations with the weekly run. Reports preserve source year, issue number,
+and first-observation time. Issue 9 is not automatically a September issue, and a day shown
+in search metadata is not automatically a paper's first publication date. Blocking, changed
+HTML, and page-limit truncation appear as coverage limits rather than zero results.
+
+A minimal redistributable HTML fixture now tests parsing, error pages, content types, page
+interruption, and transactional state. A bounded public search was also run using terms held
+only in the private watchlist. Systematic journal-site, Wanfang, and VIP record checks, publication-time
+author affiliations, and cross-source paper identity still require article-level review beyond
+the manually checked candidates described below. CNKI Space is not
+the full KNS collection, and bounded pages cannot establish complete Chinese or worldwide
+coverage. No new version tag or GitHub Release was created.
+
+A Git-ignored private evidence file now records article-level manual checks against journal
+or catalog pages. It marks title, authors, journal, year, and issue corroborated only when
+the fields agree, and notes China-based author affiliation only when the article page
+supports it. Two private candidates have been checked against a journal publication portal page
+and a separate catalog page; only the journal article page supports the affiliation note.
+The publication portal is hosted by CNKI, so this does not constitute an independent
+Wanfang or VIP check.
+Search and reports can also flag strict bibliographic overlap with PhilPapers records
+resolved in the current run, without merging records or changing verified paper totals.
+Synthetic tests cover agreement, conflicts, missing fields, and overlap. The National
+Center for Philosophy and Social Sciences Documentation restricts unlicensed automated
+crawling in its user agreement; broad Wanfang coverage and VIP access remain pending.
+The [Chinese-source expansion note](references/chinese-source-expansion.md) describes the
+private file and its evidence limits.
+
+An optional Wanfang AI HUB metadata cross-check now uses the subscribed Query
+endpoint for a bounded set of CNKI leads. When enabled, it reads the AppKey from
+`WFDATA_APP_KEY` or a configured Git-ignored local file and compares Chinese journal title, authors,
+journal, year, and issue. Search, on-demand pulls, and weekly reports distinguish
+agreement, missing fields, conflict, and no corroboration in the checked scope.
+`OriginalOrganization` is retained as a publication-time affiliation lead, but
+the program does not automatically assign a China-based affiliation to an author.
+The absence of a same-title hit does not prove that Wanfang lacks the article. Synthetic JSON tests cover
+the request, response variants, errors, and pagination limits. A bounded live
+trial using the subscribed API and CNKI leads confirmed authentication and the
+actual response shape: `numFound` can be a decimal string, journal metadata can
+appear in `Periodical`, and `PublishYear` can be zero while `PublishDate` has a
+year. The parser now handles these cases. Private search results and the AppKey
+remain outside public files; trial quota, long-term stability, and full coverage
+remain unverified.
+
+This branch update also narrows the Chinese section of an on-demand pull as requested:
+it no longer lists every issue found in the current year. A lead appears only
+when the source explicitly labels an issue month overlapping the selected rolling
+window. Year-only and issue-number-only leads, and months outside the window,
+contribute to coverage counts without listing their article titles. On-demand
+Wanfang checks are limited to the displayed leads. Month precision cannot prove
+an article's first publication day, and an empty Chinese section does not establish
+that no recent Chinese paper exists; the researcher may request a broader search.
+Historical `search` and formal weekly monitoring retain their existing scope.
+Synthetic tests cover overlapping months, missing months, and out-of-window issues.
+No new version tag or GitHub Release was created.
 
 <a id="technical-update-2026-09-20"></a>
 
@@ -289,7 +480,7 @@ See [Installation and first deployment](references/installation.en.md) and the
 
 ## 4. Current version
 
-Current version: `v0.3.0`.
+Latest tagged release: `v0.3.0`; the table also includes the capability added by this `main` branch update.
 
 | Capability | Status |
 |---|---|
@@ -303,6 +494,10 @@ Current version: `v0.3.0`.
 | User-requested `pull-now` | Stable, explicit and read-only |
 | OAI cross-run caching, interruption recovery, and incremental refresh | Stable |
 | Chinese and English weekly/on-demand report output | Stable |
+| Bounded Chinese metadata candidates and reviewed issue leads | Stable, opt-in (`main` branch update) |
+
+**Bounded Chinese-journal leads are a stable opt-in capability added on `main`; the existing `v0.3.0` tag has not been re-released.**
+With `sources.cnki_space` enabled, search, pull-now, and weekly reports can each show bounded Chinese metadata leads and reviewed issue leads under their own time rules; the public example leaves this source disabled. Nine publisher directories can be scanned separately (eight textual TOCs and one PDF); the other six registered journals still require manual review. Automatically collected issue data must pass evidence review before it enters the three modes. Chinese candidates do not enter the verified-paper main section, and this feature does not promise complete Chinese-philosophy coverage, a fixed indexing time, or an interest-paper recall rate. P0/P1 of the bounded leads workflow and P2 issue-level accounting, entry decisions, and source-use limits have passed acceptance. The roughly eight-week repeated-article study remains a separate source-evaluation experiment; users do not need it to use the bounded service. See [Chinese sources and current limits](references/chinese-source-expansion.md).
 
 The OAI cache is a performance and recoverability mechanism, not a substitute for paper-freshness
 evidence. Persistence does not turn a source `datestamp` into a publication date and does not bypass

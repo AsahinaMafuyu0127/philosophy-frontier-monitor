@@ -65,6 +65,30 @@ sources:
     # Successful windows use private var/oai-cache.sqlite3 unless --no-oai-cache is set.
     enabled: true
     endpoint: "https://philarchive.org/oai.pl"
+  cnki_space:
+    # Optional bounded CNKI Space metadata discovery. Keep actual research terms
+    # in the private watchlist only. Issue numbers are not calendar months.
+    # Optional reviewed_evidence points to a Git-ignored YAML file under var/;
+    # its article-level facts must be checked against the linked source page.
+    enabled: false
+    max_pages: 1
+    terms: []
+    reviewed_evidence: null
+  wanfang:
+    # Optional bounded CNKI cross-check and independent Chinese-journal discovery
+    # using the subscribed AI HUB Query API. Discovery reuses at most three
+    # private CNKI terms. Both checks and discovery are off by default because
+    # Wanfang can lag publisher issues and calls may use trial quota. The
+    # separate journal-watch command needs --with-wanfang for its checks.
+    # Set WFDATA_APP_KEY in the process environment locally,
+    # or point key_file to an ignored local file containing only the AppKey.
+    # This does not add papers to verified totals or infer a publication day.
+    enabled: false
+    max_checks: 5
+    discover: false
+    max_discovery_terms: 2
+    max_discovery_pages: 1
+    key_file: null
   crossref:
     # Optional. Crossref recommends a contact address for its polite pool.
     # Put a real address only in the private watchlist.yaml, never in Git.

@@ -6,7 +6,13 @@ from zoneinfo import ZoneInfo
 import pytest
 
 import philosophy_frontier_monitor.pipeline as pipeline
-from philosophy_frontier_monitor.config import ConfirmedCategoryConfig, FeedConfig, load_watchlist
+from philosophy_frontier_monitor.config import (
+    CnkiSpaceConfig,
+    ConfirmedCategoryConfig,
+    FeedConfig,
+    WanfangConfig,
+    load_watchlist,
+)
 from philosophy_frontier_monitor.models import (
     CategoryAssignment,
     CategoryStatus,
@@ -31,10 +37,22 @@ from philosophy_frontier_monitor.pipeline import (
     run_weekly,
     run_weekly_catch_up,
 )
+from philosophy_frontier_monitor.sources.cnki_space import (
+    CnkiIssue,
+    CnkiRecord,
+    CnkiScan,
+    CnkiSearchTerm,
+)
 from philosophy_frontier_monitor.sources.crossref import CrossrefWork
 from philosophy_frontier_monitor.sources.openalex import OpenAlexWork
 from philosophy_frontier_monitor.sources.philarchive_oai import OAIRecord, OAIWindowSnapshot
 from philosophy_frontier_monitor.sources.philpapers_rss import FeedEntry
+from philosophy_frontier_monitor.sources.wanfang import (
+    WanfangCheck,
+    WanfangDiscoveryScan,
+    WanfangRecord,
+    WanfangScan,
+)
 from philosophy_frontier_monitor.state import StateStore
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
@@ -115,6 +133,231 @@ def confirmed_resolver(candidate, taxonomy, _config, _start, _end, attempted_at)
 
 def allow_test_fixture_for_committing_run(monkeypatch):
     monkeypatch.setattr(pipeline, "require_production_taxonomy", lambda _snapshot: None)
+
+
+def test_cnki_weekly_first_scan_is_baseline_and_later_issue_is_reported_once(monkeypatch):
+    allow_test_fixture_for_committing_run(monkeypatch)
+    config = replace(
+        CONFIG,
+        cnki_space=CnkiSpaceConfig(
+            True,
+            (CnkiSearchTerm("generic term"),),
+            1,
+            FIXTURE_DIR / "cnki_reviewed_evidence.yaml",
+        ),
+        wanfang=WanfangConfig(True, 5),
+    )
+    first_record = CnkiRecord(
+        title="概念与论证",
+        url="https://www.cnki.com.cn/Article/CJFDTOTAL-ZXFX202609001.htm",
+        authors=("甲",),
+        venue="哲学分析",
+        year=2026,
+        issue="9",
+        label_month=None,
+    )
+    first = CnkiIssue("first", "哲学分析", 2026, "9", None, (first_record,), (), RUN_TIME)
+    second_record = replace(
+        first_record,
+        title="后期论文",
+        url="https://www.cnki.com.cn/Article/CJFDTOTAL-ZXFX202610001.htm",
+        issue="10",
+    )
+    second = CnkiIssue("second", "哲学分析", 2026, "10", None, (second_record,), (), RUN_TIME)
+    scans = [(first,), (first, second), (first, second)]
+
+    def cnki_loader(*args, **kwargs):
+        issues = scans.pop(0)
+        records = tuple(record for issue in issues for record in issue.records)
+        return CnkiScan(issues, records, kwargs["checked_at"], "partial", 1, 1, ("page_limit",), ())
+
+    wanfang_titles = []
+
+    def wanfang_loader(records, **kwargs):
+        wanfang_titles.extend(record.title for record in records)
+        checks = tuple(
+            WanfangCheck(record.url, "corroborated", "synthetic-journal-id") for record in records
+        )
+        return WanfangScan(checks, kwargs["checked_at"], "success", len(records), len(records), 0)
+
+    with StateStore(":memory:") as state:
+        establish_baseline(
+            config,
+            state,
+            now=BASELINE_TIME,
+            feed_loader=loader_for({"entries": (BASE_ENTRY,)}),
+            allow_development_fixture=True,
+        )
+        results = []
+        for start, end in (
+            (WINDOW_START, WINDOW_END),
+            (WINDOW_END, datetime(2026, 9, 14, tzinfo=UTC)),
+            (datetime(2026, 9, 14, tzinfo=UTC), datetime(2026, 9, 21, tzinfo=UTC)),
+        ):
+            results.append(
+                run_weekly(
+                    config,
+                    state,
+                    now=end,
+                    window_start=start,
+                    window_end=end,
+                    feed_loader=loader_for({"entries": (BASE_ENTRY,)}),
+                    cnki_loader=cnki_loader,
+                    wanfang_loader=wanfang_loader,
+                    report_writer=lambda directory, filename, content: Path("F:/virtual")
+                    / filename,
+                )
+            )
+        assert state.known_cnki_issue_keys({"first", "second"}) == {"first", "second"}
+
+    assert "作为基线观察" in results[0].report_markdown
+    assert "概念与论证" in results[0].report_markdown
+    assert "来源页面显示中国机构署名" in results[0].report_markdown
+    assert "后期论文" in results[1].report_markdown
+    assert "概念与论证" not in results[1].report_markdown
+    assert "中文期刊新期次观察（0）" in results[2].report_markdown
+    assert results[1].stats["cnki_new_issue_observations"] == 1
+    assert wanfang_titles == ["概念与论证", "后期论文"]
+    assert "万方期刊题录的题名" in results[0].report_markdown
+    assert "万方期刊题录的题名" in results[1].report_markdown
+
+
+def test_wanfang_discovery_weekly_baseline_and_new_record_are_atomic(monkeypatch):
+    allow_test_fixture_for_committing_run(monkeypatch)
+    config = replace(
+        CONFIG,
+        cnki_space=CnkiSpaceConfig(True, (CnkiSearchTerm("generic term"),), 1),
+        wanfang=WanfangConfig(True, 1, discover=True),
+    )
+    first = WanfangRecord(
+        "first-id",
+        "万方基线论文",
+        (),
+        "示例期刊",
+        2026,
+        "9",
+        None,
+        (),
+        (),
+        publish_date="2026-09-10",
+    )
+    second = replace(first, record_id="second-id", title="万方后续论文")
+    scans = [(first,), (first, second), (first, second)]
+
+    def discovery_loader(*_args, **kwargs):
+        found = scans.pop(0)
+        return WanfangDiscoveryScan(found, kwargs["checked_at"], "success", 1, 1, 0, ())
+
+    with StateStore(":memory:") as state:
+        establish_baseline(
+            config,
+            state,
+            now=BASELINE_TIME,
+            feed_loader=loader_for({"entries": (BASE_ENTRY,)}),
+            allow_development_fixture=True,
+        )
+        results = []
+        for start, end in (
+            (WINDOW_START, WINDOW_END),
+            (WINDOW_END, datetime(2026, 9, 14, tzinfo=UTC)),
+            (datetime(2026, 9, 14, tzinfo=UTC), datetime(2026, 9, 21, tzinfo=UTC)),
+        ):
+            results.append(
+                run_weekly(
+                    config,
+                    state,
+                    now=end,
+                    window_start=start,
+                    window_end=end,
+                    feed_loader=loader_for({"entries": (BASE_ENTRY,)}),
+                    cnki_loader=lambda *_args, **kwargs: CnkiScan(
+                        (),
+                        (),
+                        kwargs["checked_at"],
+                        "success",
+                        1,
+                        1,
+                        (),
+                        (),
+                    ),
+                    wanfang_loader=lambda records, **kwargs: WanfangScan(
+                        (),
+                        kwargs["checked_at"],
+                        "success",
+                        0,
+                        len(records),
+                        0,
+                    ),
+                    wanfang_discovery_loader=discovery_loader,
+                    report_writer=lambda directory, filename, content: Path("F:/virtual")
+                    / filename,
+                )
+            )
+        assert state.known_wanfang_record_ids({"first-id", "second-id"}) == {
+            "first-id",
+            "second-id",
+        }
+    assert "构成基线" in results[0].report_markdown
+    assert "万方基线论文" in results[0].report_markdown
+    assert "万方后续论文" in results[1].report_markdown
+    assert "万方基线论文" not in results[1].report_markdown
+    assert "万方中文期刊论文线索（0）" in results[2].report_markdown
+
+
+def test_failed_wanfang_discovery_does_not_advance_its_checkpoint(monkeypatch):
+    allow_test_fixture_for_committing_run(monkeypatch)
+    config = replace(
+        CONFIG,
+        cnki_space=CnkiSpaceConfig(True, (CnkiSearchTerm("generic term"),), 1),
+        wanfang=WanfangConfig(True, 1, discover=True),
+    )
+    with StateStore(":memory:") as state:
+        establish_baseline(
+            config,
+            state,
+            now=BASELINE_TIME,
+            feed_loader=loader_for({"entries": (BASE_ENTRY,)}),
+            allow_development_fixture=True,
+        )
+        result = run_weekly(
+            config,
+            state,
+            now=WINDOW_END,
+            window_start=WINDOW_START,
+            window_end=WINDOW_END,
+            feed_loader=loader_for({"entries": (BASE_ENTRY,)}),
+            cnki_loader=lambda *_args, **kwargs: CnkiScan(
+                (),
+                (),
+                kwargs["checked_at"],
+                "success",
+                1,
+                1,
+                (),
+                (),
+            ),
+            wanfang_loader=lambda records, **kwargs: WanfangScan(
+                (),
+                kwargs["checked_at"],
+                "success",
+                0,
+                len(records),
+                0,
+            ),
+            wanfang_discovery_loader=lambda *_args, **kwargs: WanfangDiscoveryScan(
+                (),
+                kwargs["checked_at"],
+                "failed",
+                1,
+                0,
+                0,
+                ("http_403",),
+            ),
+            report_writer=lambda directory, filename, content: Path("F:/virtual") / filename,
+        )
+        assert state.get_checkpoint("wanfang-discovery") is None
+    assert "wanfang-discovery" in result.report_markdown
+    assert "失败 1 项" in result.report_markdown
 
 
 def test_merge_work_re_resolves_combined_structured_type_evidence():

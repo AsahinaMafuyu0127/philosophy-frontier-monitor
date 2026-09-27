@@ -12,12 +12,14 @@ from philosophy_frontier_monitor.models import (
     WorkTypeEvidence,
     WorkTypeStatus,
 )
+from philosophy_frontier_monitor.official_journals import new_observation
 from philosophy_frontier_monitor.report import (
     HumanReviewItem,
     SourceCoverage,
     render_on_demand_report,
     render_weekly_report,
 )
+from philosophy_frontier_monitor.sources.cnki_space import CnkiIssue, CnkiRecord
 
 START = datetime(2026, 8, 31, tzinfo=UTC)
 END = datetime(2026, 9, 7, tzinfo=UTC)
@@ -96,6 +98,106 @@ def test_zero_results_does_not_claim_none_exist_when_source_failed(taxonomy):
     )
 
     assert "这不等于本周没有相关新作" in report
+
+
+def test_official_issue_evidence_precedes_cnki_leads_in_both_languages(taxonomy):
+    profile = build_interest_profile("我研究《泰阿泰德》。", taxonomy, now=START)
+    official = new_observation(
+        "ziran-bianzhengfa-tongxun",
+        2026,
+        "9",
+        "https://jdn.ucas.ac.cn/home/column/lists/cid/349",
+        "journal-site",
+        label_month="2026-09",
+        status="reviewed",
+    )
+    report = render_weekly_report(
+        profile=profile,
+        snapshot=taxonomy,
+        works={},
+        matches=(),
+        window_start=START,
+        window_end=END,
+        coverage=(),
+        official_issues=(official,),
+        cnki_issues=(),
+    )
+    assert "期次标示月份：2026-09" in report
+    assert "issue date: not stated" in report
+    assert report.index("## 期刊官方发布渠道") < report.index("## 中文期刊新期次观察")
+    assert report.index("## Publisher issue leads") < report.index(
+        "## Chinese journal issue observations"
+    )
+    on_demand = render_on_demand_report(
+        profile=profile,
+        snapshot=taxonomy,
+        works={},
+        matches=(),
+        window_start=START,
+        window_end=END,
+        coverage=(),
+        official_issues=(official,),
+    )
+    assert on_demand.count("https://jdn.ucas.ac.cn/home/column/lists/cid/349") == 2
+
+
+def test_on_demand_empty_chinese_window_does_not_expand_to_year(taxonomy):
+    profile = build_interest_profile("我研究《泰阿泰德》。", taxonomy, now=START)
+    report = render_on_demand_report(
+        profile=profile,
+        snapshot=taxonomy,
+        works={},
+        matches=(),
+        window_start=START,
+        window_end=END,
+        coverage=(SourceCoverage("cnki-space-issues", "success", END, "缺少明确月份 3 项"),),
+        cnki_issues=(),
+    )
+
+    assert "即时窗口内中文期刊论文线索（0）" in report
+    assert "不能据此断言近月没有论文" in report
+    assert "Chinese journal leads in the on-demand window (0)" in report
+    assert "does not establish that no paper appeared" in report
+
+
+def test_cnki_issue_observation_keeps_issue_number_distinct_from_month(taxonomy):
+    profile = build_interest_profile("我研究《泰阿泰德》。", taxonomy, now=START)
+    record = CnkiRecord(
+        title="概念与论证",
+        url="https://www.cnki.com.cn/Article/CJFDTOTAL-ZXFX202609001.htm",
+        authors=("甲",),
+        venue="哲学分析",
+        year=2026,
+        issue="9",
+        label_month=None,
+    )
+    issue = CnkiIssue(
+        key="sample-key",
+        venue="哲学分析",
+        year=2026,
+        issue="9",
+        label_month=None,
+        records=(record,),
+        queries=("private term",),
+        observed_at=END,
+    )
+    report = render_weekly_report(
+        profile=profile,
+        snapshot=taxonomy,
+        works={},
+        matches=(),
+        window_start=START,
+        window_end=END,
+        coverage=(SourceCoverage("cnki-space-issues", "partial", END, "有限检索"),),
+        cnki_issues=(issue,),
+        cnki_baseline=True,
+    )
+    assert "中文期刊新期次观察（1）" in report
+    assert "2026年第9期" in report
+    assert "2026年9月刊" not in report
+    assert "作为基线观察" in report
+    assert "private term" not in report
+    assert "issue 9 (month unverified)" in report
 
 
 def test_remote_title_cannot_inject_a_markdown_heading(taxonomy):

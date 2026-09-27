@@ -60,6 +60,21 @@ def test_public_schema_five_example_records_onboarding_without_account_access():
     assert config.onboarding.public_profile_url is None
 
 
+@pytest.mark.parametrize("field,value", [("max_discovery_terms", 4), ("max_discovery_pages", 3)])
+def test_wanfang_discovery_request_budget_is_bounded(workspace_tmp_path, field, value):
+    source = FIXTURE_DIR.parents[1] / "config" / "watchlist.example.yaml"
+    payload = yaml.safe_load(source.read_text(encoding="utf-8"))
+    payload["sources"]["cnki_space"].update(
+        enabled=True, terms=[{"query": "通用词", "field": "title"}]
+    )
+    payload["sources"]["wanfang"].update(enabled=True, discover=True)
+    payload["sources"]["wanfang"][field] = value
+    target = workspace_tmp_path / "watchlist.yaml"
+    target.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(ConfigError, match="discovery bounds"):
+        load_watchlist(target)
+
+
 def _write_schema_five(workspace_tmp_path, mutate):
     source = FIXTURE_DIR.parents[1] / "config" / "watchlist.example.yaml"
     payload = yaml.safe_load(source.read_text(encoding="utf-8"))

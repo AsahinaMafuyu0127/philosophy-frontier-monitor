@@ -1,0 +1,12 @@
+version: 1
+records:
+  - cnki_url: "https://www.cnki.com.cn/Article/CJFDTOTAL-ZXFX202609001.htm"
+    evidence_url: "https://journal.example.org/articles/example-1"
+    source_type: journal_article
+    title: "概念与论证"
+    authors: ["甲"]
+    venue: "哲学分析"
+    year: 2026
+    issue: "9"
+    china_affiliated_authors: ["甲"]
+    reviewed_at: "2026-09-23T10:00:00+08:00"

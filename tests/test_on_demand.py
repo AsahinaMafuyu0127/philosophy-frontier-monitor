@@ -14,7 +14,12 @@ from philosophy_frontier_monitor.cli import (
     _emit_pull_now_storage_advice,
     build_parser,
 )
-from philosophy_frontier_monitor.config import FeedConfig, load_watchlist
+from philosophy_frontier_monitor.config import (
+    CnkiSpaceConfig,
+    FeedConfig,
+    WanfangConfig,
+    load_watchlist,
+)
 from philosophy_frontier_monitor.http_retry import BoundedRequestError
 from philosophy_frontier_monitor.models import (
     CategoryAssignment,
@@ -32,6 +37,12 @@ from philosophy_frontier_monitor.pipeline import (
     on_demand_window,
     run_on_demand,
 )
+from philosophy_frontier_monitor.sources.cnki_space import (
+    CnkiIssue,
+    CnkiRecord,
+    CnkiScan,
+    CnkiSearchTerm,
+)
 from philosophy_frontier_monitor.sources.crossref import CrossrefWork
 from philosophy_frontier_monitor.sources.openalex import OpenAlexWork
 from philosophy_frontier_monitor.sources.philarchive_oai import (
@@ -40,6 +51,11 @@ from philosophy_frontier_monitor.sources.philarchive_oai import (
     OAIWindowSnapshot,
 )
 from philosophy_frontier_monitor.sources.philpapers_rss import FeedEntry, FeedRequest
+from philosophy_frontier_monitor.sources.wanfang import (
+    WanfangDiscoveryScan,
+    WanfangRecord,
+    WanfangScan,
+)
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
 CONFIG = load_watchlist(FIXTURE_DIR / "watchlist_minimal.yaml")
@@ -122,6 +138,135 @@ def resolver_for(publication_dates: dict[str, date], calls: list[str]):
 
 def no_title_batch(_titles, _config, _attempted_at):
     return ()
+
+
+def test_on_demand_cnki_lists_only_issues_with_month_evidence_in_window():
+    config = replace(
+        CONFIG,
+        cnki_space=CnkiSpaceConfig(True, (CnkiSearchTerm("generic term"),), 1, None),
+        wanfang=WanfangConfig(True, 5),
+    )
+
+    def issue(key: str, month: int | None) -> CnkiIssue:
+        record = CnkiRecord(
+            title=f"论文{key}",
+            url=f"https://www.cnki.com.cn/Article/CJFDTOTAL-TEST2026{key}.htm",
+            authors=("甲",),
+            venue="测试期刊",
+            year=2026,
+            issue=key,
+            label_month=month,
+        )
+        return CnkiIssue(key, "测试期刊", 2026, key, month, (record,), (), REQUEST_TIME)
+
+    issues = (issue("7", 7), issue("8", 8), issue("9", 9), issue("10", None))
+    seen_by_wanfang: list[str] = []
+
+    def cnki_loader(*_args, **kwargs):
+        return CnkiScan(
+            issues,
+            tuple(record for item in issues for record in item.records),
+            kwargs["checked_at"],
+            "success",
+            1,
+            1,
+            (),
+            (),
+        )
+
+    def wanfang_loader(records, **kwargs):
+        seen_by_wanfang.extend(record.title for record in records)
+        return WanfangScan((), kwargs["checked_at"], "success", len(records), len(records), 0)
+
+    result = run_on_demand(
+        config,
+        now=REQUEST_TIME,
+        lookback_days=30,
+        feed_loader=loader_with(),
+        cnki_loader=cnki_loader,
+        wanfang_loader=wanfang_loader,
+        allow_development_fixture=True,
+    )
+
+    assert result.stats["cnki_issue_candidates"] == 4
+    assert result.stats["cnki_recent_issue_candidates"] == 2
+    assert result.stats["cnki_issue_month_unknown"] == 1
+    assert result.stats["cnki_issue_outside_window"] == 1
+    assert "论文8" in result.report_markdown
+    assert "论文9" in result.report_markdown
+    assert "论文7" not in result.report_markdown
+    assert "论文10" not in result.report_markdown
+    assert seen_by_wanfang == ["论文8", "论文9"]
+    assert "月份精度不能证明" in result.report_markdown
+
+
+def test_on_demand_wanfang_discovery_only_lists_source_months_in_window():
+    config = replace(
+        CONFIG,
+        cnki_space=CnkiSpaceConfig(True, (CnkiSearchTerm("generic term"),), 1),
+        wanfang=WanfangConfig(True, 1, discover=True),
+    )
+
+    def record(identity: str, publication: str) -> WanfangRecord:
+        return WanfangRecord(
+            identity,
+            f"万方论文{identity}",
+            (),
+            "示例期刊",
+            2026,
+            "9",
+            None,
+            (),
+            (),
+            publish_date=publication,
+        )
+
+    found = (
+        record("july", "2026-07-10"),
+        record("august", "2026-08-20"),
+        record("september", "2026-09-10"),
+        record("unknown", "2026-01-01"),
+    )
+    result = run_on_demand(
+        config,
+        now=REQUEST_TIME,
+        lookback_days=30,
+        feed_loader=loader_with(),
+        cnki_loader=lambda *_args, **kwargs: CnkiScan(
+            (),
+            (),
+            kwargs["checked_at"],
+            "success",
+            1,
+            1,
+            (),
+            (),
+        ),
+        wanfang_loader=lambda records, **kwargs: WanfangScan(
+            (),
+            kwargs["checked_at"],
+            "success",
+            0,
+            len(records),
+            0,
+        ),
+        wanfang_discovery_loader=lambda *_args, **kwargs: WanfangDiscoveryScan(
+            found,
+            kwargs["checked_at"],
+            "partial",
+            1,
+            1,
+            1,
+            (),
+        ),
+        allow_development_fixture=True,
+    )
+    assert "万方论文august" in result.report_markdown
+    assert "万方论文september" in result.report_markdown
+    assert "万方论文july" not in result.report_markdown
+    assert "万方论文unknown" not in result.report_markdown
+    assert "缺少可信月份 1 条" in result.report_markdown
+    assert "万方标示出版时间不等于首次发表日" in result.report_markdown
 
 
 def test_oai_window_narrows_undated_cold_start_before_external_lookups():

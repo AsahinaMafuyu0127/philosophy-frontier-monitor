@@ -6,12 +6,23 @@ import httpx
 import pytest
 
 from philosophy_frontier_monitor import cli
-from philosophy_frontier_monitor.config import ConfirmedCategoryConfig, FeedConfig, load_watchlist
+from philosophy_frontier_monitor.config import (
+    CnkiSpaceConfig,
+    ConfirmedCategoryConfig,
+    FeedConfig,
+    WanfangConfig,
+    load_watchlist,
+)
 from philosophy_frontier_monitor.identity import IdentityReviewRequired
 from philosophy_frontier_monitor.models import DatePrecision, DateValue
 from philosophy_frontier_monitor.pipeline import FeedSnapshot, PipelineError
 from philosophy_frontier_monitor.search import SearchOptions, run_paper_search
 from philosophy_frontier_monitor.search_report import render_paper_search
+from philosophy_frontier_monitor.sources.cnki_space import (
+    CnkiRecord,
+    CnkiScan,
+    CnkiSearchTerm,
+)
 from philosophy_frontier_monitor.sources.crossref import CrossrefWork
 from philosophy_frontier_monitor.sources.openalex import (
     OpenAlexError,
@@ -20,6 +31,12 @@ from philosophy_frontier_monitor.sources.openalex import (
     find_works_by_titles,
 )
 from philosophy_frontier_monitor.sources.philpapers_rss import FeedEntry
+from philosophy_frontier_monitor.sources.wanfang import (
+    WanfangCheck,
+    WanfangDiscoveryScan,
+    WanfangRecord,
+    WanfangScan,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CONFIG = load_watchlist(FIXTURES / "watchlist_minimal.yaml")
@@ -69,6 +86,19 @@ def run(entries, works=(), *, config=CONFIG, options=None, **kwargs):
     )
 
 
+def test_official_issue_store_failure_does_not_abort_historical_search(monkeypatch):
+    def unavailable(*_args, **_kwargs):
+        raise OSError("synthetic private store failure")
+
+    monkeypatch.setattr(cli, "list_issues", unavailable)
+    issues, status = cli._search_official_issues(Path("unused.sqlite3"), None, None)
+    assert issues == ()
+    assert status == "failed"
+    rendered = render_paper_search(run(()), official_issues=issues, official_issue_status=status)
+    assert "官方期刊监控库读取失败" in rendered
+    assert "不能据此认为期刊没有新期" in rendered
+
+
 def two_category_config():
     return replace(
         CONFIG,
@@ -96,6 +126,156 @@ def test_historical_papers_sorted_and_missing_is_not_zero():
     assert result.items[-1].citation_source is None
     assert result.items[0].citation_retrieved_at == NOW
     assert result.state_mutated is False
+
+
+def test_cnki_candidates_are_visible_but_not_counted_as_verified_search_matches():
+    record = CnkiRecord(
+        title="概念与论证",
+        url="https://www.cnki.com.cn/Article/CJFDTOTAL-ZXFX202609001.htm",
+        authors=("甲",),
+        venue="哲学分析",
+        year=2026,
+        issue="9",
+        label_month=None,
+    )
+    cnki_config = replace(
+        CONFIG,
+        cnki_space=CnkiSpaceConfig(
+            True,
+            (CnkiSearchTerm("哲学"),),
+            1,
+            FIXTURES / "cnki_reviewed_evidence.yaml",
+        ),
+    )
+
+    def cnki_loader(*args, **kwargs):
+        return CnkiScan((), (record,), NOW, "partial", 1, 1, ("page_limit",), ())
+
+    result = run((), config=cnki_config, cnki_loader=cnki_loader)
+    rendered = render_paper_search(result)
+    assert result.total_matches == 0
+    assert result.cnki_candidates == (record,)
+    assert "知网空间补充候选" in rendered
+    assert "2026年第9期" in rendered
+    assert "不计入上方已核验论文数" in rendered
+    assert result.cnki_assessments[0].status == "corroborated"
+    assert "来源页面显示中国机构署名" in rendered
+
+
+def test_cnki_philpapers_overlap_is_shown_without_merging_counts():
+    record = CnkiRecord(
+        title="Paper",
+        url="https://www.cnki.com.cn/Article/CJFDTOTAL-ZXFX199009001.htm",
+        authors=("Ada Scholar",),
+        venue="Example Journal",
+        year=1990,
+        issue="9",
+        label_month=None,
+    )
+    cnki_config = replace(
+        CONFIG,
+        cnki_space=CnkiSpaceConfig(True, (CnkiSearchTerm("Paper"),), 1),
+    )
+
+    def cnki_loader(*args, **kwargs):
+        return CnkiScan((), (record,), NOW, "success", 1, 1, (), ())
+
+    result = run((entry("Paper"),), (oa("Paper"),), config=cnki_config, cnki_loader=cnki_loader)
+    assert result.total_matches == 1
+    assert result.cnki_overlaps[0].status == "same_bibliography"
+    assert "尚未自动合并" in render_paper_search(result)
+
+
+def test_wanfang_crosscheck_is_separate_from_verified_search_total():
+    record = CnkiRecord(
+        "概念与论证",
+        "https://www.cnki.com.cn/Article/CJFDTOTAL-ZXFX202609001.htm",
+        ("甲",),
+        "哲学分析",
+        2026,
+        "9",
+        None,
+    )
+    config = replace(
+        CONFIG,
+        cnki_space=CnkiSpaceConfig(True, (CnkiSearchTerm("概念"),), 1),
+        wanfang=WanfangConfig(True, 1),
+    )
+
+    def cnki_loader(*args, **kwargs):
+        return CnkiScan((), (record,), NOW, "success", 1, 1, (), ())
+
+    def wanfang_loader(records, **kwargs):
+        assert records == (record,)
+        return WanfangScan(
+            (WanfangCheck(record.url, "corroborated", "synthetic-journal-id"),),
+            NOW,
+            "success",
+            1,
+            1,
+            0,
+        )
+
+    result = run((), config=config, cnki_loader=cnki_loader, wanfang_loader=wanfang_loader)
+    report = render_paper_search(result)
+    assert result.total_matches == 0
+    assert "万方期刊题录的题名" in report
+    assert "万方记录 ID：`synthetic-journal-id`" in report
+
+
+def test_wanfang_independent_discovery_is_visible_even_without_cnki_hit():
+    config = replace(
+        CONFIG,
+        cnki_space=CnkiSpaceConfig(True, (CnkiSearchTerm("伦理学"),), 1),
+        wanfang=WanfangConfig(True, 1, discover=True),
+    )
+    found = WanfangRecord(
+        "wanfang-id",
+        "独立发现论文",
+        ("甲",),
+        "示例期刊",
+        2026,
+        "9",
+        None,
+        (),
+        (),
+        publish_date="2026-09-10",
+    )
+    result = run(
+        (),
+        config=config,
+        cnki_loader=lambda *_args, **kwargs: CnkiScan(
+            (),
+            (),
+            kwargs["checked_at"],
+            "success",
+            1,
+            1,
+            (),
+            (),
+        ),
+        wanfang_loader=lambda records, **kwargs: WanfangScan(
+            (),
+            kwargs["checked_at"],
+            "success",
+            0,
+            len(records),
+            0,
+        ),
+        wanfang_discovery_loader=lambda *_args, **kwargs: WanfangDiscoveryScan(
+            (found,),
+            kwargs["checked_at"],
+            "success",
+            1,
+            1,
+            0,
+            (),
+        ),
+    )
+    report = render_paper_search(result)
+    assert "万方独立发现的中文期刊候选" in report
+    assert "独立发现论文" in report
+    assert result.total_matches == 0
 
 
 @pytest.mark.parametrize("count", [None, -1, True, False, 2.5, "18", {}, []])

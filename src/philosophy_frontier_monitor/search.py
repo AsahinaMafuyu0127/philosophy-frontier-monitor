@@ -13,6 +13,12 @@ from datetime import UTC, datetime
 
 import httpx
 
+from .cnki_review import (
+    BibliographicPeer,
+    CnkiAssessment,
+    CnkiOverlap,
+    assess_cnki_overlaps,
+)
 from .config import WatchlistConfig
 from .identity import IdentityMatchLevel, IdentityReviewRequired, compare_bibliographic_identity
 from .models import DateValue, WorkTypeEvidence
@@ -23,11 +29,13 @@ from .pipeline import (
     PipelineError,
     ProgressReporter,
     _bibliographic_error_opens_circuit,
+    _cnki_review_assessments,
     _load_all_feeds,
     _load_runtime,
     load_philpapers_feed,
     merge_feed_snapshots,
 )
+from .sources.cnki_space import CnkiRecord, CnkiScan, scan_cnki_space
 from .sources.crossref import CrossrefError, CrossrefWork
 from .sources.crossref import find_exact_work as find_crossref_work
 from .sources.openalex import (
@@ -40,6 +48,12 @@ from .sources.openalex import (
     find_works_by_titles,
 )
 from .sources.philpapers_rss import split_display_bibliography
+from .sources.wanfang import (
+    WanfangDiscoveryScan,
+    WanfangScan,
+    scan_wanfang_cnki,
+    scan_wanfang_discovery,
+)
 from .taxonomy import expand_selected_categories
 from .work_types import (
     SUPPORTED_CANONICAL_WORK_TYPES,
@@ -132,6 +146,12 @@ class PaperSearchResult:
     unconfirmed_records: tuple[UnconfirmedSearchRecord, ...] = ()
     coverage: str = "current_category_feed_inventory"
     state_mutated: bool = False
+    cnki_candidates: tuple[CnkiRecord, ...] = ()
+    cnki_coverage: str | None = None
+    cnki_assessments: tuple[CnkiAssessment, ...] = ()
+    cnki_overlaps: tuple[CnkiOverlap, ...] = ()
+    wanfang_scan: WanfangScan | None = None
+    wanfang_discovery: WanfangDiscoveryScan | None = None
 
 
 def _identity(candidate: MergedCandidate, work: OpenAlexWork | CrossrefWork) -> IdentityMatchLevel:
@@ -270,6 +290,9 @@ def run_paper_search(
     fallback_lookup: Callable = find_crossref_work,
     progress: ProgressReporter | None = None,
     allow_development_fixture: bool = False,
+    cnki_loader: Callable[..., CnkiScan] = scan_cnki_space,
+    wanfang_loader: Callable[..., WanfangScan] = scan_wanfang_cnki,
+    wanfang_discovery_loader: Callable[..., WanfangDiscoveryScan] = scan_wanfang_discovery,
 ) -> PaperSearchResult:
     """Search configured interests; dependencies may be injected for offline tests."""
     options = options or SearchOptions()
@@ -463,7 +486,8 @@ def run_paper_search(
     if progress:
         progress("candidates", len(candidates), len(candidates))
     matched: list[PaperSearchItem] = []
-    for item in _merge_items(items, stats):
+    verified_items = _merge_items(items, stats)
+    for item in verified_items:
         paper_ids = frozenset(item.category_ids)
         if paper_ids.intersection(profile.excluded_category_ids):
             stats["excluded_category"] += 1
@@ -513,6 +537,117 @@ def run_paper_search(
     page_end = options.offset + limit if limit is not None else None
     page = tuple(matched[options.offset : page_end])
     next_offset = options.offset + len(page)
+    cnki_candidates: tuple[CnkiRecord, ...] = ()
+    cnki_coverage: str | None = None
+    cnki_assessments: tuple[CnkiAssessment, ...] = ()
+    cnki_overlaps: tuple[CnkiOverlap, ...] = ()
+    wanfang_scan: WanfangScan | None = None
+    wanfang_discovery: WanfangDiscoveryScan | None = None
+    if config.cnki_space.enabled:
+        if (
+            options.year_from is not None
+            and options.year_to is not None
+            and options.year_to - options.year_from <= 1
+        ):
+            cnki_years: tuple[int | None, ...] = tuple(
+                range(options.year_from, options.year_to + 1)
+            )
+        else:
+            cnki_years = (None,)
+        try:
+            cnki_scan = cnki_loader(
+                config.cnki_space.terms,
+                years=cnki_years,
+                max_pages=config.cnki_space.max_pages,
+                checked_at=now,
+            )
+        except Exception as error:  # Optional source failure is disclosed.
+            cnki_coverage = f"CNKI Space 检索失败：{type(error).__name__}。"
+        else:
+            cnki_candidates = tuple(
+                record
+                for record in cnki_scan.records
+                if (
+                    (
+                        options.year_from is None
+                        or record.year is None
+                        or record.year >= options.year_from
+                    )
+                    and (
+                        options.year_to is None
+                        or record.year is None
+                        or record.year <= options.year_to
+                    )
+                )
+            )
+            cnki_coverage = (
+                f"知网空间 {cnki_scan.status}：完成 {cnki_scan.result_pages}/"
+                f"{cnki_scan.requested_pages} 页；截断 {len(cnki_scan.incomplete_queries)} 项；"
+                f"失败 {len(cnki_scan.failures)} 项。仅为候选题录，未确认全库覆盖。"
+            )
+            # Keep structured review details aligned with the locally filtered
+            # candidates shown to the user; the source scan itself is unchanged.
+            cnki_assessments, review_coverage = _cnki_review_assessments(
+                config, replace(cnki_scan, records=cnki_candidates)
+            )
+            if review_coverage is not None:
+                cnki_coverage += f" 人工证据：{review_coverage.detail}"
+            cnki_overlaps = assess_cnki_overlaps(
+                cnki_candidates,
+                tuple(
+                    BibliographicPeer(
+                        item.title,
+                        item.authors,
+                        item.publication_year,
+                        item.source_urls[0],
+                    )
+                    for item in verified_items
+                    if item.source_urls
+                ),
+            )
+            if config.wanfang.enabled:
+                try:
+                    wanfang_scan = wanfang_loader(
+                        cnki_candidates,
+                        max_checks=config.wanfang.max_checks,
+                        checked_at=now,
+                        key_file=config.wanfang.key_file,
+                    )
+                except Exception as error:  # Optional source failure is disclosed.
+                    wanfang_scan = WanfangScan(
+                        (), now, "failed", 0, len(cnki_candidates), 0, type(error).__name__
+                    )
+        if config.wanfang.discover:
+            try:
+                wanfang_discovery = wanfang_discovery_loader(
+                    config.cnki_space.terms,
+                    years=cnki_years,
+                    max_terms=config.wanfang.max_discovery_terms,
+                    max_pages=config.wanfang.max_discovery_pages,
+                    checked_at=now,
+                    key_file=config.wanfang.key_file,
+                )
+                wanfang_discovery = replace(
+                    wanfang_discovery,
+                    records=tuple(
+                        record
+                        for record in wanfang_discovery.records
+                        if (
+                            options.year_from is None
+                            or record.year is None
+                            or record.year >= options.year_from
+                        )
+                        and (
+                            options.year_to is None
+                            or record.year is None
+                            or record.year <= options.year_to
+                        )
+                    ),
+                )
+            except Exception as error:
+                wanfang_discovery = WanfangDiscoveryScan(
+                    (), now, "failed", 0, 0, 0, (f"adapter:{type(error).__name__}",)
+                )
     return PaperSearchResult(
         queried_at=now,
         profile_id=config.profile_id,
@@ -530,6 +665,12 @@ def run_paper_search(
         next_offset=next_offset if next_offset < len(matched) else None,
         stats=dict(stats),
         source_failures=tuple(sorted(failures)),
+        cnki_candidates=cnki_candidates,
+        cnki_coverage=cnki_coverage,
+        cnki_assessments=cnki_assessments,
+        cnki_overlaps=cnki_overlaps,
+        wanfang_scan=wanfang_scan,
+        wanfang_discovery=wanfang_discovery,
         unconfirmed_records=tuple(unconfirmed),
         limitations=(
             "范围是已配置 PhilPapers 分类 feed 本次返回的记录，不保证覆盖完整历史索引。",

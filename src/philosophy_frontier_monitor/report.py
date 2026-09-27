@@ -6,7 +6,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
 from html import escape
+from urllib.parse import quote
 
+from .cnki_review import CnkiAssessment, CnkiOverlap
 from .models import (
     FreshnessStatus,
     InterestProfile,
@@ -16,6 +18,9 @@ from .models import (
     WorkRecord,
     WorkTypeStatus,
 )
+from .official_journals import OfficialIssue, render_issue_leads
+from .sources.cnki_space import CnkiIssue
+from .sources.wanfang import WanfangCheck, WanfangRecord, publication_month
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +127,250 @@ def _safe_text(value: str) -> str:
     for character in ("\\", "`", "*", "_", "[", "]", "#"):
         escaped = escaped.replace(character, f"\\{character}")
     return escaped
+
+
+def _cnki_issue_lines(
+    issues: tuple[CnkiIssue, ...],
+    *,
+    baseline: bool,
+    english: bool,
+    on_demand_window: bool = False,
+    assessments: tuple[CnkiAssessment, ...] = (),
+    overlaps: tuple[CnkiOverlap, ...] = (),
+    wanfang_checks: tuple[WanfangCheck, ...] = (),
+) -> list[str]:
+    if on_demand_window:
+        heading = (
+            f"## Chinese journal leads in the on-demand window ({len(issues)})"
+            if english
+            else f"## 即时窗口内中文期刊论文线索（{len(issues)}）"
+        )
+    else:
+        heading = (
+            f"## Chinese journal issue observations ({len(issues)})"
+            if english
+            else f"## 中文期刊新期次观察（{len(issues)}）"
+        )
+    lines = [heading, ""]
+    if on_demand_window and english:
+        lines.append(
+            "Only issues with an explicit source-labelled month overlapping this rolling window "
+            "are listed. A month label does not prove the article first appeared within the "
+            "window; year-only and issue-number-only leads are withheld."
+        )
+    elif on_demand_window:
+        lines.append(
+            "仅列来源明确标示月份、且该月份与本次滚动窗口相交的期刊论文线索。"
+            "月份精度不能证明逐篇论文在窗口内首次发表；只有年份或期号的记录不列题名。"
+        )
+    elif english:
+        lines.append(
+            "These are CNKI Space metadata observations, separate from verified new papers. "
+            "An issue number is not a month or a paper's first publication date."
+        )
+        if baseline:
+            lines.append("This is the first bounded scan, so these issues form a baseline.")
+    else:
+        lines.append(
+            "以下是知网空间题录所显示的期次线索，与上方已核验新论文分列。期号不是月份，"
+            "本次检出不证明逐篇论文在本周首次发表。"
+        )
+        if baseline:
+            lines.append("这是该来源的首次有限检索；所列期次作为基线观察，不声称本周才上线。")
+    lines.append("")
+    if not issues:
+        if on_demand_window:
+            empty_message = (
+                "No month-supported journal lead can be listed for this window; this does not "
+                "establish that no paper appeared."
+                if english
+                else "本次没有具备月份证据、可列入即时窗口的中文期刊论文线索；"
+                "不能据此断言近月没有论文。"
+            )
+        else:
+            empty_message = (
+                "No issue was observed in the configured query scope."
+                if english
+                else "本次配置的检索范围内没有可列出的新期次。"
+            )
+        lines.extend([empty_message, ""])
+        return lines
+    reviewed = {assessment.cnki_url: assessment for assessment in assessments}
+    compared = {overlap.cnki_url: overlap for overlap in overlaps}
+    wanfang_by_url = {check.cnki_url: check for check in wanfang_checks}
+    for issue in issues[:12]:
+        if issue.label_month:
+            label = f"{issue.year}年{issue.label_month}月（来源标示）"
+            if not issue.issue.endswith("月"):
+                label += f"、第{issue.issue}期"
+        else:
+            label = f"{issue.year}年第{issue.issue}期"
+        if english:
+            if issue.label_month:
+                label = f"{issue.year} month {issue.label_month} (source label)"
+                if not issue.issue.endswith("月"):
+                    label += f", issue {issue.issue}"
+            else:
+                label = f"{issue.year} issue {issue.issue} (month unverified)"
+        lines.append(
+            f"- **{_safe_text(issue.venue)} · {_safe_text(label)}** "
+            f"({'observed' if english else '观察于'} "
+            f"`{issue.observed_at.isoformat()}`)"
+        )
+        for record in issue.records[:3]:
+            lines.append(f"  - [{_safe_text(record.title)}]({record.url})")
+            assessment = reviewed.get(record.url)
+            if assessment is not None:
+                if assessment.status == "corroborated":
+                    label = (
+                        "Journal/catalog bibliography checked against the source page"
+                        if english
+                        else "期刊或目录书目字段已据来源页面人工核对"
+                    )
+                    if assessment.china_affiliated_authors:
+                        label += (
+                            "; China-based affiliation shown for "
+                            + _safe_text("、".join(assessment.china_affiliated_authors))
+                            if english
+                            else "；来源页面显示中国机构署名："
+                            + _safe_text("、".join(assessment.china_affiliated_authors))
+                        )
+                elif assessment.status == "conflict":
+                    label = (
+                        "Reviewed source conflicts with CNKI metadata; manual recheck needed"
+                        if english
+                        else "人工核对的来源与知网题录存在字段冲突，需复核"
+                    )
+                else:
+                    label = (
+                        "Reviewed source is insufficient for complete bibliographic corroboration"
+                        if english
+                        else "来源信息不足以完成全部书目字段核对"
+                    )
+                source_label = "source" if english else "来源"
+                lines.append(f"    - {label}：[{source_label}]({assessment.evidence_url})")
+            overlap = compared.get(record.url)
+            if overlap is not None:
+                label = (
+                    "Bibliography matches a PhilPapers record resolved in this run; not merged"
+                    if english and overlap.status == "same_bibliography"
+                    else "Same-title PhilPapers record needs identity review"
+                    if english
+                    else "与本次已解析 PhilPapers 记录的题名、首作者和年份一致；尚未自动合并"
+                    if overlap.status == "same_bibliography"
+                    else "本次已解析 PhilPapers 记录中有同题条目，身份待复核"
+                )
+                links = ", ".join(
+                    f"[PhilPapers {index}]({url})" for index, url in enumerate(overlap.peer_urls, 1)
+                )
+                lines.append(f"    - {label}: {links}")
+            wanfang = wanfang_by_url.get(record.url)
+            if wanfang is not None:
+                if wanfang.status == "corroborated":
+                    label = (
+                        "Wanfang journal bibliography agrees on title, authors, "
+                        "journal, year and issue"
+                        if english
+                        else "万方期刊题录的题名、作者、刊名、年份及期次相符"
+                    )
+                elif wanfang.status == "partial":
+                    label = (
+                        "Wanfang has a same-title record, but some comparison fields are missing"
+                        if english
+                        else "万方有同题记录，但字段不足以完整核对"
+                    )
+                elif wanfang.status == "conflict":
+                    label = (
+                        "Wanfang same-title record conflicts on bibliography fields; review needed"
+                        if english
+                        else "万方同题记录存在书目字段冲突，需复核"
+                    )
+                else:
+                    label = (
+                        "No same-title record corroborated in this bounded Wanfang query; "
+                        "absence is unproven"
+                        if english
+                        else "本次有限万方查询未核对到同题记录，不代表万方未收录"
+                    )
+                identifier = f"; ID `{wanfang.record_id}`" if wanfang.record_id else ""
+                lines.append(f"    - {label}{identifier}")
+        if len(issue.records) > 3:
+            lines.append(
+                f"  - {len(issue.records) - 3} more candidate records"
+                if english
+                else f"  - 另有 {len(issue.records) - 3} 条候选题录未展开。"
+            )
+    if len(issues) > 12:
+        lines.append(
+            f"- {len(issues) - 12} further issues omitted."
+            if english
+            else f"- 另有 {len(issues) - 12} 个期次未在本报告展开。"
+        )
+    lines.append("")
+    return lines
+
+
+def _wanfang_discovery_lines(
+    records: tuple[WanfangRecord, ...],
+    *,
+    english: bool,
+    baseline: bool,
+    on_demand_window: bool,
+) -> list[str]:
+    heading = (
+        f"## Wanfang Chinese-journal leads ({len(records)})"
+        if english
+        else f"## 万方中文期刊论文线索（{len(records)}）"
+    )
+    explanation = (
+        "These are bounded metadata leads whose Wanfang publication month overlaps the "
+        "window. That field can describe an issue or be a placeholder; it does not establish "
+        "an article's first publication date, affiliation, or interest-category match."
+        if english
+        else (
+            "以下为万方有限题录检索中，标示出版月份与窗口相交的候选。"
+            "该字段可能是卷期日期或占位值，不能证明逐篇首次发表、"
+            "作者发表时机构或兴趣分类匹配。"
+        )
+    )
+    lines = [heading, "", explanation, ""]
+    if baseline and not on_demand_window:
+        lines.extend(
+            [
+                "First scan: listed records form a baseline, not new works this week."
+                if english
+                else "首次扫描：所列记录构成基线，不声称本周首次发表。",
+                "",
+            ]
+        )
+    if not records:
+        lines.extend(
+            [
+                "No month-supported lead was available in the bounded scope; absence is unproven."
+                if english
+                else "本次有限范围内没有可列出的月份线索；不能据此断言没有相关论文。",
+                "",
+            ]
+        )
+        return lines
+    for record in records[:12]:
+        link = "https://d.wanfangdata.com.cn/periodical/" + quote(record.record_id, safe="")
+        month = publication_month(record)
+        month_text = f"{month[0]}-{month[1]:02d}" if month else "unknown"
+        venue = _safe_text(record.venue or ("Journal unknown" if english else "刊名未记录"))
+        label = "Wanfang publication label" if english else "万方出版时间标示"
+        lines.append(
+            f"- [{_safe_text(record.title)}]({link})；{venue}；{label} "
+            f"`{month_text}`；ID `{_safe_text(record.record_id)}`。"
+        )
+    if len(records) > 12:
+        lines.append(
+            f"- {len(records) - 12} further leads omitted."
+            if english
+            else f"- 另有 {len(records) - 12} 条候选未展开。"
+        )
+    lines.append("")
+    return lines
 
 
 def _date_text(work: WorkRecord) -> str:
@@ -362,6 +611,15 @@ def render_weekly_report(
     human_review_items: tuple[HumanReviewItem, ...] = (),
     include_english: bool = True,
     show_recently_changed: bool = False,
+    official_issues: tuple[OfficialIssue, ...] = (),
+    cnki_issues: tuple[CnkiIssue, ...] | None = None,
+    cnki_baseline: bool = False,
+    cnki_on_demand_window: bool = False,
+    cnki_assessments: tuple[CnkiAssessment, ...] = (),
+    cnki_overlaps: tuple[CnkiOverlap, ...] = (),
+    wanfang_checks: tuple[WanfangCheck, ...] = (),
+    wanfang_discovery_records: tuple[WanfangRecord, ...] | None = None,
+    wanfang_discovery_baseline: bool = False,
 ) -> str:
     """Render only works whose deterministic decision is ``notify``."""
 
@@ -454,6 +712,29 @@ def render_weekly_report(
     else:
         lines.extend(["本次没有符合条件的来源记录近期变化。", ""])
 
+    if official_issues:
+        lines.extend([render_issue_leads(official_issues).rstrip(), ""])
+    if cnki_issues is not None:
+        lines.extend(
+            _cnki_issue_lines(
+                cnki_issues,
+                baseline=cnki_baseline,
+                english=False,
+                on_demand_window=cnki_on_demand_window,
+                assessments=cnki_assessments,
+                overlaps=cnki_overlaps,
+                wanfang_checks=wanfang_checks,
+            )
+        )
+    if wanfang_discovery_records is not None:
+        lines.extend(
+            _wanfang_discovery_lines(
+                wanfang_discovery_records,
+                english=False,
+                baseline=wanfang_discovery_baseline,
+                on_demand_window=cnki_on_demand_window,
+            )
+        )
     lines.extend(["## 数据源覆盖", ""])
     if not coverage:
         lines.extend(["- 未提供来源运行记录；不能断言本次监测覆盖完整。", ""])
@@ -538,6 +819,15 @@ def render_weekly_report(
         remote_verification_not_reached_count=remote_verification_not_reached_count,
         human_review_items=human_review_items,
         show_recently_changed=show_recently_changed,
+        official_issues=official_issues,
+        cnki_issues=cnki_issues,
+        cnki_baseline=cnki_baseline,
+        cnki_on_demand_window=cnki_on_demand_window,
+        cnki_assessments=cnki_assessments,
+        cnki_overlaps=cnki_overlaps,
+        wanfang_checks=wanfang_checks,
+        wanfang_discovery_records=wanfang_discovery_records,
+        wanfang_discovery_baseline=wanfang_discovery_baseline,
     )
     return f"{chinese}\n\n---\n\n{english}"
 
@@ -556,6 +846,15 @@ def _render_weekly_report_en(
     remote_verification_not_reached_count: int = 0,
     human_review_items: tuple[HumanReviewItem, ...] = (),
     show_recently_changed: bool = False,
+    official_issues: tuple[OfficialIssue, ...] = (),
+    cnki_issues: tuple[CnkiIssue, ...] | None = None,
+    cnki_baseline: bool = False,
+    cnki_on_demand_window: bool = False,
+    cnki_assessments: tuple[CnkiAssessment, ...] = (),
+    cnki_overlaps: tuple[CnkiOverlap, ...] = (),
+    wanfang_checks: tuple[WanfangCheck, ...] = (),
+    wanfang_discovery_records: tuple[WanfangRecord, ...] | None = None,
+    wanfang_discovery_baseline: bool = False,
 ) -> str:
     """Render the English version of a weekly report from the same evidence."""
 
@@ -652,6 +951,29 @@ def _render_weekly_report_en(
     else:
         lines.extend(["No matching source record changed recently.", ""])
 
+    if official_issues:
+        lines.extend([render_issue_leads(official_issues, english=True).rstrip(), ""])
+    if cnki_issues is not None:
+        lines.extend(
+            _cnki_issue_lines(
+                cnki_issues,
+                baseline=cnki_baseline,
+                english=True,
+                on_demand_window=cnki_on_demand_window,
+                assessments=cnki_assessments,
+                overlaps=cnki_overlaps,
+                wanfang_checks=wanfang_checks,
+            )
+        )
+    if wanfang_discovery_records is not None:
+        lines.extend(
+            _wanfang_discovery_lines(
+                wanfang_discovery_records,
+                english=True,
+                baseline=wanfang_discovery_baseline,
+                on_demand_window=cnki_on_demand_window,
+            )
+        )
     lines.extend(["## Source coverage", ""])
     if not coverage:
         lines.extend(
@@ -772,6 +1094,12 @@ def render_on_demand_report(
     matched_confirmed_new: int = 0,
     matched_confirmed_source_arrivals: int = 0,
     show_recently_changed: bool = False,
+    official_issues: tuple[OfficialIssue, ...] = (),
+    cnki_issues: tuple[CnkiIssue, ...] | None = None,
+    cnki_assessments: tuple[CnkiAssessment, ...] = (),
+    cnki_overlaps: tuple[CnkiOverlap, ...] = (),
+    wanfang_checks: tuple[WanfangCheck, ...] = (),
+    wanfang_discovery_records: tuple[WanfangRecord, ...] | None = None,
 ) -> str:
     """Render a state-independent rolling report for an explicit user request."""
 
@@ -786,6 +1114,13 @@ def render_on_demand_report(
         unresolved_count=0,
         include_english=False,
         show_recently_changed=show_recently_changed,
+        official_issues=official_issues,
+        cnki_issues=cnki_issues,
+        cnki_on_demand_window=True,
+        cnki_assessments=cnki_assessments,
+        cnki_overlaps=cnki_overlaps,
+        wanfang_checks=wanfang_checks,
+        wanfang_discovery_records=wanfang_discovery_records,
     )
     lines = weekly.splitlines()
     lines[0] = "# 哲学前沿论文即时拉取报告"
@@ -907,6 +1242,12 @@ def render_on_demand_report(
         matched_confirmed_new=matched_confirmed_new,
         matched_confirmed_source_arrivals=matched_confirmed_source_arrivals,
         show_recently_changed=show_recently_changed,
+        official_issues=official_issues,
+        cnki_issues=cnki_issues,
+        cnki_assessments=cnki_assessments,
+        cnki_overlaps=cnki_overlaps,
+        wanfang_checks=wanfang_checks,
+        wanfang_discovery_records=wanfang_discovery_records,
     )
     return f"{chinese}\n\n---\n\n{english}"
 
@@ -930,6 +1271,12 @@ def _render_on_demand_report_en(
     matched_confirmed_new: int = 0,
     matched_confirmed_source_arrivals: int = 0,
     show_recently_changed: bool = False,
+    official_issues: tuple[OfficialIssue, ...] = (),
+    cnki_issues: tuple[CnkiIssue, ...] | None = None,
+    cnki_assessments: tuple[CnkiAssessment, ...] = (),
+    cnki_overlaps: tuple[CnkiOverlap, ...] = (),
+    wanfang_checks: tuple[WanfangCheck, ...] = (),
+    wanfang_discovery_records: tuple[WanfangRecord, ...] | None = None,
 ) -> str:
     """Render the English version of a state-independent on-demand report."""
 
@@ -943,6 +1290,13 @@ def _render_on_demand_report_en(
         coverage=coverage,
         unresolved_count=0,
         show_recently_changed=show_recently_changed,
+        official_issues=official_issues,
+        cnki_issues=cnki_issues,
+        cnki_on_demand_window=True,
+        cnki_assessments=cnki_assessments,
+        cnki_overlaps=cnki_overlaps,
+        wanfang_checks=wanfang_checks,
+        wanfang_discovery_records=wanfang_discovery_records,
     )
     lines = weekly.splitlines()
     lines[0] = "# Philosophy Frontier On-Demand Report"

@@ -1,0 +1,19 @@
+{
+  "documents": [
+    {
+      "resource_type": "Periodical",
+      "fields": {
+        "Id": {"strValue": "journal202609001"},
+        "Title": {"listValue": {"values": [{"stringValue": "概念与论证"}]}},
+        "Creator": {"listValue": {"values": [{"stringValue": "甲"}]}},
+        "PeriodicalTitle": {"listValue": {"values": [{"stringValue": "哲学分析"}]}},
+        "PublishDate": {"strValue": "2026-09"},
+        "Issue": {"strValue": "09"},
+        "OriginalOrganization": {"listValue": {"values": [{"stringValue": "示例大学哲学系"}]}},
+        "AuthorOrg": {"listValue": {"values": [{"stringValue": "甲:示例大学哲学系"}]}},
+        "Type": {"strValue": "Periodical"}
+      }
+    }
+  ],
+  "num_found": 1
+}

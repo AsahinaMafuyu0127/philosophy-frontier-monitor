@@ -88,7 +88,7 @@ def test_completed_checkpoint_round_trips():
         store.save_completed_checkpoint("philpapers:test", cursor="page-9", window_end=END)
         checkpoint = store.get_checkpoint("philpapers:test")
 
-    assert schema_version == "4"
+    assert schema_version == "6"
     assert checkpoint is not None
     assert checkpoint.cursor == "page-9"
     assert checkpoint.window_end == END
@@ -128,7 +128,7 @@ def test_schema_two_run_table_is_migrated_without_rebuilding_database(monkeypatc
         "pipeline_version",
         "matching_rule_version",
     }.issubset(columns)
-    assert schema_version == "4"
+    assert schema_version == "6"
 
 
 def test_file_schema_upgrade_creates_verified_backup():
@@ -139,7 +139,7 @@ def test_file_schema_upgrade_creates_verified_backup():
         connection.executescript(
             """
             CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-            INSERT INTO schema_meta(key, value) VALUES ('schema_version', '3');
+            INSERT INTO schema_meta(key, value) VALUES ('schema_version', '5');
             """
         )
         connection.close()
@@ -150,7 +150,7 @@ def test_file_schema_upgrade_creates_verified_backup():
                 "SELECT value FROM schema_meta WHERE key = 'schema_version'"
             ).fetchone()["value"]
 
-        assert schema_version == "4"
+        assert schema_version == "6"
         assert backup is not None and backup.is_file()
         verification = sqlite3.connect(backup)
         try:
@@ -159,7 +159,7 @@ def test_file_schema_upgrade_creates_verified_backup():
                 verification.execute(
                     "SELECT value FROM schema_meta WHERE key = 'schema_version'"
                 ).fetchone()[0]
-                == "3"
+                == "5"
             )
         finally:
             verification.close()

@@ -1,0 +1,103 @@
+version: 1
+# Editorial/publisher channels are discovery and issue-date authorities. A hosted
+# CNKI editorial portal is an official journal channel, but not an independent
+# CNKI database corroboration. Entries without a live TOC remain manual review.
+journals:
+  - id: zhexue-yanjiu
+    title: 哲学研究
+    scope: general-philosophy
+    official_url: https://zxyj.cbpt.cnki.net/portal/journal/portal/client/index
+    channel: editorial-portal
+    review: manual
+    frequency: monthly
+    schedule: 2026 年计划每月 25 日出版；须逐期核实际日期
+    frequency_evidence_url: https://zxyj.cbpt.cnki.net/portal/journal/portal/client/paper/fc389b35d2b905d7493c68f9fa1483b5
+  - id: zhexue-dongtai
+    title: 哲学动态
+    scope: general-philosophy
+    official_url: https://zxdt.cbpt.cnki.net/portal/journal/portal/client/index
+    channel: editorial-portal
+    review: manual
+    frequency: monthly
+    frequency_evidence_url: https://zxdt.cbpt.cnki.net/
+  - id: shijie-zhexue
+    title: 世界哲学
+    scope: world-philosophy
+    official_url: https://philosophy.cssn.cn/bsgk/zzjg/kyfz/202005/t20200505_5123464.html
+    channel: publisher-institute
+    review: manual
+    frequency: bimonthly
+    schedule: 2026 年计划每个单月 2 日出版；须逐期核实际日期
+    frequency_evidence_url: https://zxyj.cbpt.cnki.net/portal/journal/portal/client/paper/fc389b35d2b905d7493c68f9fa1483b5
+  - id: zhongguo-zhexueshi
+    title: 中国哲学史
+    scope: chinese-philosophy
+    official_url: https://phil.ucass.edu.cn/xsyj/qkzy/zgzxs.htm
+    channel: publisher-institute
+    review: manual
+  - id: xiandai-zhexue
+    title: 现代哲学
+    scope: general-philosophy
+    official_url: https://mphilosophy.sysu.edu.cn/cat/124
+    channel: publisher-institute
+    review: manual
+  - id: zhexue-fenxi
+    title: 哲学分析
+    scope: general-philosophy
+    official_url: https://zxfx.cbpt.cnki.net/portal/journal/portal/client/index
+    channel: editorial-portal
+    review: manual
+  - id: lunlixue-yanjiu
+    title: 伦理学研究
+    scope: ethics
+    official_url: https://llx.hunnu.edu.cn/CN/article/showOldVolumn.do
+    channel: editorial-site
+    review: manual
+  - id: daode-yu-wenming
+    title: 道德与文明
+    scope: ethics
+    official_url: https://www.nopss.gov.cn/n/2013/0221/c352080-20558716.html
+    channel: publisher-description
+    review: verify-issue-entry
+  - id: ziran-bianzhengfa-tongxun
+    title: 自然辩证法通讯
+    scope: philosophy-of-science
+    official_url: https://jdn.ucas.ac.cn/home/journal/cataloglist/cid/349
+    channel: editorial-site
+    review: manual
+  - id: ziran-bianzhengfa-yanjiu
+    title: 自然辩证法研究
+    scope: philosophy-of-science
+    official_url: https://zrbz.cbpt.cnki.net/portal/journal/portal/client/index
+    channel: editorial-portal
+    review: manual
+  - id: kexue-jishu-zhexue-yanjiu
+    title: 科学技术哲学研究
+    scope: philosophy-of-science
+    official_url: https://kxbz.cbpt.cnki.net/portal
+    channel: editorial-portal
+    review: manual
+  - id: zhouyi-yanjiu
+    title: 周易研究
+    scope: chinese-philosophy
+    official_url: https://zhouyi.sdu.edu.cn/zyyjxk/qkml.htm
+    channel: publisher-institute
+    review: manual
+  - id: kongzi-yanjiu
+    title: 孔子研究
+    scope: chinese-philosophy
+    official_url: https://www.chinakongzi.org/category/kongziyanjiu_qikan/
+    channel: publisher-institute
+    review: manual
+  - id: zongjiaoxue-yanjiu
+    title: 宗教学研究
+    scope: philosophy-of-religion
+    official_url: https://daoism.scu.edu.cn/zjxyj/gqml.htm
+    channel: publisher-institute
+    review: manual
+  - id: zhongguo-shehui-kexue
+    title: 中国社会科学
+    scope: interdisciplinary
+    official_url: https://www.cssn.cn/dkzgxp/zgxp_zgshkx/
+    channel: publisher-site
+    review: manual
