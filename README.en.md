@@ -88,18 +88,18 @@ Let me confirm the categories, then guide me through local setup, the historical
 first weekly report. Do not ask me to paste credentials into the conversation.
 ```
 
-The latest tagged application release is **v0.3.0**. This branch is preparing an unreleased **v0.4.0 candidate**; the internal evidence-pipeline version remains **0.6.0**.
+The latest tagged application release is **v0.4.0**; the internal evidence-pipeline version remains **0.6.0**.
 Formal real-machine acceptance has been completed on Windows. macOS and Linux paths are supported,
 but have not yet received equivalent real scheduled-run validation.
 
-<a id="technical-update-2026-10-08-v040-candidate"></a>
+<a id="technical-update-2026-10-08-v040-release"></a>
 
-## Technical update: preparing the v0.4.0 release candidate (2026-10-08)
+## Technical update: v0.4.0 release (2026-10-08)
 
-This isolated branch assembles the
+This release includes the
 [accepted bounded Chinese-journal leads workflow](references/chinese-journal-stabilization.md),
 shared publisher-date corroboration across the three modes, and corrections to
-weekly source status and deduplication coverage as a `v0.4.0` candidate.
+weekly source status and deduplication coverage in `v0.4.0`.
 The application metadata and `uv.lock` agree; the internal evidence pipeline
 stays at `0.6.0`. Chinese records remain separately labelled leads. Weekly and
 on-demand reports list them only when a supported publication month overlaps
@@ -108,15 +108,15 @@ the relevant window.
 Confirmed newly published Chinese papers, fully automated coverage of all 15
 registered journals, complete database recall, and a fixed indexing delay are
 outside this release scope. Opening a public `v0.3.0` schema-4 state database
-with this schema-6 candidate first creates an integrity-checked backup; see
-the [upgrade guide](references/installation.en.md#upgrade-checks-for-the-v040-candidate).
+with this schema-6 release first creates an integrity-checked backup; see
+the [upgrade guide](references/installation.en.md#upgrade-checks-for-v040).
 
 The release audit now excludes the `.git` pointer file used by linked worktrees.
 All 422 tests, Ruff, skill validation, the read-only release audit, and locked
 dependency installation passed. The required source-package files and private-path
 exclusions were checked; the wheel installed in a fresh environment and its command
-entrypoints worked. See the [release-candidate checks](references/v0.4-release-candidate.md).
-This is local release preparation; no `v0.4.0` tag or GitHub Release has been created.
+entrypoints worked. See the [release checks](references/v0.4-release-candidate.md).
+This update corresponds to the `v0.4.0` tag and GitHub Release.
 <a id="technical-update-2026-10-07-weekly-coverage"></a>
 
 ## Technical update: weekly source status and deduplication coverage (2026-10-07)
@@ -552,7 +552,7 @@ See [Installation and first deployment](references/installation.en.md) and the
 
 ## 4. Current version
 
-Latest tagged release: `v0.3.0`; this branch contains an unreleased `v0.4.0` application candidate.
+Latest tagged release: `v0.4.0`.
 
 | Capability | Status |
 |---|---|
@@ -566,9 +566,9 @@ Latest tagged release: `v0.3.0`; this branch contains an unreleased `v0.4.0` app
 | User-requested `pull-now` | Stable, explicit and read-only |
 | OAI cross-run caching, interruption recovery, and incremental refresh | Stable |
 | Chinese and English weekly/on-demand report output | Stable |
-| Bounded Chinese metadata candidates and reviewed issue leads | Stable, opt-in (`v0.4.0` candidate) |
+| Bounded Chinese metadata candidates and reviewed issue leads | Stable, opt-in (since `v0.4.0`) |
 
-**Bounded Chinese-journal leads are a stable opt-in capability in the `v0.4.0` candidate; the existing `v0.3.0` tag has not been re-released.**
+**Bounded Chinese-journal leads are a stable opt-in capability since `v0.4.0`.**
 With `sources.cnki_space` enabled, search, pull-now, and weekly reports can each show bounded Chinese metadata leads and reviewed issue leads under their own time rules; the public example leaves this source disabled. Nine publisher directories can be scanned separately (eight textual TOCs and one PDF); the other six registered journals still require manual review. Automatically collected issue data must pass evidence review before it enters the three modes. Chinese candidates do not enter the verified-paper main section, and this feature does not promise complete Chinese-philosophy coverage, a fixed indexing time, or an interest-paper recall rate. P0/P1 of the bounded leads workflow and P2 issue-level accounting, entry decisions, and source-use limits have passed acceptance. The roughly eight-week repeated-article study remains a separate source-evaluation experiment; users do not need it to use the bounded service. See [Chinese sources and current limits](references/chinese-source-expansion.md).
 
 The OAI cache is a performance and recoverability mechanism, not a substitute for paper-freshness
