@@ -220,6 +220,10 @@ def _public_candidates(root: Path) -> tuple[Path, ...]:
             if name not in SKIPPED_DIRECTORY_NAMES and not name.startswith(".pytest-tmp")
         )
         for filename in sorted(filenames):
+            # Linked Git worktrees use a .git pointer file rather than a directory.
+            # It is repository metadata, not part of the public release surface.
+            if filename == ".git":
+                continue
             path = current / filename
             relative_path = _relative(path, root)
             if _is_private_path(relative_path):

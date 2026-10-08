@@ -30,6 +30,7 @@ from .pipeline import (
     ProgressReporter,
     _bibliographic_error_opens_circuit,
     _cnki_review_assessments,
+    _cnki_scan_with_dates,
     _load_all_feeds,
     _load_runtime,
     load_philpapers_feed,
@@ -564,6 +565,7 @@ def run_paper_search(
         except Exception as error:  # Optional source failure is disclosed.
             cnki_coverage = f"CNKI Space 检索失败：{type(error).__name__}。"
         else:
+            cnki_scan = _cnki_scan_with_dates(config, cnki_scan)
             cnki_candidates = tuple(
                 record
                 for record in cnki_scan.records
@@ -584,6 +586,19 @@ def run_paper_search(
                 f"知网空间 {cnki_scan.status}：完成 {cnki_scan.result_pages}/"
                 f"{cnki_scan.requested_pages} 页；截断 {len(cnki_scan.incomplete_queries)} 项；"
                 f"失败 {len(cnki_scan.failures)} 项。仅为候选题录，未确认全库覆盖。"
+            )
+            stats["cnki_date_month_unknown"] = sum(
+                record.label_month is None for record in cnki_candidates
+            )
+            stats["cnki_date_conflicts"] = sum(record.date_conflict for record in cnki_candidates)
+            stats["cnki_publisher_date_supported"] = sum(
+                bool(record.date_evidence_urls) and not record.date_conflict
+                for record in cnki_candidates
+            )
+            cnki_coverage += (
+                f" 日期证据：刊方支持 {stats['cnki_publisher_date_supported']} 条；"
+                f"月份未核实 {stats['cnki_date_month_unknown']} 条；"
+                f"日期冲突 {stats['cnki_date_conflicts']} 条。"
             )
             # Keep structured review details aligned with the locally filtered
             # candidates shown to the user; the source scan itself is unchanged.

@@ -167,3 +167,20 @@ Do not delete the entire Skill directory to update it.
 Upgrading from `v0.2.0` does not require rebuilding `state.sqlite3`, the historical baseline, or
 notification history. The existing OAI cache gains interruption-session and staged-page tables in
 place. `--no-oai-cache` remains available for a temporary direct-network run.
+
+### Upgrade checks for the `v0.4.0` candidate
+
+`v0.4.0` is still a local release candidate; `v0.3.0` remains the latest formal tag. The public
+`v0.3.0` state database uses schema 4, while this candidate uses schema 6. On first opening an
+older state database, the candidate creates and verifies a `*-pre-schema6-*.sqlite3` backup in
+the database's sibling `backups/` directory before adding the Chinese-journal observation tables
+and updating the schema number. It does not rebuild the baseline or notification history. Synthetic
+schema 4 and 5 fixtures verified that the backup is readable and existing checkpoints and
+notifications survive; this does not replace a backup and review of a particular private database.
+
+For a formal upgrade, first back up the existing private configuration, database, and reports.
+Review the Git changes in the known installation path, install the selected version with
+`uv sync --locked`, and check schema, backup, checkpoints, and notification history on an isolated
+copy before using the new code for scheduled runs. Do not rerun a successful historical window
+solely to correct report wording. Chinese sources still require explicit enablement in the private
+configuration; upgrading the application does not turn them on.

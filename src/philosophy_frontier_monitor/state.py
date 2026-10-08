@@ -370,13 +370,16 @@ class StateStore:
             completed_at=datetime.fromisoformat(row["completed_at"]),
         )
 
-    def known_cnki_issue_keys(self, keys: set[str]) -> set[str]:
+    def known_cnki_issue_keys(
+        self, keys: set[str], *, month_supported_only: bool = False
+    ) -> set[str]:
         if not keys:
             return set()
         known: set[str] = set()
         for key in keys:
             if self.connection.execute(
-                "SELECT 1 FROM cnki_issues WHERE issue_key = ?", (key,)
+                "SELECT 1 FROM cnki_issues WHERE issue_key = ? "
+                "AND (? = 0 OR label_month IS NOT NULL)", (key, month_supported_only)
             ).fetchone():
                 known.add(key)
         return known

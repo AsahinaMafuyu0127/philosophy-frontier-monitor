@@ -44,6 +44,9 @@ class CnkiRecord:
     year: int | None
     issue: str | None
     label_month: int | None
+    date_evidence_urls: tuple[str, ...] = ()
+    publication_date: str | None = None
+    date_conflict: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +59,9 @@ class CnkiIssue:
     records: tuple[CnkiRecord, ...]
     queries: tuple[str, ...]
     observed_at: datetime
+    date_evidence_urls: tuple[str, ...] = ()
+    publication_date: str | None = None
+    date_conflict: bool = False
 
 
 @dataclass(frozen=True, slots=True)

@@ -88,9 +88,81 @@ Let me confirm the categories, then guide me through local setup, the historical
 first weekly report. Do not ask me to paste credentials into the conversation.
 ```
 
-The latest tagged application release is **v0.3.0**; the internal evidence-pipeline version is **0.6.0**. `main` includes subsequent updates.
+The latest tagged application release is **v0.3.0**. This branch is preparing an unreleased **v0.4.0 candidate**; the internal evidence-pipeline version remains **0.6.0**.
 Formal real-machine acceptance has been completed on Windows. macOS and Linux paths are supported,
 but have not yet received equivalent real scheduled-run validation.
+
+<a id="technical-update-2026-10-08-v040-candidate"></a>
+
+## Technical update: preparing the v0.4.0 release candidate (2026-10-08)
+
+This isolated branch assembles the
+[accepted bounded Chinese-journal leads workflow](references/chinese-journal-stabilization.md),
+shared publisher-date corroboration across the three modes, and corrections to
+weekly source status and deduplication coverage as a `v0.4.0` candidate.
+The application metadata and `uv.lock` agree; the internal evidence pipeline
+stays at `0.6.0`. Chinese records remain separately labelled leads. Weekly and
+on-demand reports list them only when a supported publication month overlaps
+the relevant window.
+
+Confirmed newly published Chinese papers, fully automated coverage of all 15
+registered journals, complete database recall, and a fixed indexing delay are
+outside this release scope. Opening a public `v0.3.0` schema-4 state database
+with this schema-6 candidate first creates an integrity-checked backup; see
+the [upgrade guide](references/installation.en.md#upgrade-checks-for-the-v040-candidate).
+
+The release audit now excludes the `.git` pointer file used by linked worktrees.
+All 422 tests, Ruff, skill validation, the read-only release audit, and locked
+dependency installation passed. The required source-package files and private-path
+exclusions were checked; the wheel installed in a fresh environment and its command
+entrypoints worked. See the [release-candidate checks](references/v0.4-release-candidate.md).
+This is local release preparation; no `v0.4.0` tag or GitHub Release has been created.
+<a id="technical-update-2026-10-07-weekly-coverage"></a>
+
+## Technical update: weekly source status and deduplication coverage (2026-10-07)
+
+Weekly reports now distinguish `local_only` reviewed publisher issues from source failures.
+When checked network sources succeed and the local publisher-issue store has no newly reviewed
+issue, the report no longer claims that a source check failed. CNKI and Wanfang coverage now
+states how many eligible issue or article leads were listed previously, reconciling the candidate
+total with missing months, outside-window leads, and the current report. Previously listed leads
+remain deduplicated. Text corrections to an already successful report retain a private original
+and do not rerun its window or advance checkpoints. All 420 tests, Ruff, skill validation, and
+the read-only release audit passed. This is a local code and documentation update, without a push,
+version tag, or GitHub Release.
+
+<a id="technical-update-2026-09-28-weekly-months"></a>
+
+## Technical update: shared Chinese-journal dates and weekly section order (2026-09-28)
+
+Both complete language versions of weekly reports now list Chinese publisher, CNKI, and Wanfang
+leads before PhilPapers papers. The first CNKI baseline also applies the publication-month gate:
+only month-supported issues overlapping the weekly window display article titles. Earlier issues,
+missing months, and conflicting dates remain in coverage counts. Issue numbers, query dates, and
+announcement dates cannot supply a publication month. Announcement-only publisher issues are
+withheld from weekly reports; explicit issue labels and an earlier release day remain separate facts.
+
+When CNKI lacks dates, `scripts/prepare_weekly_cnki.py --config config/watchlist.yaml` produces a
+bounded, read-only candidate list for review against the publisher's same-article or same-issue page.
+Weekly preparation remains the default; `--mode pull-now --days N` and
+`--mode search --year-from YYYY --year-to YYYY` align preparation with the other two modes.
+All three modes share the evidence logic and consistent issue/article fields. Search JSON and Markdown
+show reviewed dates, publisher links, and missing/conflicting months. Historical candidates still
+follow the requested year scope; they are not automatically described as recent papers.
+The private reviewed-bibliography file accepts optional `issue_label_month` and `publication_date`
+fields. Only fully matching publisher bibliographies can supplement dates; catalog records cannot.
+Month filtering precedes article-level Wanfang checks. A previously undated observation can become
+eligible after corroboration, and an older catch-up window cannot consume a future issue early.
+Previously eligible issues remain deduplicated. See the
+[Chinese-source policy](references/chinese-source-expansion.md#43-月份精度与新期次观察).
+
+All 419 tests and Ruff passed, covering first-scan filtering, earlier and undated exclusions,
+bibliographic conflicts, invalid dates, early publication, later corroboration, future-window
+eligibility, both language orders, shared evidence across search and immediate results, year scopes,
+and read-only weekly state. The program consumes manually verified dates; the preparation
+script does not automatically interpret publisher dates, confirm first publication within the week,
+or establish interest-category membership. This is a local code and documentation update, without
+a push, version tag, or GitHub Release.
 
 <a id="technical-update-2026-09-28-journal-p2"></a>
 
@@ -480,7 +552,7 @@ See [Installation and first deployment](references/installation.en.md) and the
 
 ## 4. Current version
 
-Latest tagged release: `v0.3.0`; the table also includes the capability added by this `main` branch update.
+Latest tagged release: `v0.3.0`; this branch contains an unreleased `v0.4.0` application candidate.
 
 | Capability | Status |
 |---|---|
@@ -494,9 +566,9 @@ Latest tagged release: `v0.3.0`; the table also includes the capability added by
 | User-requested `pull-now` | Stable, explicit and read-only |
 | OAI cross-run caching, interruption recovery, and incremental refresh | Stable |
 | Chinese and English weekly/on-demand report output | Stable |
-| Bounded Chinese metadata candidates and reviewed issue leads | Stable, opt-in (`main` branch update) |
+| Bounded Chinese metadata candidates and reviewed issue leads | Stable, opt-in (`v0.4.0` candidate) |
 
-**Bounded Chinese-journal leads are a stable opt-in capability added on `main`; the existing `v0.3.0` tag has not been re-released.**
+**Bounded Chinese-journal leads are a stable opt-in capability in the `v0.4.0` candidate; the existing `v0.3.0` tag has not been re-released.**
 With `sources.cnki_space` enabled, search, pull-now, and weekly reports can each show bounded Chinese metadata leads and reviewed issue leads under their own time rules; the public example leaves this source disabled. Nine publisher directories can be scanned separately (eight textual TOCs and one PDF); the other six registered journals still require manual review. Automatically collected issue data must pass evidence review before it enters the three modes. Chinese candidates do not enter the verified-paper main section, and this feature does not promise complete Chinese-philosophy coverage, a fixed indexing time, or an interest-paper recall rate. P0/P1 of the bounded leads workflow and P2 issue-level accounting, entry decisions, and source-use limits have passed acceptance. The roughly eight-week repeated-article study remains a separate source-evaluation experiment; users do not need it to use the bounded service. See [Chinese sources and current limits](references/chinese-source-expansion.md).
 
 The OAI cache is a performance and recoverability mechanism, not a substitute for paper-freshness

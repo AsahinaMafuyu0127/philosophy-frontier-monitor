@@ -84,6 +84,8 @@ def render_paper_search(
         lines += [
             "以下题录由中文检索词发现，尚未完成作者发表时机构、论文类型、兴趣分类与跨库"
             "作品同一性核验，因此不计入上方已核验论文数或引用量排序。期号不等于月份。",
+            "缺少知网日期时使用同篇、同期的刊方证据补充。标示月份、出版日与观察日分别处理；"
+            "缺月或日期冲突的历史候选可保留，但不据此认定为近期论文。",
             "",
         ]
         if result.cnki_candidates:
@@ -95,7 +97,7 @@ def render_paper_search(
                 else {}
             )
             for record in result.cnki_candidates[:30]:
-                if record.year and record.label_month:
+                if record.year and record.label_month and not record.date_conflict:
                     issue = f"{record.year}年{record.label_month}月（来源标示）"
                     if record.issue and not record.issue.endswith("月"):
                         issue += f"、第{record.issue}期"
@@ -107,6 +109,16 @@ def render_paper_search(
                     f"- [{_safe_text(record.title)}]({record.url})；"
                     f"{_safe_text(record.venue)}；{issue}。"
                 )
+                if record.date_conflict:
+                    lines.append("  - 日期证据冲突：月份未定，不据此归入近期窗口。")
+                elif record.label_month is None:
+                    lines.append("  - 出版月份未核实；仅保留已有年份／期号，不推算月份。")
+                if record.date_evidence_urls:
+                    links = "、".join(
+                        f"[刊方日期证据]({url})" for url in record.date_evidence_urls
+                    )
+                    day = record.publication_date or "未明示日级日期"
+                    lines.append(f"  - {links}；刊方标示出版日期：{day}。")
                 assessment = assessments.get(record.url)
                 if assessment is not None:
                     if assessment.status == "corroborated":

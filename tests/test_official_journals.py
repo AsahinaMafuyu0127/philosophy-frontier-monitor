@@ -90,8 +90,9 @@ def test_reviewed_month_from_publisher_enriches_missing_cnki_month_only(tmp_path
         observed_at=datetime(2026, 9, 27, tzinfo=UTC),
     )
     assert _official_months_for_cnki((cnki,), reviewed)[0].label_month == 9
-    # A contradictory CNKI source value remains visible for later crosschecking.
-    assert _official_months_for_cnki((replace(cnki, label_month=8),), reviewed)[0].label_month == 8
+    conflicting = _official_months_for_cnki((replace(cnki, label_month=8),), reviewed)[0]
+    assert conflicting.label_month is None
+    assert conflicting.date_conflict
 
 
 def test_wechat_host_cannot_be_substituted_for_official_evidence(tmp_path: Path) -> None:
@@ -235,3 +236,27 @@ def test_weekly_uses_first_review_date_and_does_not_repeat_monthly_issue(tmp_pat
     )
     assert len(first_week) == 1
     assert later_week == ()
+
+
+@pytest.mark.parametrize("dates,eligible", [
+    ({"announcement_on": "2026-09-25"}, False),
+    ({"issue_published_on": "2026-09-15"}, True),
+    ({"label_month": "2026-08", "announcement_on": "2026-09-25"}, False),
+])
+def test_weekly_publisher_month_gate_does_not_use_announcement(tmp_path, dates, eligible):
+    observed = new_observation(
+        "ziran-bianzhengfa-tongxun", 2026, "9",
+        "https://jdn.ucas.ac.cn/home/column/lists/cid/349", "journal-site",
+    )
+    reviewed = replace(observed, status="reviewed",
+                       reviewed_at="2026-09-25T08:00:00+08:00", **dates)
+    record_issue(tmp_path / "official-journals.sqlite3", reviewed)
+    config = SimpleNamespace(
+        storage=SimpleNamespace(state_database=tmp_path / "state.sqlite3"),
+        timezone=ZoneInfo("Asia/Shanghai"),
+    )
+    selected = _official_issues_for_window(
+        config, datetime(2026, 9, 21, tzinfo=UTC), datetime(2026, 9, 28, tzinfo=UTC),
+        first_observed_only=True, publication_month_only=True,
+    )
+    assert bool(selected) == eligible

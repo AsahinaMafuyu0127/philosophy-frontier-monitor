@@ -87,18 +87,40 @@ When the
 private watchlist enables `sources.cnki_space`, `search`, `pull-now`, and
 `weekly-run` perform bounded CNKI Space metadata discovery using the public
 search method documented by the third-party cnki-search MCP. Its candidates and
-issue observations remain separate from verified PhilPapers matches. An issue
-labelled only with a year and issue number may be mentioned as first observed
-this week; do not invent a month or day or call the papers first published this
-week. Disclose blocked or truncated searches, and do not present this limited
-source as the complete CNKI KNS collection.
-For `pull-now`, show Chinese journal leads only when a reviewed official issue
-record or the database source explicitly labels a month that overlaps the
-selected rolling window. Withhold
+issue observations remain separate from verified PhilPapers matches. For both
+`weekly-run` and `pull-now`, show Chinese journal leads only when a reviewed
+publisher issue/article page or the database source supports a publication month
+overlapping the respective window. This also applies to the first weekly baseline.
+Disclose blocked or truncated searches, and do not present this limited source
+as the complete CNKI KNS collection. Withhold
 year-only or issue-number-only leads from that section, disclose their count,
 and do not infer that zero displayed leads means no recent Chinese papers.
 The month label is not an article's verified first-publication day; leave
 broader historical discovery to an explicit `search` request.
+Weekly reports put Chinese publisher, CNKI, and Wanfang sections before the
+PhilPapers paper sections in both language versions. All three modes share the
+same publisher-date evidence. Before weekly, immediate, or historical discovery
+with CNKI enabled, use `.venv/Scripts/python.exe scripts/prepare_weekly_cnki.py
+--config config/watchlist.yaml` for a bounded, read-only candidate list. Weekly is
+the default; add `--mode pull-now --days N` for the same immediate window, or
+`--mode search --year-from YYYY --year-to YYYY` for the historical year scope
+(omit year flags when unrestricted). Keep those options aligned with the final
+command. When CNKI
+lacks dates, follow the article to its publisher's official article or issue page
+and verify the same title, authors, journal, year, and issue. Save explicit
+`issue_label_month` (YYYY-MM) or `publication_date` (YYYY-MM-DD) with its URL and
+timezone-aware review time in the private reviewed-evidence file. These optional
+fields require a journal article/issue source, not a catalog record. An announcement,
+page-update date, issue number, or frequency is insufficient. Missing or conflicting
+months remain in coverage counts, without article titles in weekly or immediate
+lists. Historical `search` retains candidates within the requested year scope,
+explicitly marking unknown or conflicting months rather than calling them recent.
+Both structured search results and Markdown show publisher dates and source URLs;
+a month-only source stays month-only. Then run the requested `pull-now` or `search`,
+or the regular weekly `catch-up` once. Do not rerun a successful window to correct
+its presentation; preserve an original private report and amend the saved report
+without changing committed checkpoints or notification history. A formerly
+monthless CNKI observation remains eligible after later date corroboration.
 An optional Git-ignored `sources.cnki_space.reviewed_evidence` file holds
 manually checked journal or catalog bibliographies. The source page must support
 the stated title, authors, journal, year, issue, and any publication-time China

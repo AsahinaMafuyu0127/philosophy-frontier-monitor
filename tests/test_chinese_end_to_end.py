@@ -115,6 +115,12 @@ def test_fresh_profile_search_pull_weekly_and_reviewed_issue_journey(
     first_start = reviewed_at - timedelta(days=1)
     first_end = first_start + timedelta(days=7)
     second_end = first_end + timedelta(days=7)
+    second_month = (second_end - timedelta(microseconds=1)).astimezone(config.timezone)
+    second = replace(
+        second, year=second_month.year, label_month=second_month.month,
+        records=(replace(second.records[0], year=second_month.year,
+                         label_month=second_month.month),),
+    )
     scans = [(first,), (first, second)]
 
     def weekly_cnki(*_args, **kwargs):

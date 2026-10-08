@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+import yaml
 
 from philosophy_frontier_monitor.cnki_review import (
     BibliographicPeer,
@@ -15,7 +18,8 @@ from philosophy_frontier_monitor.cnki_review import (
     assess_cnki_record,
     load_reviewed_evidence,
 )
-from philosophy_frontier_monitor.sources.cnki_space import parse_result_page
+from philosophy_frontier_monitor.pipeline import _cnki_issues_in_window, _cnki_issues_with_dates
+from philosophy_frontier_monitor.sources.cnki_space import CnkiIssue, parse_result_page
 
 FIXTURES = Path(__file__).parent / "fixtures"
 RECORD = parse_result_page((FIXTURES / "cnki_space_list.html").read_text(encoding="utf-8"))[0][0]
@@ -80,3 +84,70 @@ def test_same_title_requires_author_and_year_for_strong_overlap() -> None:
     possible = assess_cnki_overlaps((RECORD,), (changed_year,))[0]
     assert possible.status == "needs_review"
     assert assess_cnki_overlaps((RECORD,), (unrelated,)) == ()
+
+
+@pytest.mark.parametrize(
+    "dates,expected",
+    [
+        ({"publication_date": "2026-09-15"}, 9),
+        ({"issue_label_month": "2026-09", "publication_date": "2026-08-31"}, 9),
+        ({}, None),
+    ],
+)
+def test_exact_publisher_bibliography_supplies_month(tmp_path, dates, expected) -> None:
+    payload = yaml.safe_load((FIXTURES / "cnki_reviewed_evidence.yaml").read_text("utf-8"))
+    payload["records"][0].update(dates)
+    reviewed = tmp_path / "reviewed.yaml"
+    reviewed.write_text(yaml.safe_dump(payload, allow_unicode=True), "utf-8")
+    config = SimpleNamespace(
+        storage=SimpleNamespace(state_database=tmp_path / "state.sqlite3"),
+        cnki_space=SimpleNamespace(reviewed_evidence=reviewed),
+    )
+    issue = CnkiIssue(
+        "synthetic", RECORD.venue, RECORD.year, RECORD.issue, None, (RECORD,), (),
+        datetime(2026, 9, 28, tzinfo=UTC),
+    )
+    enriched = _cnki_issues_with_dates(config, (issue,))[0]
+    assert enriched.label_month == expected
+    assert not enriched.date_conflict
+    conflicting = replace(issue, records=(replace(RECORD, authors=("乙",)),))
+    assert _cnki_issues_with_dates(config, (conflicting,))[0].label_month is None
+
+
+def test_conflicting_explicit_month_is_withheld(tmp_path) -> None:
+    payload = yaml.safe_load((FIXTURES / "cnki_reviewed_evidence.yaml").read_text("utf-8"))
+    payload["records"][0]["issue_label_month"] = "2026-08"
+    reviewed = tmp_path / "reviewed.yaml"
+    reviewed.write_text(yaml.safe_dump(payload, allow_unicode=True), "utf-8")
+    config = SimpleNamespace(
+        storage=SimpleNamespace(state_database=tmp_path / "state.sqlite3"),
+        cnki_space=SimpleNamespace(reviewed_evidence=reviewed),
+    )
+    issue = CnkiIssue(
+        "synthetic", RECORD.venue, RECORD.year, RECORD.issue, 9, (RECORD,), (),
+        datetime(2026, 9, 28, tzinfo=UTC),
+    )
+    enriched = _cnki_issues_with_dates(config, (issue,))[0]
+    assert enriched.date_conflict and enriched.label_month is None
+    selected, missing, outside = _cnki_issues_in_window(
+        (enriched,), window_start=datetime(2026, 9, 21, tzinfo=UTC),
+        window_end=datetime(2026, 9, 28, tzinfo=UTC), timezone=UTC,
+    )
+    assert (selected, missing, outside) == ((), 1, 0)
+
+
+@pytest.mark.parametrize("fields,error", [
+    ({"publication_date": "2026-02-30"}, "invalid_publication_date_evidence"),
+    ({"issue_label_month": "2026-13"}, "invalid_publication_date_evidence"),
+    ({"publication_date": "2025-09-15"}, "invalid_publication_date_evidence"),
+    ({"publication_date": "2026-09-15", "source_type": "catalog_record",
+      "china_affiliated_authors": []},
+     "publication_date_needs_publisher_page"),
+])
+def test_invalid_publisher_date_evidence_is_rejected(tmp_path, fields, error) -> None:
+    payload = yaml.safe_load((FIXTURES / "cnki_reviewed_evidence.yaml").read_text("utf-8"))
+    payload["records"][0].update(fields)
+    reviewed = tmp_path / "reviewed.yaml"
+    reviewed.write_text(yaml.safe_dump(payload, allow_unicode=True), "utf-8")
+    with pytest.raises(CnkiReviewError, match=error):
+        load_reviewed_evidence(reviewed)

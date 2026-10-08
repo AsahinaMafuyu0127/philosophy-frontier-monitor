@@ -129,6 +129,22 @@ def _safe_text(value: str) -> str:
     return escaped
 
 
+def _chinese_sources_first(lines: list[str], *, english: bool) -> None:
+    headings = (
+        ("## Publisher issue leads", "## Chinese journal issue observations", "## Wanfang ")
+        if english else
+        ("## 期刊官方发布渠道", "## 中文期刊新期次观察", "## 万方中文期刊")
+    )
+    start = next((i for i, line in enumerate(lines) if line.startswith(headings)), None)
+    if start is None:
+        return
+    match_heading = "## Matching papers" if english else "## 匹配论文"
+    insert_at = next(i for i, line in enumerate(lines) if line.startswith(match_heading))
+    block = lines[start:]
+    del lines[start:]
+    lines[insert_at:insert_at] = block
+
+
 def _cnki_issue_lines(
     issues: tuple[CnkiIssue, ...],
     *,
@@ -165,15 +181,18 @@ def _cnki_issue_lines(
         )
     elif english:
         lines.append(
-            "These are CNKI Space metadata observations, separate from verified new papers. "
-            "An issue number is not a month or a paper's first publication date."
+            "Only issues with a supported publication month overlapping the weekly window "
+            "are listed. Missing or conflicting dates and earlier issues are withheld. "
+            "Publisher issue/article pages supplement missing CNKI dates; an issue number "
+            "or observation date is not publication evidence."
         )
         if baseline:
             lines.append("This is the first bounded scan, so these issues form a baseline.")
     else:
         lines.append(
-            "以下是知网空间题录所显示的期次线索，与上方已核验新论文分列。期号不是月份，"
-            "本次检出不证明逐篇论文在本周首次发表。"
+            "仅列出版月份有证据、且月份与本周窗口相交的期次论文线索。知网缺月时，"
+            "按同刊、同年、同期的刊方期次或逐篇页面补证；缺月、日期冲突及窗外期次不列题名。"
+            "期号、检索日和首次观察日不能充当出版时间；月份精度不证明逐篇本周首次发表。"
         )
         if baseline:
             lines.append("这是该来源的首次有限检索；所列期次作为基线观察，不声称本周才上线。")
@@ -189,9 +208,10 @@ def _cnki_issue_lines(
             )
         else:
             empty_message = (
-                "No issue was observed in the configured query scope."
+                "No month-supported new issue can be listed for this weekly window; "
+                "this does not establish that no relevant paper exists."
                 if english
-                else "本次配置的检索范围内没有可列出的新期次。"
+                else "本次没有日期证据充分、可列入本周窗口的新期次；不能据此断言没有相关论文。"
             )
         lines.extend([empty_message, ""])
         return lines
@@ -217,6 +237,12 @@ def _cnki_issue_lines(
             f"({'observed' if english else '观察于'} "
             f"`{issue.observed_at.isoformat()}`)"
         )
+        if issue.date_evidence_urls:
+            source_label = "publisher date evidence" if english else "刊方日期证据"
+            sources = "; ".join(f"[{source_label}]({url})" for url in issue.date_evidence_urls)
+            day = issue.publication_date or ("not stated" if english else "未明示日级日期")
+            day_label = "publication date" if english else "刊方标示出版日期"
+            lines.append(f"  - {sources}；{day_label}：{day}")
         for record in issue.records[:3]:
             lines.append(f"  - [{_safe_text(record.title)}]({record.url})")
             assessment = reviewed.get(record.url)
@@ -643,7 +669,7 @@ def render_weekly_report(
 
     if not notifying:
         successful = any(item.status == "success" for item in coverage)
-        failed = any(item.status != "success" for item in coverage)
+        failed = any(item.status not in {"success", "local_only"} for item in coverage)
         if successful and not failed:
             lines.extend(
                 [
@@ -735,6 +761,8 @@ def render_weekly_report(
                 on_demand_window=cnki_on_demand_window,
             )
         )
+    if not cnki_on_demand_window:
+        _chinese_sources_first(lines, english=False)
     lines.extend(["## 数据源覆盖", ""])
     if not coverage:
         lines.extend(["- 未提供来源运行记录；不能断言本次监测覆盖完整。", ""])
@@ -880,7 +908,7 @@ def _render_weekly_report_en(
 
     if not notifying:
         successful = any(item.status == "success" for item in coverage)
-        failed = any(item.status != "success" for item in coverage)
+        failed = any(item.status not in {"success", "local_only"} for item in coverage)
         if successful and not failed:
             lines.extend(
                 [
@@ -974,6 +1002,8 @@ def _render_weekly_report_en(
                 on_demand_window=cnki_on_demand_window,
             )
         )
+    if not cnki_on_demand_window:
+        _chinese_sources_first(lines, english=True)
     lines.extend(["## Source coverage", ""])
     if not coverage:
         lines.extend(
