@@ -27,6 +27,15 @@ gaps. They do not rank paper quality or filter results by a model score.
 
 ### Public example: an actual pull from three real categories
 
+**Sample status (8 October 2026):** A new on-demand pull with the same three categories and a seven-day window did not produce a verifiable report. The statistics, complete report, and preview below remain the **successful 9 September 2026 snapshot**; they are not results for the current seven-day window.
+
+<details>
+<summary>Why this refresh could not be completed</summary>
+
+The isolated configuration used the complete taxonomy and the three exact categories, with state and output inside a Git-ignored directory. `pull-now` received HTTP 403 while reading the first PhilPapers category page; an independent `pfm feed` check received the same response. No report was generated and formal weekly state was not advanced. The public category webpage is viewable, but its visible list does not supply the category RSS, source-arrival, and publication-date evidence required by this report. We did not assemble a new weekly report from those webpage entries or present the old totals as current results.
+
+</details>
+
 The report below is not a synthetic mock-up. On 9 September 2026, the project actually ran a
 seven-day `pull-now` using `Moral Responsibility` (4590), `Free Will` (347), and `Action Theory`
 (5992) from the complete PhilPapers taxonomy. Each category was monitored exactly as selected;
@@ -91,6 +100,12 @@ first weekly report. Do not ask me to paste credentials into the conversation.
 The latest tagged application release is **v0.4.0**; the internal evidence-pipeline version remains **0.6.0**.
 Formal real-machine acceptance has been completed on Windows. macOS and Linux paths are supported,
 but have not yet received equivalent real scheduled-run validation.
+
+<a id="technical-update-2026-10-08-public-demo-refresh"></a>
+
+## Technical update: public sample refresh status (2026-10-08)
+
+We retried `pull-now` with the original three public categories and a seven-day window in an isolated configuration. The PhilPapers category page returned HTTP 403, and an independent `pfm feed` check returned the same result. Neither request generated a new report or advanced formal weekly state. The landing page now dates the successful 9 September 2026 snapshot and discloses that this refresh was incomplete, so its historical totals cannot be mistaken for the current window. The original report, preview, and paper records remain unchanged. This is a branch documentation update; it does not create a new version tag or GitHub Release.
 
 <a id="technical-update-2026-10-08-v040-release"></a>
 
