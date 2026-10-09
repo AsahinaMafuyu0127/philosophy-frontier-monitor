@@ -22,49 +22,51 @@ gaps. They do not rank paper quality or filter results by a model score.
 ![Four steps from a research interest to a weekly philosophy-paper report](assets/demo/philosophy-frontier-monitor-demo.png)
 
 [Read the complete public sample report](examples/public-demo-weekly-report.md) ·
-[Open the report-preview image](assets/demo/public-demo-weekly-report-2026-09-09.png) ·
+[Open the report-preview image](assets/demo/public-demo-weekly-report-2026-10-09.png) ·
 [Read the full installation guide](references/installation.en.md)
 
 ### Public example: an actual pull from three real categories
 
-**Sample status (9 October 2026):** The on-demand pull attempted on 8 October with the same three categories and a seven-day window did not produce a verifiable report. The statistics, complete report, and preview below remain the **successful 9 September 2026 snapshot**; they are not results for the current seven-day window.
+**Sample status (9 October 2026):** A seven-day `pull-now` ran at 13:08 China Standard Time,
+covering 2 October 13:08 to 9 October 13:08 (exclusive end). It used the complete PhilPapers
+taxonomy and the exact categories `Moral Responsibility` (4590), `Free Will` (347), and
+`Action Theory` (5992), without descendants. All three official category RSS feeds were read
+successfully. The report is an actual run, not a synthetic example.
 
-A further check on 9 October traced the category-page failure to a Cloudflare challenge. Official RSS links for two categories are directly readable, while the third category page still stops at the challenge. **No complete new report for the three categories has been generated.**
+The run found **1 confirmed-new paper** and **34 recent PhilPapers source arrivals**, for
+35 deduplicated matching works. A source arrival means a work entered the selected categories'
+PhilPapers or PhilArchive source-change set and this run found no earlier-work evidence; it
+does not establish a formal publication date. The complete report groups the 35 works as
+**recently published** (1), **recently arrived** (17), and **recently changed** (17).
+Each group is ordered newest first by the date evidence appropriate to it. Recently changed
+is collapsed by default, with a visible show/hide control. Another **45 records require human review**.
+
+The image previews the report's first page. The
+[complete Markdown report](examples/public-demo-weekly-report.md) retains all 35 works in Chinese
+and English, with expandable review records and technical notes. The
+[9 September 2026 snapshot](examples/public-demo-weekly-report-2026-09-09.md) remains available.
+The on-demand run did not advance formal weekly state.
+
+![Classical ivory first-page preview of a report generated from three real PhilPapers categories](assets/demo/public-demo-weekly-report-2026-10-09.png)
 
 <details>
-<summary>Why this refresh could not be completed</summary>
+<summary>Coverage and verification limits for this pull</summary>
 
-The isolated configuration used the complete taxonomy and the three exact categories, with state and output inside a Git-ignored directory. `pull-now` received HTTP 403 while reading the first PhilPapers category page; an independent `pfm feed` check received the same response. No report was generated and formal weekly state was not advanced. The public category webpage is viewable, but its visible list does not supply the category RSS, source-arrival, and publication-date evidence required by this report. We did not assemble a new weekly report from those webpage entries or present the old totals as current results.
+Each official category RSS feed returned 500 entries. The program read all returned entries,
+but exactly 500 does not establish that the source has no item cap or that the feed contains
+every work from the seven-day period. PhilArchive OAI returned 148,183 source events in the
+window, mainly record changes rather than new publications. OpenAlex lookup failures and a
+rate limit left 19 candidates awaiting a later automatic retry; 45 others require human
+review. None of these unresolved candidates is counted among the 35 matches. This public
+example did not enable CNKI or Wanfang or check Chinese journal sites live. The report gives
+the full source status and evidence boundaries.
 
 </details>
 
-The report below is not a synthetic mock-up. On 9 September 2026, the project actually ran a
-seven-day `pull-now` using `Moral Responsibility` (4590), `Free Will` (347), and `Action Theory`
-(5992) from the complete PhilPapers taxonomy. Each category was monitored exactly as selected;
-descendants were not added. The example uses the read-only on-demand mode—which shares the weekly
-evidence rules—so that it does not pretend a scheduled run occurred or alter formal weekly state.
-
-The primary result of the actual run was **1 confirmed-new paper**, plus **91 recent PhilPapers
-source arrivals**. The latter entered the PhilPapers or PhilArchive source-change set for the
-selected categories, and that run's old-work check found no earlier work evidence; this is not a
-claim that a formal publication date was obtained. Together they make 92 deduplicated works.
-The matching-paper block is now divided into **recently published** (1), **recently arrived** (2),
-and **recently changed** (89), in that order. Each group is ordered newest first by the evidence
-appropriate to its meaning and separated by a rule. Recently changed is collapsed by default, but
-the report always leaves a visible show/hide control.
-
-An additional **18 records require human review**.
-
-The image shows the report's first page. The
-[complete Markdown report](examples/public-demo-weekly-report.md) contains all 92 papers in Chinese
-and English. Review records and technical notes can be expanded there if the reader wants details.
-
-![Classical ivory first-page preview of a report generated from three real PhilPapers categories](assets/demo/public-demo-weekly-report-2026-09-09.png)
-
 The CLI's native report format is Markdown. In a Codex environment with document or presentation
 generation capabilities, a user may also ask Codex to typeset the same report as **Word (.docx)**
-or **PowerPoint (.pptx)**. That is a post-report presentation conversion: it does not re-filter the
-papers, and it is not a native `pfm` CLI export format.
+or **PowerPoint (.pptx)**. That is a post-report presentation conversion: it does not re-filter
+the papers, and it is not a native `pfm` CLI export format.
 In interactive Markdown, the record-change group can be expanded directly. Before conversion to
 Word or PowerPoint, add `--show-recently-changed` when that group should be expanded in the source
 report.
@@ -105,9 +107,19 @@ but have not yet received equivalent real scheduled-run validation.
 
 <a id="technical-update-2026-10-09-official-rss-link"></a>
 
-## Technical update: direct official RSS links (2026-10-09)
+## Technical update: direct official RSS and refreshed public report (9 October 2026)
 
-We identified the local category-page HTTP 403 as a Cloudflare challenge; the FAQ remained reachable. Official links generated by the category pages' own controls returned valid RSS XML for `Moral Responsibility` and `Free Will`. A private watchlist may now supply an optional `official_rss_url`; the program checks the host, category identity, and unfiltered RSS parameters before reading it under the existing evidence rules. Without that field, category-page discovery remains the default. The new pipeline parsed 500 entries from each of the two links; 433 tests, Ruff, Skill validation, and the read-only release check passed. Exactly 500 entries does not establish that the source has no item cap. The two verified links do not supply the missing `Action Theory` category: its browser page still stops at the challenge, so the public seven-day report has not been refreshed. See the [source audit](references/source-catalog.md#2026-10-09-访问复核) and [installation guide](references/installation.en.md#5-taxonomy-and-credentials). This is a branch code and documentation update, not a new version tag or GitHub Release.
+The local command-line HTTP 403 on category pages was identified as a Cloudflare challenge.
+After the user completed ordinary browser verification, all three category pages generated
+official RSS links through their own controls. The optional private-watchlist
+`official_rss_url` validates the host, category identity, and unfiltered parameters before
+reading these links under the existing evidence rules. An isolated seven-day `pull-now`
+completed: the report contains 1 confirmed-new paper, 34 recent source arrivals, and
+45 human-review records. Source coverage, unfinished verification, and upstream limits
+remain in the report's optional technical notes. Formal weekly state was not advanced.
+All 433 tests, Ruff, Skill validation, and the read-only release check passed. See the [complete public report](examples/public-demo-weekly-report.md)
+and [source audit](references/source-catalog.md#2026-10-09-访问复核). This is a branch documentation
+and sample update, not a new version tag or GitHub Release.
 
 <a id="technical-update-2026-10-08-public-demo-refresh"></a>
 
