@@ -87,6 +87,15 @@ Windows 用户还应检查 `storage.state_database` 的实际位置。OAI 与书
 同一官方 JSON，然后执行 `taxonomy-import` 验证；不得伪装浏览器、复用 Cookie、关闭 TLS 或绕过
 访问控制。
 
+若被拦截的是已确认分类的**网页发现步骤**，但正常浏览器能打开该分类页及其右侧 `RSS feed` 控件，
+可将该控件生成的官方 RSS 链接保存为私人 `config/watchlist.yaml` 中对应分类的
+`sources.philpapers_category_pages[].official_rss_url`。程序会核对 HTTPS 域名、分类 ID、页面
+slug、`new=1` 和未加额外筛选的订阅参数，再直接读取官方 RSS XML；未配置此字段时仍按原方式从
+分类页发现 feed。链接内含不透明 `dg` 参数，只放在 Git 忽略的私人配置，不粘贴到聊天或公开仓库。
+若浏览器也停在安全验证页，不能据此猜测订阅地址或绕过验证；缺少任何必需分类的 feed 时，完整
+即时拉取仍应停止，不以部分分类结果冒充完整周报。官方订阅链接日后若失效，需重新从可访问的
+官方页面取得并核对。
+
 OpenAlex key 不是建立兴趣画像所必需，但宽范围书目核验可能需要较多 credits。可选 key 同样只能
 从私人文件或当前进程环境读取。
 

@@ -236,6 +236,15 @@ for existing schedules and configuration consistency.
    the same official JSON response in a private browser session and validate it
    with `pfm taxonomy-import`; do not impersonate a browser or reuse cookies to
    bypass the challenge.
+   If a selected category page is challenged but its ordinary browser page
+   presents an `RSS feed` control, the user may generate the official link there
+   and save it as `official_rss_url` beside that category's `url` in the private,
+   Git-ignored watchlist. Validate that the link's host, category ID, slug,
+   unfiltered scope and RSS parameters match the confirmed category. This link
+   is an optional direct feed entrypoint, not a replacement for the taxonomy or
+   a way to solve or bypass a challenge. Never paste its opaque `dg` value into
+   public files or logs. If a required category remains challenged and no
+   verified link is available, stop the complete `pull-now` or weekly run.
 2. When a new taxonomy snapshot is obtained, retain the old file and run
    `pfm taxonomy-audit` before changing the private watchlist. Read
    [taxonomy-lifecycle.md](references/taxonomy-lifecycle.md). Never infer a

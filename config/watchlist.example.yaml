@@ -56,6 +56,9 @@ sources:
     - category_id: "74924"
       category_name: "Plato: Theaetetus"
       url: "https://philpapers.org/browse/plato-theaetetus"
+      # If the category page is challenged, use its own RSS feed control in a
+      # normal browser and put the generated link in the Git-ignored private
+      # watchlist as official_rss_url. Do not commit or share the opaque link.
     - category_id: "74844"
       category_name: "Plato: Knowledge and Belief"
       url: "https://philpapers.org/browse/plato-knowledge-and-belief"

@@ -105,6 +105,7 @@ from .sources.philpapers_rss import (
 )
 from .sources.philpapers_rss import (
     FeedEntry,
+    direct_feed_request,
     discover_feed_request,
     fetch_feed,
     parse_feed,
@@ -658,7 +659,11 @@ def load_philpapers_feed(
     *,
     client: httpx.Client | None = None,
 ) -> FeedSnapshot:
-    request = discover_feed_request(feed.url, client=client)
+    request = (
+        direct_feed_request(feed.url, feed.category_id, feed.official_rss_url)
+        if feed.official_rss_url is not None
+        else discover_feed_request(feed.url, client=client)
+    )
     if request.category_id != feed.category_id:
         raise PipelineError(
             f"PhilPapers page {feed.url} resolved to cId={request.category_id}, "
