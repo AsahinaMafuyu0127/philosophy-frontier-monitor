@@ -178,6 +178,21 @@ PhilPapers 官方说明：用户可以在满足任意搜索或筛选条件的页
 
 `confirmed`（用于分类页成员关系与 feed 发现）；`not_suitable`（单独用于本周发表日期核验）
 
+### 2026-10-09 访问复核
+
+隔离公开示例的 `pull-now` 在第一个分类页返回 HTTP 403。相同机器上，PhilPapers FAQ 对诚实项目
+User-Agent 返回 200，但分类页在 Python 客户端与系统 `curl` 均返回 403；后者响应明确包含
+`Server: cloudflare`、`Cf-Mitigated: challenge`。正常浏览器可打开 `Moral Responsibility` 与
+`Free Will` 分类页并使用页面的 `RSS feed` 控件；控件生成的两个官方链接均由同一 Python 客户端
+直接取得有效 RSS/RDF XML，各返回 500 条。`Action Theory` 分类页在本次浏览器核查中停在
+Cloudflare 安全验证页，未取得其官方链接。因此三个分类的完整新周报仍未生成。恰好返回 500 条
+不能证明服务端不存在条数上限，也不能证明七日范围的全部材料已经进入当前 RSS。
+
+新增可选私人 `official_rss_url`：仅接受所选分类的官方 HTTPS 页面路径、同一分类 ID 与 slug、
+`format=rss`、`new=1` 和未增加筛选条件的生成链接；直接读取后仍检查响应内容类型和 XML 根元素。
+它只省去受挑战的分类页发现步骤，不改变作品类型、日期、旧作排除与分类交集政策；缺少任何必需
+分类的官方链接时仍停止完整运行。不伪装浏览器、不复用 Cookie、不自动处理 Cloudflare 验证页。
+
 ### 实现限制
 
 - 解析器按表单 `id`、字段 `name` 和 RSS 生成链接参数读取，不按屏幕位置或 CSS 排列猜测；

@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import httpx
 import pytest
 
 from philosophy_frontier_monitor import pipeline
@@ -540,6 +541,39 @@ def test_default_feed_loading_reuses_one_philpapers_connection_pool(monkeypatch)
     assert len(snapshots) == 2
     assert len(created_clients) == 1
     assert observed_clients == [created_clients[0]] * 4
+
+
+def test_direct_official_rss_skips_challenged_category_page(monkeypatch):
+    feed = FeedConfig(
+        category_id="74924",
+        category_name="Plato: Theaetetus",
+        url="https://philpapers.org/browse/plato-theaetetus/",
+        official_rss_url=(
+            "https://philpapers.org/browse/plato-theaetetus/"
+            "?cId=74924&catId=74924&cn=plato-theaetetus&dg=example123"
+            "&format=rss&import_options=1&new=1&proOnly=on&search_inside=1&sort=cat"
+        ),
+    )
+    xml = (FIXTURE_DIR / "philpapers_feed_sample.xml").read_text(encoding="utf-8")
+    requested_urls = []
+
+    def handler(request):
+        requested_urls.append(str(request.url))
+        return httpx.Response(
+            200, text=xml, headers={"content-type": "application/rss+xml"}, request=request
+        )
+
+    monkeypatch.setattr(
+        pipeline,
+        "discover_feed_request",
+        lambda *_args, **_kwargs: pytest.fail("category page must not be requested"),
+    )
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        snapshot = pipeline.load_philpapers_feed(feed, REQUEST_TIME, client=client)
+
+    assert requested_urls == [feed.official_rss_url]
+    assert snapshot.category_id == "74924"
+    assert len(snapshot.entries) == 1
 
 
 def test_default_fallback_reuses_crossref_and_openalex_connection_pools(monkeypatch):
