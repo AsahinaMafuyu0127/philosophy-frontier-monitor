@@ -19,40 +19,39 @@
 ![从研究方向到每周哲学论文报告的四步流程](assets/demo/philosophy-frontier-monitor-demo.png)
 
 [查看完整公开示例周报](examples/public-demo-weekly-report.md) ·
-[查看周报预览原图](assets/demo/public-demo-weekly-report-2026-09-09.png) ·
+[查看周报预览原图](assets/demo/public-demo-weekly-report-2026-10-09.png) ·
 [完整安装说明](references/installation.md)
 
 ### 公开示例：用三个真实标签实际拉取
 
-**示例状态（2026-10-09）：**10 月 8 日按相同三个标签和七日窗口重新运行即时拉取，未能取得可核验的新报告。因此，下方的统计、完整报告和预览图仍是 **2026-09-09 的成功运行快照**，不代表当前七日窗口的结果。
+**示例状态（2026-10-09）：**本次在北京时间 10 月 9 日 13:08 运行七日 `pull-now`，窗口为
+10 月 2 日 13:08 至 10 月 9 日 13:08（右端不含）。选用完整 PhilPapers taxonomy 中的
+`Moral Responsibility`（4590）、`Free Will`（347）和 `Action Theory`（5992），均按精确分类读取，
+不展开子类。三个分类的官方 RSS 均成功读取，报告来自真实运行，不是合成稿。
 
-2026-10-09 的进一步核查定位到分类页的 Cloudflare 安全验证。两个分类的官方 RSS 链接可以直接读取，第三个分类的页面仍停在验证页；**三个标签的完整新报告尚未生成**。
+**确认新出 1 篇**，另有 **PhilPapers 新近来源 34 篇**，合计 35 篇去重后的匹配作品。
+“新近来源”表示作品进入所选分类的 PhilPapers／PhilArchive 来源变化集合，且本次旧作检查未见
+更早作品证据；它不等于取得正式发表日期。完整报告将 35 篇依次分为
+**recently published**（1 篇）、**recently arrived**（17 篇）与
+**recently changed**（17 篇）。各组按相应证据时间从新到旧排列；来源记录变化组默认折叠，
+保留可见的显示／隐藏开关。另有 **45 条记录需要人工复核**。
+
+下图呈现本次报告第一页。[完整 Markdown](examples/public-demo-weekly-report.md)保留全部 35 篇的
+中英文记录，以及可展开的复核记录和技术说明。[2026-09-09 旧版快照](examples/public-demo-weekly-report-2026-09-09.md)
+仍可查阅。即时模式不推进正式周报状态。
+
+![三个真实 PhilPapers 标签生成的古典象牙白周报第一页](assets/demo/public-demo-weekly-report-2026-10-09.png)
 
 <details>
-<summary>查看本次更新未完成的来源说明</summary>
+<summary>查看本次拉取的覆盖与核验限制</summary>
 
-隔离配置使用完整 taxonomy、三个精确分类，并把状态与报告写入 Git 忽略目录；`pull-now` 在读取第一个 PhilPapers 分类页时收到 HTTP 403，独立的 `pfm feed` 读取核查也收到 HTTP 403。运行未生成报告、未推进正式周报状态。公开分类网页可查看，但网页列表不能替代项目所需的分类 RSS、来源到达与发表日期核验；因此没有把网页条目拼接为新周报，也没有把旧统计标作本周结果。
+三个分类的官方 RSS 各返回 500 条；程序读完了这些返回内容，但恰好 500 条不能证明来源没有
+条数上限，也不能证明当前 RSS 覆盖了七日内全部作品。PhilArchive OAI 在本窗口内返回 148,183 条
+来源事件，主要为记录变化，不能当作新发表论文。OpenAlex 书目核验遇到限额与请求失败，
+19 条候选等待后续自动重试；还有 45 条需人工复核，均未计入 35 篇匹配结果。
+本示例未启用知网、万方，也未实时巡查中文期刊原站。完整的来源状态和证据边界见报告末尾。
 
 </details>
-
-下面的报告不是合成稿。它于 2026-09-09 使用完整 PhilPapers taxonomy 中的
-`Moral Responsibility`（4590）、`Free Will`（347）和 `Action Theory`（5992）三个分类实际运行
-七日 `pull-now` 生成；三个分类均按精确范围读取，不展开子类。为避免改动正式周报状态，示例采用
-与每周监测共享证据规则的只读即时模式，而不是伪造一次已经提交的定时运行。
-
-这次真实运行的首要结果是：**确认新出 1 篇**，另有 **PhilPapers 新近来源 91 篇**。后者表示
-论文新近进入所选分类对应的 PhilPapers／PhilArchive 来源变化集合，而且当次旧作检查没有发现更早
-作品证据；它不等于已经取得正式发表日期。两项合计 92 篇，并在同一报告内按作品去重。匹配论文
-现在依次分为 **recently published**（1 篇）、**recently arrived**（2 篇）和
-**recently changed**（89 篇）：每组按与其语义相符的证据时间从新到旧排列，组间有清楚的分割线；
-`recently changed` 默认折叠，但报告中始终保留可见的显示／隐藏开关。
-
-另有 **18 条记录需要人工复核**。
-
-下图呈现报告第一页。[完整 Markdown](examples/public-demo-weekly-report.md)收录全部 92 篇的
-中英文记录；需要了解更多时，可自行展开其中的复核记录与技术说明。
-
-![三个真实 PhilPapers 标签生成的古典象牙白周报第一页](assets/demo/public-demo-weekly-report-2026-09-09.png)
 
 CLI 原生报告格式是 Markdown。若当前 Codex 环境具备文档或演示文稿生成能力，用户还可以要求把
 同一份报告转排为 **Word（.docx）** 或 **PowerPoint（.pptx）**；这是报告生成后的呈现转换，不会
@@ -88,9 +87,15 @@ macOS／Linux 路径已经兼容，但尚未取得同等的真实定时运行验
 
 <a id="technical-update-2026-10-09-official-rss-link"></a>
 
-## 技术更新：官方 RSS 直读入口（2026-10-09）
+## 技术更新：官方 RSS 直读与公开周报刷新（2026-10-09）
 
-查明本机分类页的 HTTP 403 是 Cloudflare 安全验证，帮助页仍可访问；通过分类页自身控件生成的 `Moral Responsibility` 与 `Free Will` 官方 RSS 链接则返回有效 XML。私人 watchlist 可选填 `official_rss_url`，程序严格核对域名、分类身份与未筛选的 RSS 参数，再按原有证据规则读取；没有该字段时仍使用分类页发现。两个链接经新管线各解析 500 条，433 项测试、Ruff、Skill 校验和只读发布检查通过；恰好 500 条不证明没有来源条数上限。两个链接的实测不能替代第三个 `Action Theory` 分类：其浏览器页面仍停在验证页，故公开示例的七日周报尚未刷新。测试与访问边界见[来源目录](references/source-catalog.md#2026-10-09-访问复核)，配置方法见[安装指南](references/installation.md#5-taxonomy-与凭据)。本次为分支代码与文档更新，未创建新版本标签或 GitHub Release。
+本机分类页的命令行 HTTP 403 确认为 Cloudflare 安全验证。经用户在正常浏览器完成页面验证后，
+三个分类均由各自页面控件生成官方 RSS 链接；私人 watchlist 的可选 `official_rss_url` 经过域名、
+分类身份与未筛选参数核对，可直接读取这些链接，原有证据规则不变。隔离七日 `pull-now` 实际完成，
+报告列出 1 篇确认新出、34 篇新近来源，45 条需人工复核。来源覆盖、未完成核验与上游限制
+保留在报告的可选展开说明中；正式周报状态未推进。433 项测试、Ruff、Skill 校验和只读发布检查通过。
+来源与方法见[完整公开报告](examples/public-demo-weekly-report.md)及[来源目录](references/source-catalog.md#2026-10-09-访问复核)。
+本次为分支文档与示例更新，未创建新版本标签或 GitHub Release。
 
 <a id="technical-update-2026-10-08-public-demo-refresh"></a>
 
