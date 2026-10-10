@@ -48,6 +48,7 @@ class WorkTypeStatus(StrEnum):
     DEFAULTED = "defaulted"
     UNKNOWN = "unknown"
     CONFLICT = "conflict"
+    REVIEWED = "reviewed"
 
 
 class MappingSource(StrEnum):

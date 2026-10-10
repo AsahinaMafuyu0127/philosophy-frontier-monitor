@@ -173,15 +173,19 @@ def _safe_raw_type(value: str) -> str | None:
     return normalized
 
 
+def _safe_source_raw_type(source: str, value: str) -> str | None:
+    if source == "philarchive-oai":
+        prefix = "info:eu-repo/semantics/"
+        normalized_uri = value.strip().casefold()
+        if normalized_uri.startswith(prefix):
+            value = normalized_uri.removeprefix(prefix)
+    return _safe_raw_type(value)
+
+
 def normalize_source_work_type(source: str, raw_type: str) -> str | None:
     """Map one provider's controlled type to the project's canonical vocabulary."""
 
-    if source == "philarchive-oai":
-        prefix = "info:eu-repo/semantics/"
-        normalized_uri = raw_type.strip().casefold()
-        if normalized_uri.startswith(prefix):
-            raw_type = normalized_uri.removeprefix(prefix)
-    safe_raw = _safe_raw_type(raw_type)
+    safe_raw = _safe_source_raw_type(source, raw_type)
     if safe_raw is None:
         return None
     mapping = SOURCE_TYPE_MAPS.get(source)
@@ -200,7 +204,7 @@ def resolve_work_type(
     evidence = tuple(
         WorkTypeEvidence(
             source=signal.source,
-            raw_type=_safe_raw_type(signal.raw_type) or "unrecognized",
+            raw_type=_safe_source_raw_type(signal.source, signal.raw_type) or "unrecognized",
             normalized_type=normalize_source_work_type(signal.source, signal.raw_type),
             source_record_id=signal.source_record_id,
             method=signal.method,
@@ -218,6 +222,14 @@ def resolve_work_type_evidence(
 ) -> WorkTypeResolution:
     """Resolve already-normalized evidence when duplicate work records are merged."""
 
+    reviewed = {
+        item.normalized_type for item in evidence if item.method == "document-inspection"
+    }
+    if reviewed:
+        if len(reviewed) != 1 or None in reviewed:
+            return WorkTypeResolution("conflict", WorkTypeStatus.CONFLICT, evidence)
+        return WorkTypeResolution(next(iter(reviewed)), WorkTypeStatus.REVIEWED, evidence)
+
     recognized = {item.normalized_type for item in evidence if item.normalized_type is not None}
     if not evidence:
         return WorkTypeResolution(default_type, WorkTypeStatus.DEFAULTED, ())
@@ -225,11 +237,15 @@ def resolve_work_type_evidence(
         return WorkTypeResolution("unknown", WorkTypeStatus.UNKNOWN, evidence)
 
     supported = recognized.intersection(SUPPORTED_CANONICAL_WORK_TYPES)
-    unsupported = recognized.difference(SUPPORTED_CANONICAL_WORK_TYPES)
+    # `other` is a catch-all, not an affirmative assertion that a record is
+    # a book, dataset, or another excluded form. Keep it in the evidence, but
+    # let a specific supported label decide when both are present.
+    decisive = recognized - {"other"} if supported else recognized
+    unsupported = decisive.difference(SUPPORTED_CANONICAL_WORK_TYPES)
     if supported and unsupported:
         return WorkTypeResolution("conflict", WorkTypeStatus.CONFLICT, evidence)
 
-    selected = min(recognized, key=lambda item: (TYPE_PREFERENCE.get(item, 100), item))
+    selected = min(decisive, key=lambda item: (TYPE_PREFERENCE.get(item, 100), item))
     status = WorkTypeStatus.CONFIRMED if len(recognized) == 1 else WorkTypeStatus.COMPATIBLE
     if any(item.method == "explicit-bibliographic-label" for item in evidence):
         status = WorkTypeStatus.EXPLICIT_LABEL

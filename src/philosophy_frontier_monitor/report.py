@@ -10,12 +10,14 @@ from urllib.parse import quote
 
 from .cnki_review import CnkiAssessment, CnkiOverlap
 from .models import (
+    DateValue,
     FreshnessStatus,
     InterestProfile,
     MatchDecision,
     MatchRecord,
     TaxonomySnapshot,
     WorkRecord,
+    WorkTypeEvidence,
     WorkTypeStatus,
 )
 from .official_journals import OfficialIssue, render_issue_leads
@@ -38,6 +40,9 @@ class HumanReviewItem:
     author_text: str | None
     stable_url: str | None
     reason_code: str
+    work_type_evidence: tuple[WorkTypeEvidence, ...] = ()
+    evidence_fingerprint: str | None = None
+    publication_date: DateValue | None = None
 
 
 UNRESOLVED_REASON_LABELS = {
@@ -103,7 +108,7 @@ def _human_review_lines(items: tuple[HumanReviewItem, ...]) -> list[str]:
     if not items:
         return []
     lines = ["需要人工复核的候选：", ""]
-    for index, item in enumerate(items[:9], start=1):
+    for index, item in enumerate(items, start=1):
         reason = UNRESOLVED_REASON_LABELS.get(item.reason_code, item.reason_code)
         lines.extend(
             [
@@ -113,10 +118,28 @@ def _human_review_lines(items: tuple[HumanReviewItem, ...]) -> list[str]:
                 f"   - 来源链接：{_safe_text(item.stable_url) if item.stable_url else '未记录'}",
             ]
         )
-    if len(items) > 9:
-        lines.append(f"- 另有 {len(items) - 9} 条人工复核候选未在本报告展开。")
+        if item.work_type_evidence:
+            lines.append(f"   - 类型证据：{_human_review_type_evidence(item)}")
+        if item.evidence_fingerprint:
+            lines.append(f"   - 证据指纹：`{item.evidence_fingerprint}`")
+        if item.publication_date:
+            lines.append(f"   - 来源日期：{_human_review_date(item.publication_date)}")
     lines.append("")
     return lines
+
+
+def _human_review_type_evidence(item: HumanReviewItem) -> str:
+    return "; ".join(
+        f"{_safe_text(evidence.source)} "
+        f"{_safe_text(evidence.raw_type)} → "
+        f"{_safe_text(evidence.normalized_type or 'unknown')}"
+        for evidence in item.work_type_evidence
+    )
+
+
+def _human_review_date(value: DateValue) -> str:
+    rendered = value.value.isoformat() if isinstance(value.value, (date, datetime)) else value.value
+    return f"{_safe_text(str(rendered))} ({value.precision.value}; {_safe_text(value.source)})"
 
 
 def _safe_text(value: str) -> str:
@@ -452,6 +475,11 @@ def _work_type_evidence_text(work: WorkRecord) -> str:
                 if item.normalized_type and item.normalized_type != item.raw_type
                 else ""
             )
+            + (
+                f"（核查来源：{_safe_text(item.source_record_id)}）"
+                if item.method == "document-inspection" and item.source_record_id
+                else ""
+            )
             for item in work.work_type_evidence
         )
     if work.work_type_status is WorkTypeStatus.DEFAULTED:
@@ -466,6 +494,11 @@ def _work_type_evidence_text_en(work: WorkRecord) -> str:
             + (
                 f" -> {_safe_text(item.normalized_type)}"
                 if item.normalized_type and item.normalized_type != item.raw_type
+                else ""
+            )
+            + (
+                f" (inspected source: {_safe_text(item.source_record_id)})"
+                if item.method == "document-inspection" and item.source_record_id
                 else ""
             )
             for item in work.work_type_evidence
@@ -1063,7 +1096,7 @@ def _render_weekly_report_en(
             lines.extend(["Reasons:", "", *reason_lines, ""])
         if human_review_items:
             lines.extend(["Candidates requiring human review:", ""])
-            for index, item in enumerate(human_review_items[:9], start=1):
+            for index, item in enumerate(human_review_items, start=1):
                 reason = UNRESOLVED_REASON_LABELS_EN.get(item.reason_code, item.reason_code)
                 lines.extend(
                     [
@@ -1075,11 +1108,12 @@ def _render_weekly_report_en(
                         + (_safe_text(item.stable_url) if item.stable_url else "Not recorded"),
                     ]
                 )
-            if len(human_review_items) > 9:
-                lines.append(
-                    f"- {len(human_review_items) - 9} additional human-review candidates are not "
-                    "expanded in this report."
-                )
+                if item.work_type_evidence:
+                    lines.append(f"   - Work-type evidence: {_human_review_type_evidence(item)}")
+                if item.evidence_fingerprint:
+                    lines.append(f"   - Evidence fingerprint: `{item.evidence_fingerprint}`")
+                if item.publication_date:
+                    lines.append(f"   - Source date: {_human_review_date(item.publication_date)}")
             lines.append("")
 
     lines.extend(
@@ -1429,7 +1463,7 @@ def _render_on_demand_report_en(
             workload_lines.extend(["Reasons:", "", *reason_lines, ""])
         if human_review_items:
             workload_lines.extend(["Candidates requiring human review:", ""])
-            for index, item in enumerate(human_review_items[:9], start=1):
+            for index, item in enumerate(human_review_items, start=1):
                 reason = UNRESOLVED_REASON_LABELS_EN.get(item.reason_code, item.reason_code)
                 workload_lines.extend(
                     [
@@ -1441,11 +1475,18 @@ def _render_on_demand_report_en(
                         + (_safe_text(item.stable_url) if item.stable_url else "Not recorded"),
                     ]
                 )
-            if len(human_review_items) > 9:
-                workload_lines.append(
-                    f"- {len(human_review_items) - 9} additional human-review candidates are not "
-                    "expanded in this report."
-                )
+                if item.work_type_evidence:
+                    workload_lines.append(
+                        f"   - Work-type evidence: {_human_review_type_evidence(item)}"
+                    )
+                if item.evidence_fingerprint:
+                    workload_lines.append(
+                        f"   - Evidence fingerprint: `{item.evidence_fingerprint}`"
+                    )
+                if item.publication_date:
+                    workload_lines.append(
+                        f"   - Source date: {_human_review_date(item.publication_date)}"
+                    )
             workload_lines.append("")
         lines[method_index:method_index] = workload_lines
     if undated_quarantine_count:

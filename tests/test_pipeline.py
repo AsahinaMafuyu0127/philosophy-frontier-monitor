@@ -935,6 +935,10 @@ def test_crossref_and_openalex_supported_unsupported_type_conflict_is_withheld(m
 
     assert result.work is None
     assert result.reason_code == "structured_work_type_conflict"
+    assert {evidence.source for evidence in result.work_type_evidence} == {
+        "crossref",
+        "openalex",
+    }
 
 
 def test_future_publication_date_is_reported_as_current_source_arrival(monkeypatch):
@@ -1212,7 +1216,7 @@ def test_weekly_pipeline_resolves_only_records_new_since_baseline(monkeypatch):
     assert run_context["taxonomy_snapshot_id"] == "philpapers-fixture:2026-09-05"
     assert run_context["interest_profile_id"] == "pfm:interest:test"
     assert run_context["interest_profile_version"] == 3
-    assert run_context["pipeline_version"] == "0.6.0"
+    assert run_context["pipeline_version"] == "0.6.2"
     assert run_context["matching_rule_version"] == "set_intersection_v1"
 
 

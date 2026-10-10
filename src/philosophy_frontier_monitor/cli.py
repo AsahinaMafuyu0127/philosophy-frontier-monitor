@@ -9,7 +9,7 @@ import sqlite3
 import sys
 from contextlib import ExitStack
 from dataclasses import asdict
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +50,7 @@ from .official_journals import (
 from .pipeline import (
     CatchUpError,
     OnDemandRunResult,
+    WeeklyRunResult,
     establish_baseline,
     run_on_demand,
     run_weekly,
@@ -57,6 +58,7 @@ from .pipeline import (
     write_report_atomic,
 )
 from .release_check import audit_release
+from .review_feed_snapshots import load_review_feed_snapshots, serialize_feed_snapshots
 from .scope_estimate import estimate_interest_scope
 from .search import SearchOptions, run_paper_search
 from .search_report import render_paper_search
@@ -69,6 +71,7 @@ from .sources.philpapers_taxonomy import (
 from .state import StateStore
 from .taxonomy import expand_selected_categories, load_taxonomy, require_production_taxonomy
 from .taxonomy_audit import audit_taxonomy_change
+from .work_type_reviews import load_work_type_reviews
 from .work_types import SUPPORTED_CANONICAL_WORK_TYPES
 
 
@@ -646,8 +649,45 @@ def _baseline(args: argparse.Namespace) -> int:
     return 0
 
 
+def _review_queue_path(value: str, config: WatchlistConfig) -> Path:
+    path = Path(value).resolve()
+    private_root = config.storage.state_database.parent.resolve()
+    if not path.is_relative_to(private_root) or path.suffix.casefold() != ".json":
+        raise ValueError("review file must be JSON inside the private state directory")
+    return path
+
+
+def _write_review_queue(
+    path: Path, result: OnDemandRunResult | WeeklyRunResult
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": 1,
+        "window_start": result.window_start.isoformat(),
+        "window_end": result.window_end.isoformat(),
+        "items": [asdict(item) for item in result.human_review_items],
+    }
+    if isinstance(result, OnDemandRunResult):
+        payload["feed_snapshots"] = serialize_feed_snapshots(result.feed_snapshots)
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+    )
+    temporary.replace(path)
+
+
 def _weekly_run(args: argparse.Namespace) -> int:
     config = load_watchlist(args.config)
+    if args.review_queue_file and not args.dry_run:
+        raise ValueError("weekly review queue requires --dry-run before a committed run")
+    review_queue_path = (
+        _review_queue_path(args.review_queue_file, config) if args.review_queue_file else None
+    )
+    type_reviews = (
+        load_work_type_reviews(_review_queue_path(args.type_reviews, config))
+        if args.type_reviews
+        else None
+    )
     if not config.storage.state_database.is_file():
         raise ValueError(f"状态库不存在：{config.storage.state_database}；请先运行 pfm baseline。")
     window_start = _parse_instant(args.window_start, "--window-start")
@@ -669,8 +709,11 @@ def _weekly_run(args: argparse.Namespace) -> int:
             window_end=window_end,
             dry_run=args.dry_run,
             show_recently_changed=args.show_recently_changed,
+            type_reviews=type_reviews,
             **({"oai_loader": oai_cache.load_window} if oai_cache is not None else {}),
         )
+    if review_queue_path:
+        _write_review_queue(review_queue_path, result)
     payload: dict[str, Any] = {
         "ok": True,
         "operation": "weekly-run",
@@ -680,6 +723,7 @@ def _weekly_run(args: argparse.Namespace) -> int:
         "window_end": result.window_end,
         "report_path": str(result.report_path) if result.report_path else None,
         "stats": result.stats,
+        "review_queue_path": str(review_queue_path) if review_queue_path else None,
         "network_telemetry": summarize_request_telemetry(
             events,
             circuit_skipped=result.stats.get("bibliographic_source_circuit_skips", 0),
@@ -731,6 +775,39 @@ def _deliver_on_demand_report(
 
 def _pull_now(args: argparse.Namespace) -> int:
     config = load_watchlist(args.config)
+    as_of = _parse_instant(args.as_of, "--as-of")
+    review_queue_path = (
+        _review_queue_path(args.review_queue_file, config) if args.review_queue_file else None
+    )
+    type_reviews = (
+        load_work_type_reviews(_review_queue_path(args.type_reviews, config))
+        if args.type_reviews
+        else None
+    )
+    if args.type_reviews and as_of is not None and not args.review_queue_input:
+        raise ValueError("exact-window type review requires --review-queue-input")
+    if args.review_queue_input and as_of is None:
+        raise ValueError("--review-queue-input requires --as-of")
+    reviewed_feed_snapshots = (
+        load_review_feed_snapshots(
+            _review_queue_path(args.review_queue_input, config),
+            config,
+            window_end=as_of,
+        )
+        if args.review_queue_input and as_of is not None
+        else None
+    )
+    if (
+        as_of is not None
+        and reviewed_feed_snapshots is None
+        and abs((datetime.now(UTC) - as_of).total_seconds()) > 60
+    ):
+        print(
+            "[pull-now] 历史 --as-of 未提供首次 feed 快照：来源到达时间只是回溯窗口投影，"
+            "不能当作该时刻实际观察。 Historical --as-of without a saved feed inventory "
+            "cannot establish source arrival at that time.",
+            file=sys.stderr,
+        )
     cache_path = config.storage.state_database.parent / "bibliography-cache.sqlite3"
     oai_cache_path = _oai_cache_path(config)
     _emit_pull_now_storage_advice(cache_path, oai_cache_path)
@@ -753,6 +830,7 @@ def _pull_now(args: argparse.Namespace) -> int:
         )
         result = run_on_demand(
             config,
+            now=as_of,
             lookback_days=args.days,
             max_candidates=args.max_candidates,
             max_fallback_candidates=args.max_fallback_candidates,
@@ -760,8 +838,12 @@ def _pull_now(args: argparse.Namespace) -> int:
             allow_development_fixture=args.allow_development_fixture,
             progress=_emit_pull_now_progress,
             show_recently_changed=args.show_recently_changed,
+            type_reviews=type_reviews,
+            reviewed_feed_snapshots=reviewed_feed_snapshots,
             **({"oai_loader": oai_cache.load_window} if oai_cache is not None else {}),
         )
+    if review_queue_path:
+        _write_review_queue(review_queue_path, result)
     delivery_payload = _deliver_on_demand_report(result, config, args.report_delivery)
     _emit(
         {
@@ -772,6 +854,7 @@ def _pull_now(args: argparse.Namespace) -> int:
             "window_start": result.window_start,
             "window_end": result.window_end,
             "stats": result.stats,
+            "review_queue_path": str(review_queue_path) if review_queue_path else None,
             "network_telemetry": summarize_request_telemetry(
                 events,
                 circuit_skipped=result.stats.get("bibliographic_source_circuit_skips", 0),
@@ -1309,6 +1392,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="collect new feed records, check old-work evidence, and render a weekly report",
     )
     weekly.add_argument("--config", default=str(_default_watchlist()))
+    weekly.add_argument(
+        "--type-reviews",
+        help="private JSON decisions bound to inspected source-type evidence",
+    )
+    weekly.add_argument(
+        "--review-queue-file",
+        help="write all human-review candidates to an ignored private JSON file",
+    )
     weekly.add_argument("--dry-run", action="store_true")
     weekly.add_argument("--window-start")
     weekly.add_argument("--window-end")
@@ -1329,6 +1420,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="immediately verify and report matching papers from a rolling recent window",
     )
     pull_now.add_argument("--config", default=str(_default_watchlist()))
+    pull_now.add_argument(
+        "--as-of",
+        help="timezone-aware window end; exact review follow-up also needs --review-queue-input",
+    )
+    pull_now.add_argument(
+        "--type-reviews",
+        help="private JSON decisions bound to inspected source-type evidence",
+    )
+    pull_now.add_argument(
+        "--review-queue-file",
+        help="write all human-review candidates to an ignored private JSON file",
+    )
+    pull_now.add_argument(
+        "--review-queue-input",
+        help="reuse the first pass's private feed inventory for an exact-window follow-up",
+    )
     pull_now.add_argument(
         "--days",
         type=int,

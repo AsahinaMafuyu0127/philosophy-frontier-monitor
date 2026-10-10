@@ -39,6 +39,7 @@ def test_philarchive_oai_controlled_uri_is_structured_type_evidence():
 
     assert article.work_type == "article"
     assert article.status is WorkTypeStatus.CONFIRMED
+    assert article.evidence[0].raw_type == "article"
     assert book.work_type == "book"
     assert is_supported_work_type(book.work_type) is False
 
@@ -74,6 +75,27 @@ def test_supported_and_unsupported_structured_types_fail_closed():
     assert result.work_type == "conflict"
     assert result.status is WorkTypeStatus.CONFLICT
     assert result.usable is False
+
+
+def test_catch_all_other_does_not_veto_specific_supported_label():
+    result = resolve_work_type(
+        (
+            signal("philarchive-oai", "info:eu-repo/semantics/article"),
+            signal("openalex", "other"),
+        )
+    )
+
+    assert result.work_type == "article"
+    assert result.status is WorkTypeStatus.COMPATIBLE
+    assert len(result.evidence) == 2
+    assert result.usable is True
+
+
+def test_catch_all_other_alone_stays_unsupported():
+    result = resolve_work_type((signal("openalex", "other"),))
+
+    assert result.work_type == "other"
+    assert result.usable is True
 
 
 def test_unknown_structured_type_is_not_defaulted_to_article():
