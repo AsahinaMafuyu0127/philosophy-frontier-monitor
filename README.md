@@ -38,12 +38,22 @@
 **recently changed**（20 篇）。各组按相应证据时间从新到旧排列；来源记录变化组默认折叠，
 保留可见的显示／隐藏开关。另有 **10 条记录需要人工复核**。
 
-下图呈现本次报告第一页。[完整 Markdown](examples/public-demo-weekly-report.md)保留全部 43 篇的
+#### 四篇确认新出
+
+以下逐篇列出完整题名、作者、作品类型、日期证据、命中分类与稳定链接。日期证据取自本次报告的
+OpenAlex 书目核验；三篇存在类型冲突的作品另经原件复核。
+
+1. **[The Philosophy of Significance How Importance Is Constituted, Experienced, and Transformed](https://doi.org/10.5281/zenodo.23142894)** — Morteza Niami；论文（article）；发表日期证据：2026-10-04；命中 Action Theory、Free Will、Moral Responsibility。[核查原文 PDF](https://zenodo.org/records/23142895/files/The_Philosophy_of_Significance.pdf?download=1)。
+2. **[Before Fatelessness: From Fatality and Abolition to Operational Reconfiguration](https://doi.org/10.5281/zenodo.23123292)** — Fujie Naoto；手稿（manuscript）；发表日期证据：2026-10-03；命中 Action Theory、Free Will。[核查原文 DOCX](https://zenodo.org/records/23123293/files/fateless_fixed.docx?download=1)。
+3. **[Free Will and the Significance of Basic Undeservedness](https://doi.org/10.1007/s11406-026-01037-6)** — Gunnar Björnsson；论文（article）；发表日期证据：2026-10-03；命中 Free Will、Moral Responsibility。
+4. **[When the Past Cannot Be Narrated Experience, Trace, Memory, and the Emergence of Narrative](https://doi.org/10.5281/zenodo.23126385)** — Morteza Niami；论文（article）；发表日期证据：2026-10-03；命中 Action Theory、Free Will。[核查原文 PDF](https://zenodo.org/api/records/23126386/files/When%20the%20Past%20Cannot%20Be%20Narrated.pdf/content)。
+
+下图完整展示这四篇的题录，并概览报告的其他分组。[完整 Markdown](examples/public-demo-weekly-report.md)保留全部 43 篇的
 中英文记录，以及可展开的复核记录和技术说明。[2026-10-09 原始快照](examples/public-demo-weekly-report-2026-10-09-original.md)
 与[2026-09-09 旧版快照](examples/public-demo-weekly-report-2026-09-09.md)仍可查阅。
 即时模式不推进正式周报状态。
 
-![三个真实 PhilPapers 标签逐篇复核后的周报第一页](assets/demo/public-demo-weekly-report-2026-10-10.png)
+![三个真实 PhilPapers 标签逐篇复核后的周报预览，完整列出四篇确认新出](assets/demo/public-demo-weekly-report-2026-10-10.png)
 
 <details>
 <summary>查看本次拉取的覆盖与核验限制</summary>
@@ -88,6 +98,14 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 
 最近发布的应用版本标签为 **v0.4.0**；当前分支内部证据管线版本为 **0.6.2**。正式实机验收在 Windows 上完成；
 macOS／Linux 路径已经兼容，但尚未取得同等的真实定时运行验证。
+
+## 技术更新：公开示例完整展示四篇确认新出（2026-10-10）
+
+介绍页现在直接列出四篇确认新出的完整题名、作者、作品类型、日期证据、命中分类和稳定链接，
+三篇逐篇裁定的作品还附有核查原文链接；中英文介绍页和 SVG／PNG 预览同步更新。预览图不再
+省略第一篇的题名或只展示一篇确认新出。43 篇匹配作品、10 条人工复核及回溯来源的证据边界
+均沿用已核对的公开报告，没有重新拉取或修改论文记录。已检查四篇与中英文报告逐项对应，
+并重新渲染、查看预览图；本次是分支展示更新，未创建版本标签或 GitHub Release。
 
 ## 技术更新：作品类型冲突的逐篇复核（2026-10-10）
 
