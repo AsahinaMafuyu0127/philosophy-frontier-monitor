@@ -22,32 +22,36 @@ gaps. They do not rank paper quality or filter results by a model score.
 ![Four steps from a research interest to a weekly philosophy-paper report](assets/demo/philosophy-frontier-monitor-demo.png)
 
 [Read the complete public sample report](examples/public-demo-weekly-report.md) ·
-[Open the report-preview image](assets/demo/public-demo-weekly-report-2026-10-09.png) ·
+[Open the report-preview image](assets/demo/public-demo-weekly-report-2026-10-10.png) ·
 [Read the full installation guide](references/installation.en.md)
 
 ### Public example: an actual pull from three real categories
 
-**Sample status (9 October 2026):** A seven-day `pull-now` ran at 13:08 China Standard Time,
-covering 2 October 13:08 to 9 October 13:08 (exclusive end). It used the complete PhilPapers
+**Sample status (individually reviewed on 10 October 2026):** The seven-day window ending
+9 October 13:08 China Standard Time was rerun on 10 October with fresh category-feed reads
+and individual work-type review. This is an actual rerun, not a historical reconstruction
+of the 9 October feeds. The window covers 2 October 13:08 to 9 October 13:08 (exclusive end).
+It used the complete PhilPapers
 taxonomy and the exact categories `Moral Responsibility` (4590), `Free Will` (347), and
 `Action Theory` (5992), without descendants. All three official category RSS feeds were read
 successfully. The report is an actual run, not a synthetic example.
 
-The run found **1 confirmed-new paper** and **34 recent PhilPapers source arrivals**, for
-35 deduplicated matching works. A source arrival means a work entered the selected categories'
-PhilPapers or PhilArchive source-change set and this run found no earlier-work evidence; it
-does not establish a formal publication date. The complete report groups the 35 works as
-**recently published** (1), **recently arrived** (17), and **recently changed** (17).
+The run found **4 confirmed-new papers** and **39 PhilPapers source-change candidates**, for
+43 deduplicated matching works. The 39 are classifications under a retrospective window:
+they do not prove arrival by 9 October. The four confirmed-new works have separate in-window
+publication-date evidence. The complete report groups the 43 works as
+**recently published** (4), **recently arrived** (19), and **recently changed** (20).
 Each group is ordered newest first by the date evidence appropriate to it. Recently changed
-is collapsed by default, with a visible show/hide control. Another **45 records require human review**.
+is collapsed by default, with a visible show/hide control. Another **10 records require human review**.
 
 The image previews the report's first page. The
-[complete Markdown report](examples/public-demo-weekly-report.md) retains all 35 works in Chinese
+[complete Markdown report](examples/public-demo-weekly-report.md) retains all 43 works in Chinese
 and English, with expandable review records and technical notes. The
+[original 9 October snapshot](examples/public-demo-weekly-report-2026-10-09-original.md) and
 [9 September 2026 snapshot](examples/public-demo-weekly-report-2026-09-09.md) remains available.
 The on-demand run did not advance formal weekly state.
 
-![Classical ivory first-page preview of a report generated from three real PhilPapers categories](assets/demo/public-demo-weekly-report-2026-10-09.png)
+![First-page preview after individual review of three real PhilPapers categories](assets/demo/public-demo-weekly-report-2026-10-10.png)
 
 <details>
 <summary>Coverage and verification limits for this pull</summary>
@@ -55,9 +59,11 @@ The on-demand run did not advance formal weekly state.
 Each official category RSS feed returned 500 entries. The program read all returned entries,
 but exactly 500 does not establish that the source has no item cap or that the feed contains
 every work from the seven-day period. PhilArchive OAI returned 148,183 source events in the
-window, mainly record changes rather than new publications. OpenAlex lookup failures and a
-rate limit left 19 candidates awaiting a later automatic retry; 45 others require human
-review. None of these unresolved candidates is counted among the 35 matches. This public
+window, mainly record changes rather than new publications. This rerun used the OAI cache
+without a new OAI network harvest. OpenAlex lookup failures and a rate limit left 21 candidates
+awaiting a later automatic retry; 10 others require human review. None of these unresolved
+candidates is counted among the 43 matches. The remaining work-type conflict could not be
+decided from an accessible original document, so an abstract alone did not override it. This public
 example did not enable CNKI or Wanfang or check Chinese journal sites live. The report gives
 the full source status and evidence boundaries.
 
@@ -101,9 +107,37 @@ Let me confirm the categories, then guide me through local setup, the historical
 first weekly report. Do not ask me to paste credentials into the conversation.
 ```
 
-The latest tagged application release is **v0.4.0**; the internal evidence-pipeline version remains **0.6.0**.
+The latest tagged application release is **v0.4.0**; this branch uses internal evidence-pipeline version **0.6.2**.
 Formal real-machine acceptance has been completed on Windows. macOS and Linux paths are supported,
 but have not yet received equivalent real scheduled-run validation.
+
+## Technical update: individual work-type conflict review (10 October 2026)
+
+Internal evidence-pipeline version `0.6.2` no longer lets a catch-all OpenAlex/Crossref `other`
+alone veto a specific paper type from another source. Specific disagreements, such as paper
+versus book, dataset, or conference abstract, produce a complete private review queue. It
+records each source label, date, and evidence fingerprint. The skill now directs Codex to open
+each conflicting work, prioritizing those with evidence inside the seven-day window, inspect
+the document or publisher page, and write an evidence-linked private decision. A decision
+applies only to the matching PhilPapers record, title, and source-evidence fingerprint; changed
+evidence requires renewed review. An on-demand follow-up can repeat the exact initial window,
+while weekly work uses a dry run before commitment. A paper-form decision still has to pass
+the independent date and newness gates.
+
+Both report languages list every unresolved item with source-specific types, and PhilArchive
+OAI type URIs now display safely. A fixed-window rerun after document review raised the public
+sample's confirmed-new count from 1 to 4 and reduced work-type conflicts from 15 to 1. The
+final rerun has 43 matching works and 10 human-review records. The original 9 October snapshot
+is retained separately. The reviewed report is explicitly a 10 October source reread, not an
+exact historical feed reconstruction; its 39 source-change classifications are retrospective
+projections. Inspected documents and decisions stay in a Git-ignored private directory;
+no committed weekly state or private configuration was rewritten. Future
+two-pass reviews save the first category-feed inventory in the private queue and reuse it with
+`--review-queue-input`, avoiding a new RSS fetch with a backdated observation time. See the
+[work-type policy](references/work-type-policy.md). All 447 tests, Ruff, skill validation,
+public-sample consistency checks, and the read-only release audit passed.
+This is an unreleased code and documentation update, with no new
+tag or GitHub Release.
 
 <a id="technical-update-2026-10-09-official-rss-link"></a>
 
