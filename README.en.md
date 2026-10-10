@@ -44,14 +44,25 @@ publication-date evidence. The complete report groups the 43 works as
 Each group is ordered newest first by the date evidence appropriate to it. Recently changed
 is collapsed by default, with a visible show/hide control. Another **10 records require human review**.
 
-The image previews the report's first page. The
+#### Four confirmed-new works
+
+The full titles, authors, work forms, date evidence, matching categories, and stable links are
+shown here. Publication-date evidence comes from the OpenAlex bibliographic check in this run;
+the three conflicting work forms were also checked against the original documents.
+
+1. **[The Philosophy of Significance How Importance Is Constituted, Experienced, and Transformed](https://doi.org/10.5281/zenodo.23142894)** — Morteza Niami; article; publication-date evidence: 4 October 2026; Action Theory, Free Will, Moral Responsibility. [Inspected PDF](https://zenodo.org/records/23142895/files/The_Philosophy_of_Significance.pdf?download=1).
+2. **[Before Fatelessness: From Fatality and Abolition to Operational Reconfiguration](https://doi.org/10.5281/zenodo.23123292)** — Fujie Naoto; manuscript; publication-date evidence: 3 October 2026; Action Theory, Free Will. [Inspected DOCX](https://zenodo.org/records/23123293/files/fateless_fixed.docx?download=1).
+3. **[Free Will and the Significance of Basic Undeservedness](https://doi.org/10.1007/s11406-026-01037-6)** — Gunnar Björnsson; article; publication-date evidence: 3 October 2026; Free Will, Moral Responsibility.
+4. **[When the Past Cannot Be Narrated Experience, Trace, Memory, and the Emergence of Narrative](https://doi.org/10.5281/zenodo.23126385)** — Morteza Niami; article; publication-date evidence: 3 October 2026; Action Theory, Free Will. [Inspected PDF](https://zenodo.org/api/records/23126386/files/When%20the%20Past%20Cannot%20Be%20Narrated.pdf/content).
+
+The image shows all four confirmed-new entries and previews the other report groups. The
 [complete Markdown report](examples/public-demo-weekly-report.md) retains all 43 works in Chinese
 and English, with expandable review records and technical notes. The
 [original 9 October snapshot](examples/public-demo-weekly-report-2026-10-09-original.md) and
 [9 September 2026 snapshot](examples/public-demo-weekly-report-2026-09-09.md) remains available.
 The on-demand run did not advance formal weekly state.
 
-![First-page preview after individual review of three real PhilPapers categories](assets/demo/public-demo-weekly-report-2026-10-10.png)
+![Report preview listing all four confirmed-new works from three real PhilPapers categories](assets/demo/public-demo-weekly-report-2026-10-10.png)
 
 <details>
 <summary>Coverage and verification limits for this pull</summary>
@@ -110,6 +121,17 @@ first weekly report. Do not ask me to paste credentials into the conversation.
 The latest tagged application release is **v0.4.0**; this branch uses internal evidence-pipeline version **0.6.2**.
 Formal real-machine acceptance has been completed on Windows. macOS and Linux paths are supported,
 but have not yet received equivalent real scheduled-run validation.
+
+## Technical update: full display of four confirmed-new works (10 October 2026)
+
+The landing page now lists all four confirmed-new works with complete titles, authors, work
+forms, publication-date evidence, matching categories, and stable links. It also links to the
+original documents inspected for the three disputed work forms. The English and Chinese landing
+pages and SVG/PNG preview now show the same four works; the preview no longer truncates the first
+title or shows just one confirmed-new entry. The 43 matching works, 10 human-review records,
+and retrospective-source caveat are unchanged. We checked the entries against both report
+languages, rerendered and inspected the preview image, and did not fetch sources again or change
+paper records. This is an unreleased branch presentation update; no tag or GitHub Release was made.
 
 ## Technical update: individual work-type conflict review (10 October 2026)
 
