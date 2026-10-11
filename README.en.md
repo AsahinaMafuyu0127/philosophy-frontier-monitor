@@ -114,8 +114,11 @@ evidence fingerprint. After inspecting the specific manuscript or publisher reco
 decision can be applied with `--type-reviews`; changed evidence does not inherit an old decision.
 Historical search retains its category and year filters. A work-form decision does not establish
 publication date or bibliographic identity. All 450 tests, Ruff, skill validation, and the
-read-only release audit passed; no live source refresh, version tag, or GitHub Release was made. See the
-[work-type policy](references/work-type-policy.md).
+read-only release audit passed; no live source refresh, version tag, or GitHub Release was made.
+Future evidence-decision changes will be checked across all three modes and merged into `main`
+after applicable validation and PR checks pass. Each mode retains its own time range and state
+rules. See the [work-type policy](references/work-type-policy.md) and
+[contribution guide](CONTRIBUTING.md).
 
 <details>
 <summary>View earlier technical updates (18)</summary>

@@ -93,7 +93,9 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 和证据指纹的私人队列。核查本篇稿件或出版方记录后，检索可用 `--type-reviews` 回填裁定，
 证据变化时旧裁定不会自动适用。历史检索仍按原有分类和年份条件筛选，作品类型裁定不会
 代替发表日期或书目身份核验。450 项测试、Ruff、Skill 校验和只读发布检查通过；未作线上来源重拉，
-未创建新版本标签或 GitHub Release。操作边界见[结构化作品类型政策](references/work-type-policy.md)。
+未创建新版本标签或 GitHub Release。后续同类证据判断改动会同步检查三种功能，完成适用验证
+并通过 PR 检查后直接合入 `main`；各功能原有时间范围与状态规则继续适用。操作边界见
+[结构化作品类型政策](references/work-type-policy.md)和[贡献说明](CONTRIBUTING.md)。
 
 <details>
 <summary>查看往期技术更新（18 条）</summary>
