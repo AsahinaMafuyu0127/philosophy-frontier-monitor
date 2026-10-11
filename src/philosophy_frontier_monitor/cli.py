@@ -60,7 +60,7 @@ from .pipeline import (
 from .release_check import audit_release
 from .review_feed_snapshots import load_review_feed_snapshots, serialize_feed_snapshots
 from .scope_estimate import estimate_interest_scope
-from .search import SearchOptions, run_paper_search
+from .search import PaperSearchResult, SearchOptions, run_paper_search
 from .search_report import render_paper_search
 from .sources.philpapers_rss import discover_feed_request, fetch_feed, parse_feed
 from .sources.philpapers_taxonomy import (
@@ -897,6 +897,14 @@ def _search_official_issues(
 
 def _search(args: argparse.Namespace) -> int:
     config = load_watchlist(args.config)
+    review_queue_path = (
+        _review_queue_path(args.review_queue_file, config) if args.review_queue_file else None
+    )
+    type_reviews = (
+        load_work_type_reviews(_review_queue_path(args.type_reviews, config))
+        if args.type_reviews
+        else None
+    )
     options = SearchOptions(
         category_ids=tuple(args.category or ()),
         match=args.match,
@@ -909,7 +917,11 @@ def _search(args: argparse.Namespace) -> int:
         max_fallbacks=args.max_fallbacks,
     )
     with collect_request_telemetry() as events:
-        result = run_paper_search(config, options=options, progress=_emit_search_progress)
+        result = run_paper_search(
+            config, options=options, progress=_emit_search_progress, type_reviews=type_reviews
+        )
+    if review_queue_path:
+        _write_search_review_queue(review_queue_path, result)
     official_issues, official_issue_status = _search_official_issues(
         config.storage.state_database.parent / "official-journals.sqlite3",
         args.year_from, args.year_to,
@@ -926,12 +938,39 @@ def _search(args: argparse.Namespace) -> int:
             "report_markdown": report,
             "official_issue_leads": len(official_issues),
             "official_issue_status": official_issue_status,
+            "review_queue_path": str(review_queue_path) if review_queue_path else None,
             "network_telemetry": summarize_request_telemetry(events),
             "state_advanced": False,
             "weekly_notifications_written": False,
         }
     )
     return 0
+
+
+def _write_search_review_queue(path: Path, result: PaperSearchResult) -> None:
+    """Store actionable type evidence in the private state directory."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": 1,
+        "mode": "search",
+        "queried_at": result.queried_at.isoformat(),
+        "items": [
+            {
+                "record_url": record.review_record_url,
+                "title": record.review_title,
+                "source_urls": record.source_urls,
+                "reason": record.reason,
+                "work_type_evidence": [asdict(evidence) for evidence in record.work_type_evidence],
+                "evidence_fingerprint": record.evidence_fingerprint,
+            }
+            for record in result.unconfirmed_records
+            if record.reason == "type_unverified" and record.review_record_url
+        ],
+    }
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(path)
 
 
 def _journal_watch(args: argparse.Namespace) -> int:
@@ -1515,6 +1554,13 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--offset", type=int, default=0)
     search.add_argument("--max-candidates", type=int, default=1000)
     search.add_argument("--max-fallbacks", type=int, default=100)
+    search.add_argument(
+        "--review-queue-file",
+        help="write unresolved type evidence inside the private state directory",
+    )
+    search.add_argument(
+        "--type-reviews", help="read private document-review decisions for unresolved types"
+    )
     search.set_defaults(handler=_search)
 
     catch_up = subparsers.add_parser(

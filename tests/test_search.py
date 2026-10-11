@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -37,6 +38,7 @@ from philosophy_frontier_monitor.sources.wanfang import (
     WanfangRecord,
     WanfangScan,
 )
+from philosophy_frontier_monitor.work_type_reviews import ReviewedWorkType
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CONFIG = load_watchlist(FIXTURES / "watchlist_minimal.yaml")
@@ -422,6 +424,82 @@ def test_shared_identifier_with_conflicting_types_is_withheld_after_merging():
     assert len(result.unconfirmed_records[0].source_urls) == 2
 
 
+def test_merged_type_conflict_can_be_reviewed_with_exact_evidence():
+    entries = (
+        entry("A", "First title", "2024. https://doi.org/10.1234/test"),
+        entry("B", "Second title", "2024. https://doi.org/10.1234/test"),
+    )
+
+    def fallback(title, **kwargs):
+        return CrossrefWork(
+            "10.1234/test", title, ("Ada Scholar",), None,
+            "book" if title == "First title" else "journal-article",
+            "https://doi.org/10.1234/test", None, None, {},
+        )
+
+    first = run(entries, fallback_lookup=fallback)
+    pending = first.unconfirmed_records[0]
+    assert {e.normalized_type for e in pending.work_type_evidence} == {"book", "article"}
+    assert pending.evidence_fingerprint
+    review = ReviewedWorkType(
+        pending.review_record_url,
+        pending.review_title,
+        "article",
+        pending.evidence_fingerprint,
+        ("https://philpapers.org/rec/A",),
+        NOW,
+        "Inspected the full document and its publication metadata.",
+    )
+    confirmed = run(
+        entries, fallback_lookup=fallback,
+        type_reviews={pending.review_record_url: review},
+    )
+    assert confirmed.total_matches == 1
+    assert confirmed.items[0].work_type == "article"
+    assert any(e.method == "document-inspection" for e in confirmed.items[0].type_evidence)
+    assert not confirmed.unconfirmed_records
+
+    stale = replace(review, evidence_fingerprint="0" * 64)
+    withheld = run(
+        entries, fallback_lookup=fallback, type_reviews={pending.review_record_url: stale}
+    )
+    assert withheld.total_matches == 0
+    assert withheld.unconfirmed_records[0].reason == "type_unverified"
+
+
+def test_reviewed_paper_keeps_historical_year_filter():
+    first = run((entry("A", "Paper", "Manuscript. 2024."),), (oa("Paper", kind="book"),))
+    pending = first.unconfirmed_records[0]
+    review = ReviewedWorkType(
+        pending.review_record_url, pending.review_title, "article",
+        pending.evidence_fingerprint, ("https://philpapers.org/rec/A",), NOW,
+        "Inspected the full document.",
+    )
+    result = run(
+        (entry("A", "Paper", "Manuscript. 2024."),),
+        (oa("Paper", kind="book"),),
+        options=SearchOptions(year_from=2020),
+        type_reviews={pending.review_record_url: review},
+    )
+    assert result.total_matches == 0
+    assert result.stats["filtered_out"] == 1
+
+
+def test_search_private_review_queue_contains_exact_type_evidence(tmp_path):
+    result = run((entry("Unknown"),), options=SearchOptions(max_fallbacks=0))
+    path = tmp_path / "search-review.json"
+    cli._write_search_review_queue(path, result)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["mode"] == "search"
+    assert payload["items"][0]["record_url"] == "https://philpapers.org/rec/Unknown"
+    assert payload["items"][0]["evidence_fingerprint"] == (
+        result.unconfirmed_records[0].evidence_fingerprint
+    )
+    assert cli.build_parser().parse_args([
+        "search", "--review-queue-file", str(path), "--type-reviews", str(path)
+    ]).type_reviews == str(path)
+
+
 def test_fallback_budget_is_disclosed_and_unknown_not_defaulted():
     result = run((entry("A"), entry("B")), options=SearchOptions(max_fallbacks=0))
     assert result.total_matches == 0
@@ -660,7 +738,7 @@ def test_unconfirmed_report_mentions_existence_without_diagnostic_counts():
     assert "123456789" not in report
     assert "存在论文类型或书目身份尚未确认的记录" in report
     assert "自行核对" in report
-    assert "不再为这些记录继续补查或重新运行检索" in report
+    assert "类型冲突或未知类型可依据下列证据逐篇打开原文复核" in report
     assert "https://philpapers.org/rec/Unknown" in report
     assert "https://philpapers.org/rec/Ambiguous" in report
     assert "引用量：17" in report

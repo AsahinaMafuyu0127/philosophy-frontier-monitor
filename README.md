@@ -86,6 +86,23 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 最近发布的应用版本标签为 **v0.4.0**；当前代码的内部证据管线版本为 **0.6.2**。
 实机定时运行已在 Windows 验证；macOS／Linux 已适配路径，定时运行仍待实机验证。
 
+## 技术更新：三种模式共用作品类型逐篇复核（2026-10-12）
+
+周报、即时拉取和历史检索现在共用结构化作品类型的裁定及私人逐篇复核规则。检索会先合并
+同一作品从多个来源得到的类型证据，再处理论文与书籍等冲突；未确认条目可输出带来源类型
+和证据指纹的私人队列。核查本篇稿件或出版方记录后，检索可用 `--type-reviews` 回填裁定，
+证据变化时旧裁定不会自动适用。历史检索仍按原有分类和年份条件筛选，作品类型裁定不会
+代替发表日期或书目身份核验。450 项测试、Ruff、Skill 校验和只读发布检查通过；未作线上来源重拉，
+未创建新版本标签或 GitHub Release。后续同类证据判断改动会同步检查三种功能，完成适用验证
+并通过 PR 检查后直接合入 `main`；各功能原有时间范围与状态规则继续适用。操作边界见
+[结构化作品类型政策](references/work-type-policy.md)和[贡献说明](CONTRIBUTING.md)。
+
+<details>
+<summary>查看往期技术更新（18 条）</summary>
+
+<details>
+<summary>技术更新：介绍页文字与更新记录整理（2026-10-12）</summary>
+
 ## 技术更新：介绍页文字与更新记录整理（2026-10-12）
 
 中英文介绍页重新组织了项目用途、公开示例、功能、版本与使用说明，保留读者理解报告所需的
@@ -94,8 +111,7 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 只读发布检查通过。
 本次是文档展示更新，尚未创建新的版本标签或 GitHub Release。
 
-<details>
-<summary>查看往期技术更新（17 条）</summary>
+</details>
 
 <details>
 <summary>技术更新：公开示例完整展示四篇确认新出（2026-10-10）</summary>
