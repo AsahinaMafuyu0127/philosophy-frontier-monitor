@@ -57,6 +57,7 @@ from philosophy_frontier_monitor.sources.wanfang import (
     WanfangRecord,
     WanfangScan,
 )
+from philosophy_frontier_monitor.work_type_reviews import ReviewedWorkType
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
 CONFIG = load_watchlist(FIXTURE_DIR / "watchlist_minimal.yaml")
@@ -1400,6 +1401,67 @@ def test_on_demand_keeps_single_title_batch_type_conflict_out_of_fallback():
     assert result.stats["automatic_retry_required"] == 0
     assert result.stats["fallback_candidates"] == 0
     assert result.stats["unresolved"] == 1
+
+
+def test_document_review_resolves_same_window_type_conflict_without_changing_date_gate():
+    def title_batch(_titles, _config, attempted_at):
+        return (
+            OpenAlexWork(
+                openalex_id="https://openalex.org/W-TYPE-CONFLICT",
+                doi=None,
+                title="Paper TYPE-CONFLICT",
+                authors=("Ada Scholar",),
+                publication_date=DateValue(
+                    date(2026, 9, 8), DatePrecision.DAY, "openalex", retrieved_at=attempted_at
+                ),
+                work_type="book",
+                stable_url="https://openalex.org/W-TYPE-CONFLICT",
+                raw={},
+            ),
+        )
+
+    kwargs = {
+        "now": REQUEST_TIME,
+        "feed_loader": loader_with(
+            entry("TYPE-CONFLICT", published_text=None, description="Working paper. 2026 draft.")
+        ),
+        "batch_title_resolver": title_batch,
+        "resolver": lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("conflict must not enter individual fallback")
+        ),
+        "allow_development_fixture": True,
+    }
+    first = run_on_demand(CONFIG, **kwargs)
+    candidate = first.human_review_items[0]
+    assert candidate.publication_date is not None
+    assert candidate.evidence_fingerprint is not None
+    review = ReviewedWorkType(
+        record_url=candidate.stable_url or "",
+        title=candidate.title,
+        work_type="manuscript",
+        evidence_fingerprint=candidate.evidence_fingerprint,
+        evidence_urls=("https://example.org/full-paper.pdf",),
+        reviewed_at=REQUEST_TIME,
+        note="Inspected the complete manuscript and its title page.",
+    )
+    reviewed = run_on_demand(
+        CONFIG,
+        **{
+            **kwargs,
+            "feed_loader": lambda *_args: (_ for _ in ()).throw(
+                AssertionError("an exact review must reuse the first feed inventory")
+            ),
+        },
+        type_reviews={review.record_url: review},
+        reviewed_feed_snapshots=first.feed_snapshots,
+    )
+    assert reviewed.stats["structured_work_type_conflicts"] == 0
+    assert reviewed.stats["human_review_required"] == 0
+    assert reviewed.stats["matched_confirmed_new"] == 1
+    assert "document-review" in reviewed.report_markdown
+    stale = replace(review, evidence_fingerprint="0" * 64)
+    unchanged = run_on_demand(CONFIG, **kwargs, type_reviews={stale.record_url: stale})
+    assert unchanged.stats["structured_work_type_conflicts"] == 1
 
 
 def test_repeated_pull_uses_positive_per_title_batch_cache():

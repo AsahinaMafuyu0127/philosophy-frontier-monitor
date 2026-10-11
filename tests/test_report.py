@@ -430,6 +430,18 @@ def test_on_demand_report_separates_per_run_remote_deferral_from_human_review(ta
                 author_text="Ada Scholar",
                 stable_url="https://philpapers.org/rec/TEST",
                 reason_code="structured_work_type_conflict",
+                work_type_evidence=(
+                    WorkTypeEvidence(
+                        source="philarchive-oai",
+                        raw_type="article",
+                        normalized_type="article",
+                    ),
+                    WorkTypeEvidence(
+                        source="openalex",
+                        raw_type="dataset",
+                        normalized_type="dataset",
+                    ),
+                ),
             ),
         ),
     )
@@ -442,6 +454,11 @@ def test_on_demand_report_separates_per_run_remote_deferral_from_human_review(ta
     assert "需要人工复核的候选" in report
     assert "A disputed paper" in report
     assert "https://philpapers.org/rec/TEST" in report
+    assert "类型证据：philarchive-oai article → article; openalex dataset → dataset" in report
+    assert (
+        "Work-type evidence: philarchive-oai article → article; openalex dataset → dataset"
+        in report
+    )
 
 
 def test_on_demand_report_leads_with_confirmed_new_and_source_arrivals(taxonomy):
