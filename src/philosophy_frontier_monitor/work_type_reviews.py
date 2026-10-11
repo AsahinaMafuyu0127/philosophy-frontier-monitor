@@ -10,13 +10,15 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .models import WorkTypeEvidence
+from .models import WorkTypeEvidence, WorkTypeStatus
 from .normalize import normalize_title
 from .work_types import (
     CROSSREF_TYPE_MAP,
     OPENALEX_TYPE_MAP,
     PHILARCHIVE_OAI_TYPE_MAP,
     SUPPORTED_CANONICAL_WORK_TYPES,
+    WorkTypeResolution,
+    resolve_work_type_evidence,
 )
 
 RECORD_URL = re.compile(r"https://(?:www\.)?philpapers\.org/rec/[A-Za-z0-9._~-]+/?")
@@ -71,6 +73,33 @@ def work_type_evidence_fingerprint(evidence: tuple[WorkTypeEvidence, ...]) -> st
     )
     payload = json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def apply_work_type_review(
+    resolution: WorkTypeResolution,
+    review: ReviewedWorkType | None,
+    *,
+    record_url: str,
+    title: str,
+) -> WorkTypeResolution:
+    """Apply an exact, evidence-bound document inspection in every mode."""
+
+    if (
+        review is None
+        or resolution.status not in {WorkTypeStatus.CONFLICT, WorkTypeStatus.UNKNOWN}
+        or not review.applies_to(
+            record_url=record_url, title=title, evidence=resolution.evidence
+        )
+    ):
+        return resolution
+    evidence = WorkTypeEvidence(
+        source="document-review",
+        raw_type=review.work_type,
+        normalized_type=review.work_type,
+        source_record_id=review.evidence_urls[0],
+        method="document-inspection",
+    )
+    return resolve_work_type_evidence((*resolution.evidence, evidence))
 
 
 def load_work_type_reviews(path: str | Path) -> dict[str, ReviewedWorkType]:

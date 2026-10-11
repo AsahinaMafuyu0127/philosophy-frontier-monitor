@@ -105,6 +105,24 @@ The latest tagged application release is **v0.4.0**; the current code uses inter
 version **0.6.2**. Scheduled operation has been validated on Windows; macOS and Linux path support
 is in place, with scheduled operation still awaiting real-machine validation.
 
+## Technical update: document review across all three modes (12 October 2026)
+
+Weekly reports, on-demand pulls, and historical search now share the structured work-type
+decision and private document-review rule. Search merges the type evidence for one work before
+resolving a paper-versus-book conflict, and can write a private queue with source labels and an
+evidence fingerprint. After inspecting the specific manuscript or publisher record, a reviewed
+decision can be applied with `--type-reviews`; changed evidence does not inherit an old decision.
+Historical search retains its category and year filters. A work-form decision does not establish
+publication date or bibliographic identity. All 450 tests, Ruff, skill validation, and the
+read-only release audit passed; no live source refresh, version tag, or GitHub Release was made. See the
+[work-type policy](references/work-type-policy.md).
+
+<details>
+<summary>View earlier technical updates (18)</summary>
+
+<details>
+<summary>Technical update: landing-page prose and update archive (12 October 2026)</summary>
+
 ## Technical update: landing-page prose and update archive (12 October 2026)
 
 The Chinese and English landing pages now organize the project's purpose, public example,
@@ -114,8 +132,7 @@ We checked the bilingual sample counts, four entries, version, local links, and 
 structure. All 17 historical entries remain intact, and the read-only release audit passed.
 This documentation update has no new version tag or GitHub Release.
 
-<details>
-<summary>View earlier technical updates (17)</summary>
+</details>
 
 <details>
 <summary>Technical update: full display of four confirmed-new works (10 October 2026)</summary>

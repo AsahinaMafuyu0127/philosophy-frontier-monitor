@@ -131,7 +131,11 @@ from .state import (
     UnresolvedUpdate,
 )
 from .taxonomy import expand_selected_categories, load_taxonomy, require_production_taxonomy
-from .work_type_reviews import ReviewedWorkType, work_type_evidence_fingerprint
+from .work_type_reviews import (
+    ReviewedWorkType,
+    apply_work_type_review,
+    work_type_evidence_fingerprint,
+)
 from .work_types import (
     WorkTypeResolution,
     WorkTypeSignal,
@@ -1098,24 +1102,12 @@ def _work_type_resolution(
             )
         )
     resolved = resolve_work_type(tuple(signals), default_type=default_type)
-    review = candidate.type_review
-    if review is None or resolved.status not in {WorkTypeStatus.CONFLICT, WorkTypeStatus.UNKNOWN}:
-        return resolved
-    title = split_display_bibliography(candidate.display_title).title
-    if not review.applies_to(
+    return apply_work_type_review(
+        resolved,
+        candidate.type_review,
         record_url=candidate.stable_url,
-        title=title,
-        evidence=resolved.evidence,
-    ):
-        return resolved
-    reviewed_evidence = WorkTypeEvidence(
-        source="document-review",
-        raw_type=review.work_type,
-        normalized_type=review.work_type,
-        source_record_id=review.evidence_urls[0],
-        method="document-inspection",
+        title=split_display_bibliography(candidate.display_title).title,
     )
-    return resolve_work_type_evidence((*resolved.evidence, reviewed_evidence))
 
 
 def _attach_type_reviews(
@@ -1145,30 +1137,18 @@ def _apply_type_review_to_work(
     work: WorkRecord,
     reviews: dict[str, ReviewedWorkType] | None,
 ) -> WorkRecord:
-    if not reviews or work.work_type_status not in {
-        WorkTypeStatus.CONFLICT,
-        WorkTypeStatus.UNKNOWN,
-    }:
+    if not reviews:
         return work
     record_url = _review_record_url(work)
     review = reviews.get(record_url) if record_url else None
-    if review is None or not review.applies_to(
+    if review is None:
+        return work
+    resolved = apply_work_type_review(
+        WorkTypeResolution(work.work_type, work.work_type_status, work.work_type_evidence),
+        review,
         record_url=record_url,
         title=work.title,
-        evidence=work.work_type_evidence,
-    ):
-        return work
-    evidence = (
-        *work.work_type_evidence,
-        WorkTypeEvidence(
-            source="document-review",
-            raw_type=review.work_type,
-            normalized_type=review.work_type,
-            source_record_id=review.evidence_urls[0],
-            method="document-inspection",
-        ),
     )
-    resolved = resolve_work_type_evidence(evidence)
     return replace(
         work,
         work_type=resolved.work_type,

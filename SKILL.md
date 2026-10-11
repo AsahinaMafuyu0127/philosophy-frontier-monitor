@@ -23,8 +23,12 @@ scholarly quality and importance; available citation counts only order search re
   feed dates, year hints, or publication dates are missing; do not impose the
   default yearly-result page size or invent a recent-year window. In user
   reports, mention unresolved paper types or bibliographic identities without
-  counts. Offer existing source links for optional user review; do not initiate
-  another search or investigation to resolve those records.
+  counts. For type conflicts and unknown controlled values, follow the individual
+  document-review process in [work-type-policy.md](references/work-type-policy.md):
+  generate a private search review queue, inspect each accessible work, save
+  evidence-bound decisions, and rerun the same search filters with `--type-reviews`.
+  Keep unresolved bibliographic identities available for optional user review.
+  Do not raise search budgets or broaden the user's category/year scope to resolve them.
 - **Monitor new papers:** follow the onboarding and monitoring workflow below.
   `pull-now` remains a recent-paper request, separate from historical search.
 
