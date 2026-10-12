@@ -128,7 +128,22 @@ Release. See the [search rules](references/paper-search.md) and
 [monitoring policy](references/monitoring-policy.md) for identity and date thresholds.
 
 <details>
-<summary>View earlier technical updates (19)</summary>
+<summary>View earlier technical updates (20)</summary>
+
+<details>
+<summary>Technical update: local WorkBuddy Skill pilot (12 October 2026)</summary>
+
+## Technical update: local WorkBuddy Skill pilot (12 October 2026)
+
+Added an importable local WorkBuddy Skill and an allowlisted ZIP builder. The package contains
+instructions only; it calls an already installed local `pfm` for search, on-demand pulls, and
+weekly previews while reading the repository's canonical Skill and evidence policies. The
+[pilot guide](references/workbuddy-local-pilot.md) covers building, importing, and client
+acceptance. Offline checks covered metadata, ZIP contents, and local CLI availability. WorkBuddy
+was not installed on this machine, so client import and live operation remain unverified. This is
+a branch update without a new version tag or GitHub Release.
+
+</details>
 
 <details>
 <summary>Technical update: document review across all three modes (12 October 2026)</summary>

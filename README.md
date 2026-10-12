@@ -105,7 +105,21 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 [监测政策](references/monitoring-policy.md)。
 
 <details>
-<summary>查看往期技术更新（19 条）</summary>
+<summary>查看往期技术更新（20 条）</summary>
+
+<details>
+<summary>技术更新：WorkBuddy 本地 Skill 试点（2026-10-12）</summary>
+
+## 技术更新：WorkBuddy 本地 Skill 试点（2026-10-12）
+
+新增可导入 WorkBuddy 的本地 Skill 入口与白名单打包脚本。试点包只含入口说明，
+通过本机已安装的 `pfm` 使用检索、即时拉取和周报预览；来源证据与逐篇复核规则继续
+读取项目正式 Skill 和政策文件。[试点说明](references/workbuddy-local-pilot.md)列出构建、
+导入与客户端验收步骤。离线验证已检查元数据、ZIP 文件清单及本地 CLI 可用性。
+当前机器未安装 WorkBuddy，尚未完成客户端导入和实际运行验收；这是分支更新，
+未创建新版本标签或 GitHub Release。
+
+</details>
 
 <details>
 <summary>技术更新：三种模式共用作品类型逐篇复核（2026-10-12）</summary>
