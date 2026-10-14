@@ -46,6 +46,7 @@ from .official_journals import (
     new_observation,
     record_issue,
     review_observed_issue,
+    wechat_discovery_plan,
 )
 from .pipeline import (
     CatchUpError,
@@ -854,6 +855,14 @@ def _search(args: argparse.Namespace) -> int:
 def _journal_watch(args: argparse.Namespace) -> int:
     catalog_path = Path(args.catalog)
     db_path = Path(args.db)
+    if args.action == "wechat-discovery-plan":
+        _emit({
+            "ok": True, "operation": "journal-watch",
+            "wechat_discovery_plan": wechat_discovery_plan(catalog_path),
+            "network_queries": 0,
+            "evidence_status": "unverified_until_original_post_review",
+        })
+        return 0
     if args.action == "catalog":
         journals = catalog_as_dicts(catalog_path)
         for journal in journals:
@@ -1095,8 +1104,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="inspect the curated publisher catalog and record reviewed issue evidence",
     )
     journal_watch.add_argument(
-        "action", choices=("catalog", "list", "pending", "review", "observe",
-                           "scan", "check", "run", "summary", "audit", "classify")
+        "action", choices=(
+            "catalog", "wechat-discovery-plan", "list", "pending", "review",
+            "observe", "scan", "check", "run", "summary", "audit", "classify",
+        )
     )
     journal_watch.add_argument("--catalog", default=str(CATALOG_PATH))
     journal_watch.add_argument("--db", default=str(DEFAULT_DB_PATH))

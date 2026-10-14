@@ -92,6 +92,14 @@ The latest tagged application release is **v0.3.0**; the internal evidence-pipel
 Formal real-machine acceptance has been completed on Windows. macOS and Linux paths are supported,
 but have not yet received equivalent real scheduled-run validation.
 
+<a id="technical-update-2026-10-14-wechat-discovery"></a>
+
+## Technical update: finding official WeChat posts without user-supplied links (2026-10-14)
+
+The catalog now records verified account names and reference posts for *Modern Philosophy* and *Philosophical Trends*. `pfm journal-watch wechat-discovery-plan` emits a bounded local search plan without network requests. When `search`, `pull-now`, or a weekly report is requested through the Skill, Codex first looks for public original posts for these journals. An exact URL becomes reviewed publisher evidence for those modes only after the account, issue, post date, and body have been inspected. Users need not provide each post link. See the [public-discovery procedure](references/wechat-public-discovery.md).
+
+This step needs working web search and interactive access to original posts; the local `pfm` commands and Windows scheduled job do not gain a WeChat publication-list API. In a one-off access check, a public WeChat album displayed titles and links, while an ordinary HTTP request for one original post reached a verification page. Search snippets, challenges, and unreadable bodies remain unverified. This update adds discovery seeds and review instructions for two journals, without enabling automated WeChat crawling or Wanfang, changing private observations or formal reports, or creating a release tag. All 404 tests, Ruff, Skill validation, and the command-line plan output passed.
+
 <a id="technical-update-2026-10-14-wechat-evidence"></a>
 
 ## Technical update: same-issue comparison of Chinese journals' WeChat and website directories (2026-10-14)

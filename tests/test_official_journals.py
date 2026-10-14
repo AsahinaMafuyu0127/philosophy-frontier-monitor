@@ -19,6 +19,7 @@ from philosophy_frontier_monitor.official_journals import (
     new_observation,
     record_issue,
     review_observed_issue,
+    wechat_discovery_plan,
 )
 from philosophy_frontier_monitor.pipeline import (
     _official_issues_for_window,
@@ -33,6 +34,21 @@ def test_curated_catalog_has_verifiable_primary_channels() -> None:
     assert len(catalog) >= 12
     assert {"哲学研究", "哲学动态", "世界哲学"} <= titles
     assert all(journal.official_url.startswith("https://") for journal in catalog)
+
+
+def test_wechat_discovery_plan_has_verified_seeds_and_no_network(capsys) -> None:
+    plan = wechat_discovery_plan()
+    assert {item["journal_id"] for item in plan} == {
+        "xiandai-zhexue", "zhexue-dongtai",
+    }
+    assert all(item["verified_post"].startswith("https://mp.weixin.qq.com/s/") for item in plan)
+    assert all(item["status"] == "discovery_only" for item in plan)
+    args = cli.build_parser().parse_args(["journal-watch", "wechat-discovery-plan"])
+    assert args.handler(args) == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["network_queries"] == 0
+    assert output["evidence_status"] == "unverified_until_original_post_review"
+    assert output["wechat_discovery_plan"] == plan
 
 
 def test_catalog_reports_automatic_and_manual_toc_channels(capsys) -> None:

@@ -43,6 +43,8 @@
 知网题录库不构成两个独立来源。原站页面可读不等于获准批量抓取，公众号发文日不自动
 等于期刊刊出日或论文首次发表日。
 
+Skill 调用 `search`、`pull-now`、`weekly-run` 时，对[公开发现计划](wechat-public-discovery.md)中有已核原帖作身份起点的刊物，先自行寻找确切公众号原帖，不要求用户提供每篇链接。查到新帖后仍须读到账号、日期、期号与正文并人工确认，才写入本地已复核期次。计划目前覆盖《现代哲学》《哲学动态》两刊；它不构成本地 CLI 定时抓取能力。浏览器或原帖受阻时保留未核状态，三种模式照常运行并披露覆盖限制。
+
 ### 2.1 现有个人订阅的万方独立发现
 
 万方官方 [Query 字段目录](https://github.com/wanfangdata/wfdata-open-skills/blob/master/skills/wfdata-search/references/api-catalog.md)

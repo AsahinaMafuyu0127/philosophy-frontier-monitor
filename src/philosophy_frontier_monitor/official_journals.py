@@ -32,6 +32,8 @@ class OfficialJournal:
     frequency: str | None = None
     schedule: str | None = None
     frequency_evidence_url: str | None = None
+    wechat_account: str | None = None
+    wechat_seed_url: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +87,17 @@ def load_catalog(path: Path = CATALOG_PATH) -> tuple[OfficialJournal, ...]:
                 journal.frequency_evidence_url is not None
                 and not _https_url(journal.frequency_evidence_url)
             )
+            or ((journal.wechat_account is None) != (journal.wechat_seed_url is None))
+            or (journal.wechat_account is not None and not journal.wechat_account.strip())
+            or (
+                journal.wechat_seed_url is not None
+                and (
+                    not _https_url(journal.wechat_seed_url)
+                    or urlsplit(journal.wechat_seed_url).hostname != "mp.weixin.qq.com"
+                    or not urlsplit(journal.wechat_seed_url).path.startswith("/s/")
+                    or len(urlsplit(journal.wechat_seed_url).path) <= 3
+                )
+            )
         ):
             raise ValueError(f"invalid official-journal entry: {journal.id}")
         seen.add(journal.id)
@@ -94,6 +107,22 @@ def load_catalog(path: Path = CATALOG_PATH) -> tuple[OfficialJournal, ...]:
 
 def catalog_as_dicts(path: Path = CATALOG_PATH) -> list[dict[str, str | None]]:
     return [asdict(journal) for journal in load_catalog(path)]
+
+
+def wechat_discovery_plan(path: Path = CATALOG_PATH) -> list[dict[str, str]]:
+    """Return locally curated account identities and search phrases, without network I/O."""
+    return [
+        {
+            "journal_id": journal.id,
+            "title": journal.title,
+            "account": journal.wechat_account,
+            "verified_post": journal.wechat_seed_url,
+            "search_phrase": f'"{journal.wechat_account}" "{journal.title}" 目录',
+            "status": "discovery_only",
+        }
+        for journal in load_catalog(path)
+        if journal.wechat_account and journal.wechat_seed_url
+    ]
 
 
 def _valid_date(value: str | None) -> bool:

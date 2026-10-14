@@ -20,6 +20,8 @@ journals:
     review: manual
     frequency: monthly
     frequency_evidence_url: https://zxdt.cbpt.cnki.net/
+    wechat_account: 哲学动态杂志
+    wechat_seed_url: https://mp.weixin.qq.com/s/eeYI8s6Y_f9J3zbJ73XgSg
   - id: shijie-zhexue
     title: 世界哲学
     scope: world-philosophy
@@ -41,6 +43,8 @@ journals:
     official_url: https://mphilosophy.sysu.edu.cn/cat/124
     channel: publisher-institute
     review: manual
+    wechat_account: 现代哲学杂志
+    wechat_seed_url: https://mp.weixin.qq.com/s/cOimuAyoAiR-WV87o_I1rw
   - id: zhexue-fenxi
     title: 哲学分析
     scope: general-philosophy

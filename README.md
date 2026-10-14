@@ -75,6 +75,14 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 最近发布的应用版本标签为 **v0.3.0**；内部证据管线版本为 **0.6.0**。`main` 分支包含标签之后的更新。正式实机验收在 Windows 上完成；
 macOS／Linux 路径已经兼容，但尚未取得同等的真实定时运行验证。
 
+<a id="technical-update-2026-10-14-wechat-discovery"></a>
+
+## 技术更新：公众号原帖的免用户链接发现入口（2026-10-14）
+
+为《现代哲学》《哲学动态》登记已核实的公众号账号和原帖起点，新增 `pfm journal-watch wechat-discovery-plan`，输出可供 Skill 使用的有界检索计划而不发起网络请求。通过 Skill 请求 `search`、`pull-now` 或周报时，Codex 会先按刊物搜索公开原帖；只有读到并核实账号、期次、日期和正文，才把精确 URL 记为已复核刊方证据供三种模式读取。用户不必逐篇提供原帖链接。详情和失败处理见[公开发现流程](references/wechat-public-discovery.md)。
+
+这一步需要可用的网页搜索和交互式原帖阅读；本地 `pfm` 命令及 Windows 定时任务不会因此获得公众号文章列表接口。实测微信公开专辑可显示帖名与链接，但普通 HTTP 读原帖转入验证页；检索摘要、验证码页和无法读到的正文均不能入周报。本次仅新增两刊发现入口及核验流程，不启用微信自动爬取或万方，不改私人观察库、正式周报与版本标签。404 项测试、Ruff、Skill 校验和命令行计划输出已通过。
+
 <a id="technical-update-2026-10-14-wechat-evidence"></a>
 
 ## 技术更新：中文期刊公众号与网站同期期次对照（2026-10-14）

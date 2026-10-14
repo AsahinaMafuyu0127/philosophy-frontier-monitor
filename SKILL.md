@@ -37,6 +37,15 @@ publisher-origin issue evidence; use journal-specific timing comparisons to deci
 which channel to check first, while continuing the publisher-site scan. Do not infer
 universal WeChat priority from one journal or treat a search snippet or verification
 page as an inspected post. See the [same-issue timing comparison](references/chinese-journal-wechat-timing.md).
+For `search`, `pull-now`, or a weekly report invoked **through this Skill**, read
+[wechat-public-discovery.md](references/wechat-public-discovery.md) and run
+`pfm journal-watch wechat-discovery-plan` before the requested mode. For relevant
+journals in that plan, perform its bounded public search and original-post review
+without asking the user for a post URL. Record only inspected original posts as
+reviewed issue evidence, then run the requested mode. If discovery or full-text
+review is blocked, continue the requested mode and disclose that WeChat coverage
+is unverified. A local scheduled CLI run cannot perform this browser-assisted
+step and must not claim otherwise.
 `pfm journal-watch catalog` lists the monitored
 channels; `pfm journal-watch list` shows locally recorded issue evidence.
 The bounded Chinese metadata and reviewed-issue leads workflow is a stable,
