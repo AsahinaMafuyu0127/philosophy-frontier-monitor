@@ -32,7 +32,12 @@ For Chinese-journal source expansion, read
 [chinese-source-expansion.md](references/chinese-source-expansion.md). When the
 question concerns a journal in [official-journals.yaml](config/official-journals.yaml),
 start with its editorial or publisher channel and a verified official announcement
-for issue and date evidence. `pfm journal-watch catalog` lists the monitored
+for issue and date evidence. A verified journal account's original WeChat post is
+publisher-origin issue evidence; use journal-specific timing comparisons to decide
+which channel to check first, while continuing the publisher-site scan. Do not infer
+universal WeChat priority from one journal or treat a search snippet or verification
+page as an inspected post. See the [same-issue timing comparison](references/chinese-journal-wechat-timing.md).
+`pfm journal-watch catalog` lists the monitored
 channels; `pfm journal-watch list` shows locally recorded issue evidence.
 The bounded Chinese metadata and reviewed-issue leads workflow is a stable,
 explicitly enabled capability in search, pull-now, and weekly-run. It does not
@@ -49,6 +54,9 @@ date alone remains pending until this review. Preserve the first observation;
 later scans cannot downgrade it. If a different official page supplies the
 date, record that page as separate evidence instead of attributing it to the
 directory URL.
+`journal-watch observe --status reviewed` also requires `--confirm-evidence` after
+opening that exact original source. The flag records a human attestation; it cannot
+automatically verify a WeChat account or full text.
 `pfm journal-watch summary`
 reports source-specific first hits and censored non-hits from the ignored local
 store. Nine automated channels are a verified subset of the catalog; one

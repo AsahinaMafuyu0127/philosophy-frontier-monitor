@@ -955,6 +955,10 @@ def _journal_watch(args: argparse.Namespace) -> int:
         return 0
     if not all((args.journal, args.year, args.issue, args.evidence_url, args.evidence_kind)):
         raise ValueError("observe requires journal, year, issue, evidence URL and evidence kind")
+    if args.status == "reviewed" and not args.confirm_evidence:
+        raise ValueError(
+            "reviewed observation requires --confirm-evidence after inspecting the source"
+        )
     issue = new_observation(
         args.journal,
         args.year,

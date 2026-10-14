@@ -187,6 +187,27 @@ def test_journal_watch_pending_and_review_cli(tmp_path: Path, capsys) -> None:
     assert list_issues(db)[0].label_month == "2026-08"
 
 
+def test_reviewed_observe_requires_explicit_source_confirmation(tmp_path: Path, capsys) -> None:
+    db = tmp_path / "issues.sqlite3"
+    parser = cli.build_parser()
+    base = [
+        "journal-watch", "observe", "--db", str(db),
+        "--journal", "zhexue-dongtai", "--year", "2026", "--issue", "9",
+        "--evidence-url", "https://mp.weixin.qq.com/s/eeYI8s6Y_f9J3zbJ73XgSg",
+        "--evidence-kind", "official-wechat", "--announcement-on", "2026-09-27",
+        "--status", "reviewed",
+    ]
+    args = parser.parse_args(base)
+    with pytest.raises(ValueError, match="confirm-evidence"):
+        args.handler(args)
+    assert not db.exists()
+
+    confirmed = parser.parse_args([*base, "--confirm-evidence"])
+    assert confirmed.handler(confirmed) == 0
+    assert '"status": "reviewed"' in capsys.readouterr().out
+    assert list_issues(db)[0].announcement_on == "2026-09-27"
+
+
 def test_weekly_uses_first_review_date_and_does_not_repeat_monthly_issue(tmp_path: Path) -> None:
     db = tmp_path / "official-journals.sqlite3"
     pending = new_observation(

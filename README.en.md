@@ -92,6 +92,14 @@ The latest tagged application release is **v0.3.0**; the internal evidence-pipel
 Formal real-machine acceptance has been completed on Windows. macOS and Linux paths are supported,
 but have not yet received equivalent real scheduled-run validation.
 
+<a id="technical-update-2026-10-14-wechat-evidence"></a>
+
+## Technical update: same-issue comparison of Chinese journals' WeChat and website directories (2026-10-14)
+
+A [five-issue comparison](references/chinese-journal-wechat-timing.md) covers *Modern Philosophy*, *Philosophical Trends*, and *Zhouyi Studies*. Three issues show earlier timing evidence for an official WeChat post; for *Zhouyi Studies* issue 3, the displayed dates differ by six calendar days. Two further issues have the same date on both channels, with no website time of day to establish an order. The sites' first-accessible times remain partly unknown. This accessible-source sample cannot show that WeChat is always first across Chinese journals or estimate a general lead time.
+
+The evidence policy now treats a verified journal account's original post, an editorial or publisher website, and a formal journal portal as publisher-origin issue evidence. The discovery order may favor WeChat for a journal with supporting same-issue observations, while website TOCs remain under parallel review. Search snippets and verification pages remain unreviewed leads. Manual `journal-watch observe --status reviewed` now requires `--confirm-evidence`, matching the existing review gate; the flag attests human source inspection and does not automatically read WeChat content. A post date remains an announcement date, separate from the issue-label month and each article's first-publication date. The evidence status of *Philosophical Trends* issue 9 has been updated after inspection of its original post. All 403 tests, Ruff, and Skill validation passed. The read-only `release-check` passed public-file and secret checks but did not recognize the isolated worktree's root Git marker, so its full release gate did not pass. This branch adds no automatic WeChat collection, leaves Wanfang off by default, and does not change formal weekly-report state or private observation records. No version tag or GitHub Release was created.
+
 <a id="technical-update-2026-09-28-journal-p2"></a>
 
 ## Technical update: ninth publisher TOC and stricter arrival evidence (2026-09-28)
