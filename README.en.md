@@ -92,6 +92,16 @@ The latest tagged application release is **v0.3.0**; the internal evidence-pipel
 Formal real-machine acceptance has been completed on Windows. macOS and Linux paths are supported,
 but have not yet received equivalent real scheduled-run validation.
 
+<a id="technical-update-2026-10-14-wechat-candidate-queue"></a>
+
+## Technical update: publisher-link discovery and a WeChat candidate queue (2026-10-14)
+
+The catalog now records sourced WeChat account leads for eight journals: *Philosophical Research*, *Philosophical Trends*, *World Philosophy*, *History of Chinese Philosophy*, *Modern Philosophy*, *Studies of Zhouyi*, *Confucius Studies*, and *Social Sciences in China*. The dedicated *World Philosophy* account and the editorial account mapped to *History of Chinese Philosophy* remain candidate mappings; neither gains publisher-evidence status automatically.
+
+`pfm journal-watch wechat-discover` reads at most one registered publisher HTTPS page per journal per local day and saves direct WeChat post links in a Git-ignored candidate queue. An exact post found through public searching in a session can also be queued with its discovery source. Only after opening the original post and checking the account, complete visible text, issue, and explicit date may `wechat-review --confirm-evidence` record a reviewed issue. Blocked and wrong-journal links keep their queue status. The Skill handles this queue before a weekly report, on-demand pull, or search; users need not provide each post URL. See the [procedure and limits](references/wechat-public-discovery.md).
+
+An isolated live trial read all eight registered entry points: five succeeded with no direct links, the *History of Chinese Philosophy* page yielded three older-issue candidates, the *World Philosophy* entry had a transport failure, and the *Social Sciences in China* page returned 403. None of the candidates became reviewed evidence automatically. Publisher pages without outbound WeChat links cannot reveal all new account posts, and an unattended task cannot replace original-post review in a session. The full suite passed 411 tests, along with Ruff and Skill validation. This is a branch update, with no new version tag or GitHub Release.
+
 <a id="technical-update-2026-10-14-wechat-discovery"></a>
 
 ## Technical update: finding official WeChat posts without user-supplied links (2026-10-14)

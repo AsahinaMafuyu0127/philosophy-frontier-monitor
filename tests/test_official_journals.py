@@ -36,12 +36,22 @@ def test_curated_catalog_has_verifiable_primary_channels() -> None:
     assert all(journal.official_url.startswith("https://") for journal in catalog)
 
 
-def test_wechat_discovery_plan_has_verified_seeds_and_no_network(capsys) -> None:
+def test_wechat_discovery_plan_has_sourced_accounts_and_no_network(capsys) -> None:
     plan = wechat_discovery_plan()
     assert {item["journal_id"] for item in plan} == {
-        "xiandai-zhexue", "zhexue-dongtai",
+        "xiandai-zhexue", "zhexue-dongtai", "zhexue-yanjiu",
+        "shijie-zhexue", "zhouyi-yanjiu", "kongzi-yanjiu",
+        "zhongguo-shehui-kexue", "zhongguo-zhexueshi",
     }
-    assert all(item["verified_post"].startswith("https://mp.weixin.qq.com/s/") for item in plan)
+    assert all(item["identity_url"].startswith("https://") for item in plan)
+    assert all(
+        not item["verified_post"]
+        or item["verified_post"].startswith("https://mp.weixin.qq.com/s/")
+        for item in plan
+    )
+    assert next(item for item in plan if item["journal_id"] == "shijie-zhexue")[
+        "identity_status"
+    ] == "candidate"
     assert all(item["status"] == "discovery_only" for item in plan)
     args = cli.build_parser().parse_args(["journal-watch", "wechat-discovery-plan"])
     assert args.handler(args) == 0

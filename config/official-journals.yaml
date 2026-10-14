@@ -12,6 +12,9 @@ journals:
     frequency: monthly
     schedule: 2026 年计划每月 25 日出版；须逐期核实际日期
     frequency_evidence_url: https://zxyj.cbpt.cnki.net/portal/journal/portal/client/paper/fc389b35d2b905d7493c68f9fa1483b5
+    wechat_account: 哲学研究
+    wechat_identity_url: https://www.cssn.cn/dkzgxp/zgxp_xpq/xpq_zx/202301/t20230110_5578978.shtml
+    wechat_identity_status: verified
   - id: zhexue-dongtai
     title: 哲学动态
     scope: general-philosophy
@@ -22,6 +25,8 @@ journals:
     frequency_evidence_url: https://zxdt.cbpt.cnki.net/
     wechat_account: 哲学动态杂志
     wechat_seed_url: https://mp.weixin.qq.com/s/eeYI8s6Y_f9J3zbJ73XgSg
+    wechat_identity_url: https://mp.weixin.qq.com/s/eeYI8s6Y_f9J3zbJ73XgSg
+    wechat_identity_status: verified
   - id: shijie-zhexue
     title: 世界哲学
     scope: world-philosophy
@@ -31,12 +36,18 @@ journals:
     frequency: bimonthly
     schedule: 2026 年计划每个单月 2 日出版；须逐期核实际日期
     frequency_evidence_url: https://zxyj.cbpt.cnki.net/portal/journal/portal/client/paper/fc389b35d2b905d7493c68f9fa1483b5
+    wechat_account: 世界哲学杂志
+    wechat_identity_url: https://phil.hust.edu.cn/info/1048/5500.htm
+    wechat_identity_status: candidate
   - id: zhongguo-zhexueshi
     title: 中国哲学史
     scope: chinese-philosophy
     official_url: https://phil.ucass.edu.cn/xsyj/qkzy/zgzxs.htm
     channel: publisher-institute
     review: manual
+    wechat_account: 哲学研究
+    wechat_identity_url: https://www.cssn.cn/dkzgxp/zgxp_xpq/xpq_zx/202301/t20230110_5578978.shtml
+    wechat_identity_status: candidate
   - id: xiandai-zhexue
     title: 现代哲学
     scope: general-philosophy
@@ -45,6 +56,8 @@ journals:
     review: manual
     wechat_account: 现代哲学杂志
     wechat_seed_url: https://mp.weixin.qq.com/s/cOimuAyoAiR-WV87o_I1rw
+    wechat_identity_url: https://mp.weixin.qq.com/s/cOimuAyoAiR-WV87o_I1rw
+    wechat_identity_status: verified
   - id: zhexue-fenxi
     title: 哲学分析
     scope: general-philosophy
@@ -87,12 +100,18 @@ journals:
     official_url: https://zhouyi.sdu.edu.cn/zyyjxk/qkml.htm
     channel: publisher-institute
     review: manual
+    wechat_account: 山大易学
+    wechat_identity_url: https://zhouyi.sdu.edu.cn/info/1011/1409.htm
+    wechat_identity_status: verified
   - id: kongzi-yanjiu
     title: 孔子研究
     scope: chinese-philosophy
     official_url: https://www.chinakongzi.org/category/kongziyanjiu_qikan/
     channel: publisher-institute
     review: manual
+    wechat_account: kzyj2019
+    wechat_identity_url: https://www.chinakongzi.org/kzyj/gywm/202104/t20210420_516390.htm
+    wechat_identity_status: verified
   - id: zongjiaoxue-yanjiu
     title: 宗教学研究
     scope: philosophy-of-religion
@@ -105,3 +124,6 @@ journals:
     official_url: https://www.cssn.cn/dkzgxp/zgxp_zgshkx/
     channel: publisher-site
     review: manual
+    wechat_account: 中国学派
+    wechat_identity_url: https://www.cssn.cn/ggzp/202503/t20250314_5857895.shtml
+    wechat_identity_status: verified

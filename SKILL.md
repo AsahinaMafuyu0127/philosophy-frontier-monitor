@@ -39,13 +39,19 @@ universal WeChat priority from one journal or treat a search snippet or verifica
 page as an inspected post. See the [same-issue timing comparison](references/chinese-journal-wechat-timing.md).
 For `search`, `pull-now`, or a weekly report invoked **through this Skill**, read
 [wechat-public-discovery.md](references/wechat-public-discovery.md) and run
-`pfm journal-watch wechat-discovery-plan` before the requested mode. For relevant
-journals in that plan, perform its bounded public search and original-post review
-without asking the user for a post URL. Record only inspected original posts as
-reviewed issue evidence, then run the requested mode. If discovery or full-text
-review is blocked, continue the requested mode and disclose that WeChat coverage
-is unverified. A local scheduled CLI run cannot perform this browser-assisted
-step and must not claim otherwise.
+`pfm journal-watch wechat-discovery-plan`, `wechat-discover`, and
+`wechat-candidates` before the requested mode. The discovery command reads at most
+one registered publisher HTTPS page per journal and local day, adding direct
+WeChat links to a Git-ignored candidate queue. For relevant journals, search
+public pages in the session for posts the publisher page did not link, queue an
+exact post with `wechat-add-candidate` and its source URL, then inspect the
+original post in the browser. Use `wechat-review` only after checking account
+identity, full visible text, issue and stated date; an account marked `candidate`
+also needs `--confirm-account-identity`. Blocked and incorrect links retain their
+queue status. Do not ask the user for a post URL as a prerequisite. Then run the
+requested mode. If discovery or full-text review is blocked, continue and report
+the coverage gap. A local scheduled CLI run may discover publisher-page links,
+but cannot perform browser-assisted original-post review.
 `pfm journal-watch catalog` lists the monitored
 channels; `pfm journal-watch list` shows locally recorded issue evidence.
 The bounded Chinese metadata and reviewed-issue leads workflow is a stable,
