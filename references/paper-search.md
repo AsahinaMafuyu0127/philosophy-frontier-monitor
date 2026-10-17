@@ -98,15 +98,39 @@ CLI 返回 JSON，包含结构化 `items` 与中文 `report_markdown`，可由�
 
 > 存在论文类型或书目身份尚未确认的记录，未纳入论文结果。类型冲突或未知类型进入逐篇复核；书目身份可根据原始来源自行核对。
 
-对于类型冲突和未知受控类型，skill 应先以 `pfm search --review-queue-file <私人路径>`
-生成队列，逐篇打开本篇 PhilPapers／PhilArchive、稿件或出版方页面，核对题名、作者与作品形式；
+对于类型冲突、缺少类型标签及疑似误标的已纳入论文，skill 应先以
+`pfm search --review-queue-file <私人路径>` 生成队列。队列包含类型未确认记录及本页
+已纳入论文的来源标签和指纹；分页时应检查后续页面。逐篇打开本篇 PhilPapers／PhilArchive、
+稿件或出版方页面，核对题名、作者与作品形式；
 无法取得足够原始证据的条目保持未确认，不以数据库类型标签单独下结论。已判断的作品按
 [结构化作品类型政策](work-type-policy.md#5-codex-逐篇复核与回填)保存 URL、题名、证据
 指纹、来源与依据，再以相同检索条件加 `--type-reviews <私人裁定 JSON>` 重跑。重跑仍按当前
 feed 清单检索；若来源标签变化，旧指纹不会套用，需要重新检查。类型裁定只解决作品形式，
 不替代年份、书目身份或分类判断。历史检索不施加七日窗口；有年份范围时，因缺少 feed
-年份提示而提前排除的记录不进入类型复核。书目身份未确认者仍供用户按原始来源自行核对；
+年份提示而提前排除的记录不进入类型复核。原始刊方明确标为社论、书评等非论文时，
+即使 OpenAlex 写作 article，也可用当次指纹和原刊 URL 裁定排除；旧指纹不适用时先重核来源。
+书目身份未确认者仍供用户按原始来源自行核对；
 不擅自提高请求预算或扩大范围。已有旧报告若没有保留未确认明细，不凭数量推造条目。
+
+出版方给出的 DOI、完整题名、实际作者及发表年份可存入 Git 忽略的私人书目复核 JSON，
+用 `--bibliographic-reviews <私人路径>` 重跑。它要求确切 PhilPapers URL、feed 题名及
+首作者、出版方核实的题名／作者／DOI／年份、已打开的 HTTPS 证据 URL、带时区的复核时间
+和依据。程序核对 feed 身份、已有 DOI 与年份提示；用经核实 DOI 查询 OpenAlex，允许其题名
+截短但不接受首作者或年份冲突。出版方证据可以修正展示作者与年份，OpenAlex 引用量仍只作
+可选数据；书目复核不裁定作品类型，若类型未知仍须另用 `--type-reviews`。示例结构：
+
+```json
+{"schema_version":1,"reviews":[{"record_url":"https://philpapers.org/rec/EXAMPLE",
+"source_title":"Full title in feed","source_author":"Ada Scholar",
+"verified_title":"Full publisher title","verified_authors":["Ada Scholar"],
+"doi":"10.1234/example","publication_year":2026,
+"evidence_urls":["https://publisher.example/article"],
+"reviewed_at":"2026-10-17T12:00:00+08:00",
+"note":"Publisher page confirms title, authors, DOI, and publication year."}]}
+```
+
+示例值仅说明字段，不是现成裁定。来源 API 失败时，`total_matches` 只表示已完成核验的记录，
+不得称为完整检索结果；不得用人工整理的清单替换 CLI 的计数而不说明差异。
 
 不限制年份且未指定 `--limit` 时，默认返回全部已确认匹配论文；有年份范围时默认显示 20 篇。
 仅在用户明确要求限量或分页时，为不限年份检索设置 `--limit`／`--offset`；不能把默认截取的

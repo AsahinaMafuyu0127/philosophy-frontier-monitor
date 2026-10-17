@@ -16,6 +16,7 @@ from typing import Any
 import yaml
 
 from .bibliographic_cache import BibliographicCache
+from .bibliographic_reviews import load_bibliographic_reviews
 from .config import WatchlistConfig, load_watchlist
 from .diagnostics import diagnose_sources
 from .http_retry import (
@@ -72,7 +73,7 @@ from .sources.philpapers_taxonomy import (
 from .state import StateStore
 from .taxonomy import expand_selected_categories, load_taxonomy, require_production_taxonomy
 from .taxonomy_audit import audit_taxonomy_change
-from .work_type_reviews import load_work_type_reviews
+from .work_type_reviews import load_work_type_reviews, work_type_evidence_fingerprint
 from .work_types import SUPPORTED_CANONICAL_WORK_TYPES
 
 
@@ -906,6 +907,11 @@ def _search(args: argparse.Namespace) -> int:
         if args.type_reviews
         else None
     )
+    bibliographic_reviews = (
+        load_bibliographic_reviews(_review_queue_path(args.bibliographic_reviews, config))
+        if args.bibliographic_reviews
+        else None
+    )
     options = SearchOptions(
         category_ids=tuple(args.category or ()),
         match=args.match,
@@ -919,7 +925,8 @@ def _search(args: argparse.Namespace) -> int:
     )
     with collect_request_telemetry() as events:
         result = run_paper_search(
-            config, options=options, progress=_emit_search_progress, type_reviews=type_reviews
+            config, options=options, progress=_emit_search_progress,
+            type_reviews=type_reviews, bibliographic_reviews=bibliographic_reviews,
         )
     if review_queue_path:
         _write_search_review_queue(review_queue_path, result)
@@ -949,7 +956,7 @@ def _search(args: argparse.Namespace) -> int:
 
 
 def _write_search_review_queue(path: Path, result: PaperSearchResult) -> None:
-    """Store actionable type evidence in the private state directory."""
+    """Store unresolved evidence and visible confirmed results for source review."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -967,6 +974,17 @@ def _write_search_review_queue(path: Path, result: PaperSearchResult) -> None:
             }
             for record in result.unconfirmed_records
             if record.reason == "type_unverified" and record.review_record_url
+        ] + [
+            {
+                "record_url": url,
+                "title": title,
+                "source_urls": item.source_urls,
+                "reason": "confirmed_type",
+                "work_type_evidence": [asdict(evidence) for evidence in item.type_evidence],
+                "evidence_fingerprint": work_type_evidence_fingerprint(item.type_evidence),
+            }
+            for item in result.items
+            for url, title in item.source_titles
         ],
     }
     temporary = path.with_suffix(".json.tmp")
@@ -1567,10 +1585,14 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--max-fallbacks", type=int, default=100)
     search.add_argument(
         "--review-queue-file",
-        help="write unresolved type evidence inside the private state directory",
+        help="write unresolved and confirmed type evidence in the private state directory",
     )
     search.add_argument(
-        "--type-reviews", help="read private document-review decisions for unresolved types"
+        "--type-reviews", help="read private evidence-bound document-review decisions"
+    )
+    search.add_argument(
+        "--bibliographic-reviews",
+        help="read private publisher-checked DOI, author, and publication-year decisions",
     )
     search.set_defaults(handler=_search)
 

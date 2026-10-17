@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from philosophy_frontier_monitor import cli
+from philosophy_frontier_monitor.bibliographic_reviews import ReviewedBibliography
 from philosophy_frontier_monitor.config import (
     CnkiSpaceConfig,
     ConfirmedCategoryConfig,
@@ -38,7 +39,10 @@ from philosophy_frontier_monitor.sources.wanfang import (
     WanfangRecord,
     WanfangScan,
 )
-from philosophy_frontier_monitor.work_type_reviews import ReviewedWorkType
+from philosophy_frontier_monitor.work_type_reviews import (
+    ReviewedWorkType,
+    work_type_evidence_fingerprint,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CONFIG = load_watchlist(FIXTURES / "watchlist_minimal.yaml")
@@ -511,11 +515,138 @@ def test_search_private_review_queue_contains_exact_type_evidence(tmp_path):
     ).type_reviews == str(path)
 
 
+def test_unknown_type_review_can_admit_a_verified_paper():
+    source = entry("ZHAAFT", "Approaching from the Desert", "2026.")
+    first = run((source,), options=SearchOptions(year_from=2026, year_to=2026),
+                fallback_lookup=lambda *a, **k: None)
+    pending = first.unconfirmed_records[0]
+    review = ReviewedWorkType(
+        pending.review_record_url, pending.review_title, "article",
+        pending.evidence_fingerprint, (source.link,), NOW,
+        "Publisher page confirms a full journal article.",
+    )
+    confirmed = run((source,), type_reviews={source.link: review})
+    assert confirmed.total_matches == 1
+    assert confirmed.items[0].work_type == "article"
+
+
+def test_reviewed_editorial_overrides_structured_article_and_stale_evidence_does_not():
+    source = entry("GRUFUH", "Fenomenologija u Hrvatskoj", "2026.")
+    article = oa("Fenomenologija u Hrvatskoj", kind="article", year=2026)
+    initial = run((source,), (article,), options=SearchOptions(year_from=2026, year_to=2026))
+    assert initial.total_matches == 1
+    review = ReviewedWorkType(
+        source.link, "Fenomenologija u Hrvatskoj", "editorial",
+        work_type_evidence_fingerprint(initial.items[0].type_evidence),
+        ("https://hrcak.srce.hr/en/clanak/505245",), NOW,
+        "Journal identifies the work as Editorial.",
+    )
+    corrected = run((source,), (article,), options=SearchOptions(year_from=2026, year_to=2026),
+                    type_reviews={source.link: review})
+    assert corrected.total_matches == 0
+    assert corrected.stats["unsupported_type"] == 1
+    stale = run(
+        (source,), (article,),
+        type_reviews={source.link: replace(review, evidence_fingerprint="0" * 64)},
+    )
+    assert stale.total_matches == 1
+
+
+def test_private_queue_includes_confirmed_paper_for_correction(tmp_path):
+    result = run((entry("GRUFUH", "Editorial", "2026."),),
+                 (oa("Editorial", year=2026),))
+    path = tmp_path / "review-queue.json"
+    cli._write_search_review_queue(path, result)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["items"][0]["reason"] == "confirmed_type"
+    assert payload["items"][0]["evidence_fingerprint"] == work_type_evidence_fingerprint(
+        result.items[0].type_evidence
+    )
+
+
+def test_publisher_review_links_truncated_doi_title_and_corrects_authors():
+    source = entry("ZHAAFT", "Approaching from the Desert: Eros and Ethical Temporality", "2026.")
+    abbreviated = replace(
+        oa("Approaching from the Desert", year=2026, doi="10.5840/example2026"),
+        authors=("Ada Scholar", "Example Publishing Society"),
+    )
+    review = ReviewedBibliography(
+        source.link, "Approaching from the Desert: Eros and Ethical Temporality",
+        "Ada Scholar", "Approaching from the Desert: Eros and Ethical Temporality",
+        ("Ada Scholar",), "10.5840/example2026", 2026,
+        ("https://example.org/publisher/article",), NOW,
+        "Publisher identifies the complete title, author, DOI, and year.",
+    )
+    def doi_lookup(dois, **kwargs):
+        assert dois == ("10.5840/example2026",)
+        return {abbreviated.doi: abbreviated}
+
+    result = run(
+        (source,), options=SearchOptions(year_from=2026, year_to=2026),
+        doi_lookup=doi_lookup, title_lookup=lambda *a, **k: (),
+        bibliographic_reviews={source.link: review},
+    )
+    assert result.total_matches == 1
+    assert result.items[0].title == review.verified_title
+    assert result.items[0].authors == ("Ada Scholar",)
+    assert result.items[0].year_source == "publisher-document-review"
+    assert result.items[0].doi == review.doi
+
+    conflicting = replace(abbreviated, authors=("Different Researcher",))
+    withheld = run(
+        (source,), doi_lookup=lambda *a, **k: {conflicting.doi: conflicting},
+        title_lookup=lambda *a, **k: (),
+        bibliographic_reviews={source.link: review},
+    )
+    assert withheld.total_matches == 0
+    assert withheld.unconfirmed_records[0].reason == "identity_unverified"
+
+    stale = run((source,), title_lookup=lambda *a, **k: (),
+                bibliographic_reviews={source.link: replace(review, source_title="Changed title")})
+    assert stale.total_matches == 0
+
+
+def test_type_and_publisher_bibliography_reviews_jointly_restore_year_bounded_paper():
+    source = entry("ZHAAFT", "Full publisher title", "2026.")
+    first = run((source,), options=SearchOptions(year_from=2026, year_to=2026),
+                title_lookup=lambda *a, **k: (), fallback_lookup=lambda *a, **k: None)
+    pending = first.unconfirmed_records[0]
+    type_review = ReviewedWorkType(
+        source.link, "Full publisher title", "article", pending.evidence_fingerprint,
+        ("https://example.org/publisher/article",), NOW, "Full article inspected.",
+    )
+    bibliography = ReviewedBibliography(
+        source.link, "Full publisher title", "Ada Scholar", "Full publisher title",
+        ("Ada Scholar",), "10.5840/example2026", 2026,
+        ("https://example.org/publisher/article",), NOW,
+        "Publisher supplies the article's full bibliography.",
+    )
+    result = run(
+        (source,), options=SearchOptions(year_from=2026, year_to=2026),
+        doi_lookup=lambda *a, **k: {}, title_lookup=lambda *a, **k: (),
+        type_reviews={source.link: type_review},
+        bibliographic_reviews={source.link: bibliography},
+    )
+    assert result.total_matches == 1
+    assert result.items[0].publication_year == 2026
+    assert result.items[0].citation_count is None
+
+
 def test_fallback_budget_is_disclosed_and_unknown_not_defaulted():
     result = run((entry("A"), entry("B")), options=SearchOptions(max_fallbacks=0))
     assert result.total_matches == 0
     assert result.stats["fallback_not_reached"] == 2
     assert result.stats["type_unverified"] == 2
+
+
+def test_failed_bibliographic_lookup_marks_report_as_partial():
+    def unavailable(*args, **kwargs):
+        raise OpenAlexError("synthetic lookup outage")
+
+    result = run((entry("A", "Paper"),), title_lookup=unavailable,
+                 options=SearchOptions(max_fallbacks=0))
+    assert result.source_failures
+    assert "不能称为这一检索范围的完整结果" in render_paper_search(result)
 
 
 def test_explicit_review_does_not_use_bibliographic_requests():

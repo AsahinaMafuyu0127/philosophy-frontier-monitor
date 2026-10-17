@@ -86,6 +86,23 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 最近发布的应用版本标签为 **v0.4.0**；当前代码的内部证据管线版本为 **0.6.2**。
 实机定时运行已在 Windows 验证；macOS／Linux 已适配路径，定时运行仍待实机验证。
 
+## 技术更新：逐篇复核可更正来源误标与书目截断（2026-10-17）
+
+周报、即时拉取和历史检索共用的作品类型复核现在可处理缺少类型标签的记录，
+也可在原刊证据明确时更正原先标为 article 的非论文。检索的私人队列同时列出
+未确认类型和本页已纳入论文的来源标签与证据指纹；旧指纹不会覆盖变化的来源。
+历史检索另可读取私人出版方书目复核，按确切记录、题名、首作者和 DOI 补证
+完整题名、实际作者及发表年份，供书目题名被索引截短时使用。类型裁定和书目
+补证分别保存；有年份范围时仍要求正式发表年份。书目接口失败会在报告中明确
+标示结果不完整。离线回归覆盖误标社论、无标签论文、截短题名、作者更正、
+旧指纹和来源失败。472 项测试、Ruff 与 Skill 校验通过；未据此重新生成
+私人正式周报或宣布新版本。
+操作见[历史检索规则](references/paper-search.md)与
+[结构化作品类型政策](references/work-type-policy.md)。
+
+<details>
+<summary>技术更新：三种模式的批量书目处理提速（2026-10-17）</summary>
+
 ## 技术更新：三种模式的批量书目处理提速（2026-10-17）
 
 历史检索、即时拉取和周报现在共用 OpenAlex 书目候选索引。索引只缩小需要比较的范围；
@@ -115,6 +132,8 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 相关边界见[中文来源政策](references/chinese-source-expansion.md)和
 [刊方观察规则](references/publisher-article-observation.md)。此次同步不创建新版本标签或
 GitHub Release。
+
+</details>
 
 <details>
 <summary>查看往期技术更新（19 条）</summary>
