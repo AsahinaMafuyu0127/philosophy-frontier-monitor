@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from .bibliographic_cache import BibliographicCache, BibliographicCacheStats
+from .bibliographic_index import OpenAlexIdentityIndex
 from .cnki_review import (
     BibliographicPeer,
     CnkiAssessment,
@@ -2208,15 +2209,13 @@ def _official_issues_for_window(
         candidates = issues_in_window(all_reviewed, local_start, local_last)
     if not first_observed_only:
         return distinct_issue_leads(candidates)
-    first_review_by_issue = {
-        (issue.journal_id, issue.year, issue.issue): min(
-            datetime.fromisoformat(other.reviewed_at or other.observed_at)
-            for other in all_reviewed
-            if (other.journal_id, other.year, other.issue)
-            == (issue.journal_id, issue.year, issue.issue)
-        )
-        for issue in candidates
-    }
+    first_review_by_issue = {}
+    for issue in all_reviewed:
+        key = issue.journal_id, issue.year, issue.issue
+        reviewed_at = datetime.fromisoformat(issue.reviewed_at or issue.observed_at)
+        previous = first_review_by_issue.get(key)
+        if previous is None or reviewed_at < previous:
+            first_review_by_issue[key] = reviewed_at
     return distinct_issue_leads(tuple(
         issue
         for issue in candidates
@@ -2232,14 +2231,16 @@ def _official_months_for_cnki(
     def identity(title, year, number):
         return (normalize_title(title), year, number.lstrip("0") or "0")
 
+    reviewed_by_identity = {}
+    for item in official_issues:
+        if item.status == "reviewed":
+            reviewed_by_identity.setdefault(
+                identity(item.title, item.year, item.issue), []
+            ).append(item)
+
     enriched = []
     for issue in issues:
-        evidence = tuple(
-            item for item in official_issues
-            if item.status == "reviewed"
-            and identity(item.title, item.year, item.issue)
-            == identity(issue.venue, issue.year, issue.issue)
-        )
+        evidence = reviewed_by_identity.get(identity(issue.venue, issue.year, issue.issue), ())
         labels = {int(item.label_month[-2:]) for item in evidence if item.label_month}
         months = labels or {
             int(item.issue_published_on[5:7]) for item in evidence
@@ -2906,12 +2907,11 @@ def run_on_demand(
     elif title_queries_to_query:
         circuit_skip_counts["openalex"] = circuit_skip_counts.get("openalex", 0) + 1
     if bibliography_cache is not None:
+        fresh_works_by_title: dict[str, list[OpenAlexWork]] = {}
+        for work in fresh_title_works:
+            fresh_works_by_title.setdefault(normalize_title(work.title), []).append(work)
         for title in title_queries_to_query:
-            exact_works = tuple(
-                work
-                for work in fresh_title_works
-                if normalize_title(work.title) == normalize_title(title)
-            )
+            exact_works = tuple(fresh_works_by_title.get(normalize_title(title), ()))
             bibliography_cache.store_openalex_title_candidates(
                 title,
                 exact_works,
@@ -2937,30 +2937,27 @@ def run_on_demand(
     fallback_reason_by_source_id: dict[str, str] = {}
     title_batch_resolved_count = 0
     title_batch_terminal_unresolved_count = 0
+    title_work_index = OpenAlexIdentityIndex(title_works)
+    normalized_work_titles = {normalize_title(work.title) for work in title_works}
     for candidate in title_candidates:
         display = split_display_bibliography(candidate.display_title)
-        normalized_candidate_title = normalize_title(display.title)
-        same_normalized_title_works = tuple(
-            work
-            for work in title_works
-            if normalize_title(work.title) == normalized_candidate_title
-        )
-        batched_matches = [
-            resolved
-            for openalex in title_works
-            if _candidate_matches_openalex(candidate, openalex)
-            and (
-                resolved := _resolve_batched_openalex(
-                    candidate,
-                    openalex,
-                    snapshot,
-                    window_start,
-                    window_end,
-                    requested_at,
-                )
+        same_normalized_title_works = normalize_title(display.title) in normalized_work_titles
+        batched_matches = []
+        for openalex in title_work_index.possible(
+            display.title, display.author_text, candidate.doi_hints
+        ):
+            resolved = _resolve_batched_openalex(
+                candidate,
+                openalex,
+                snapshot,
+                window_start,
+                window_end,
+                requested_at,
             )
-            is not None
-        ]
+            if resolved is not None:
+                batched_matches.append(resolved)
+                if len(batched_matches) == 2:
+                    break
         if len(batched_matches) == 1:
             terminal = batched_matches[0]
             resolution_results.append(terminal)
@@ -3651,6 +3648,9 @@ def run_weekly(
             result.work if current_work is None else _merge_work(current_work, result.work)
         )
 
+    sources_by_work: dict[str, list[tuple[str, str]]] = {}
+    for key, work_id in source_to_work.items():
+        sources_by_work.setdefault(work_id, []).append(key)
     for work_id, work in tuple(works.items()):
         work = _apply_type_review_to_work(work, type_reviews)
         works[work_id] = work
@@ -3658,9 +3658,7 @@ def run_weekly(
         if failure is None:
             continue
         reason_code, detail = failure
-        for key, source_work_id in tuple(source_to_work.items()):
-            if source_work_id != work_id:
-                continue
+        for key in sources_by_work.get(work_id, ()):
             source, source_id = key
             unresolved_updates.append(
                 UnresolvedUpdate(

@@ -14,6 +14,7 @@ import unicodedata
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from enum import StrEnum
+from functools import lru_cache
 
 from .normalize import normalize_title
 
@@ -64,16 +65,19 @@ class IdentityDecision:
     evidence: tuple[str, ...]
 
 
+@lru_cache(maxsize=4096)
 def _fold(value: str) -> str:
     decomposed = unicodedata.normalize("NFKD", value.casefold())
     without_marks = "".join(char for char in decomposed if not unicodedata.combining(char))
     return normalize_title(without_marks)
 
 
+@lru_cache(maxsize=4096)
 def _content_tokens(value: str) -> frozenset[str]:
     return frozenset(token for token in _fold(value).split() if token not in TITLE_STOPWORDS)
 
 
+@lru_cache(maxsize=4096)
 def _script_families(value: str) -> frozenset[str]:
     families: set[str] = set()
     for char in value:
@@ -89,6 +93,7 @@ def _script_families(value: str) -> frozenset[str]:
     return frozenset(families)
 
 
+@lru_cache(maxsize=4096)
 def _person_parts(value: str) -> tuple[frozenset[str], str, tuple[str, ...]]:
     folded = _fold(value)
     tokens = tuple(token for token in folded.split() if token)
@@ -104,6 +109,19 @@ def _person_parts(value: str) -> tuple[frozenset[str], str, tuple[str, ...]]:
         given = tokens[:-1]
     initials = tuple(token[0] for token in given if token)
     return frozenset(tokens), surname, initials
+
+
+def identity_lookup_keys(title: str, first_author: str | None) -> tuple[str, frozenset[str], str]:
+    """Return the exact-title key and both routes to compatible first authors.
+
+    ``authors_equivalent`` can accept either identical name-token sets or matching
+    surnames (subject to initials), so both author keys are needed for a safe index.
+    """
+    title_key = _fold(title)
+    if first_author is None or not first_author.strip():
+        return title_key, frozenset(), ""
+    tokens, surname, _ = _person_parts(first_author)
+    return title_key, tokens, surname
 
 
 def authors_equivalent(expected: str | None, candidates: tuple[str, ...]) -> bool | None:

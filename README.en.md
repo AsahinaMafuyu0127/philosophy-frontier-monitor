@@ -105,6 +105,34 @@ The latest tagged application release is **v0.4.0**; the current code uses inter
 version **0.6.2**. Scheduled operation has been validated on Windows; macOS and Linux path support
 is in place, with scheduled operation still awaiting real-machine validation.
 
+## Technical update: faster batch bibliography handling in all three modes (17 October 2026)
+
+Historical search, on-demand pulls, and weekly reports now share an index of possible OpenAlex
+matches. The index narrows comparisons; the existing bibliography comparator still decides
+shared DOI, orthographic title, and compatible first-author evidence. A second equivalent work
+keeps the identity unresolved rather than selecting the more cited version. Exact-identifier
+merging in search, publisher-date matching for CNKI issues, CNKI/PhilPapers overlap hints, and
+the first-review time for weekly issue leads also use indexed lookup. Batch title caching and
+failed-work source lookup no longer rescan unrelated records. Category, date, work-form, human
+review, and private-state rules retain their existing thresholds.
+
+With 600 synthetic candidates and 600 similarly titled works by different authors, the local
+identity-matching step shared by weekly and on-demand runs fell from about 4.37 to 0.006 seconds.
+Matching 1,000 query titles to 1,000 returned works for the title cache fell from about 1.49 to
+0.002 seconds. A full offline historical search at the same 600-by-600 scale now takes about
+0.05–0.06 seconds; 600 ambiguous records with one author and highly similar titles remain
+unconfirmed. These measurements exclude remote requests and do not predict live weekly runtime.
+The full test suite, Ruff, skill validation, the read-only release audit, and differential
+comparison checks were run. This is a code branch update without a new version tag or GitHub
+Release. See the [search rules](references/paper-search.md) and
+[monitoring policy](references/monitoring-policy.md) for identity and date thresholds.
+
+<details>
+<summary>View earlier technical updates (19)</summary>
+
+<details>
+<summary>Technical update: document review across all three modes (12 October 2026)</summary>
+
 ## Technical update: document review across all three modes (12 October 2026)
 
 Weekly reports, on-demand pulls, and historical search now share the structured work-type
@@ -120,8 +148,7 @@ after applicable validation and PR checks pass. Each mode retains its own time r
 rules. See the [work-type policy](references/work-type-policy.md) and
 [contribution guide](CONTRIBUTING.md).
 
-<details>
-<summary>View earlier technical updates (18)</summary>
+</details>
 
 <details>
 <summary>Technical update: landing-page prose and update archive (12 October 2026)</summary>

@@ -86,6 +86,33 @@ def test_same_title_requires_author_and_year_for_strong_overlap() -> None:
     assert assess_cnki_overlaps((RECORD,), (unrelated,)) == ()
 
 
+def test_overlap_index_preserves_normalized_title_and_review_status() -> None:
+    peer = BibliographicPeer("概念：与论证", ("乙",), 2025,
+                             "https://philpapers.org/rec/ABC")
+    overlap = assess_cnki_overlaps((replace(RECORD, title="概念与论证"),), (peer,))
+    assert overlap[0].status == "needs_review"
+    assert overlap[0].peer_urls == (peer.url,)
+    assert assess_cnki_overlaps((replace(RECORD, title="!!!"),),
+                                (replace(peer, title="!!!"),)) == ()
+
+
+def test_official_date_index_matches_normalized_issue_identity() -> None:
+    from philosophy_frontier_monitor.pipeline import _official_months_for_cnki
+
+    issue = CnkiIssue("issue", "哲学分析", 2026, "09", None, (RECORD,), (),
+                      datetime(2026, 10, 16, tzinfo=UTC))
+    reviewed = SimpleNamespace(title="哲学分析", year=2026, issue="9", status="reviewed",
+                               label_month="2026-09", issue_published_on=None,
+                               evidence_url="https://journal.example.org/issue/9")
+    pending = SimpleNamespace(title="哲学分析", year=2026, issue="9", status="pending",
+                              label_month="2026-08", issue_published_on=None,
+                              evidence_url="https://journal.example.org/pending")
+    enriched = _official_months_for_cnki((issue,), (pending, reviewed))[0]
+    assert enriched.label_month == 9
+    assert enriched.date_evidence_urls == (reviewed.evidence_url,)
+    assert not enriched.date_conflict
+
+
 @pytest.mark.parametrize(
     "dates,expected",
     [
