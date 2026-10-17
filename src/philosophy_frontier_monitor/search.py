@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 import httpx
 
 from .bibliographic_index import OpenAlexIdentityIndex
+from .bibliographic_reviews import ReviewedBibliography
 from .cnki_dates import enrich_cnki_scan_with_dates
 from .cnki_review import (
     BibliographicPeer,
@@ -25,6 +26,7 @@ from .config import WatchlistConfig
 from .identity import (
     IdentityMatchLevel,
     IdentityReviewRequired,
+    authors_equivalent,
     compare_bibliographic_identity,
 )
 from .models import DateValue, WorkTypeEvidence
@@ -341,6 +343,7 @@ def run_paper_search(
     wanfang_loader: Callable[..., WanfangScan] = scan_wanfang_cnki,
     wanfang_discovery_loader: Callable[..., WanfangDiscoveryScan] = scan_wanfang_discovery,
     type_reviews: dict[str, ReviewedWorkType] | None = None,
+    bibliographic_reviews: dict[str, ReviewedBibliography] | None = None,
 ) -> PaperSearchResult:
     """Search configured interests; dependencies may be injected for offline tests."""
     options = options or SearchOptions()
@@ -402,6 +405,18 @@ def run_paper_search(
         stats["no_feed_year_hint"] = sum(not c.feed_year_hints for c in candidates)
         candidates = [c for c in candidates if c.feed_year_hints]
     candidates = [c for c in candidates if not _reject_explicit(c, stats)]
+    applicable_bibliographies: dict[str, ReviewedBibliography] = {}
+    for candidate in candidates:
+        review = (bibliographic_reviews or {}).get(candidate.stable_url)
+        if review is None:
+            continue
+        display = split_display_bibliography(candidate.display_title)
+        if review.applies_to(
+            record_url=candidate.stable_url, title=display.title,
+            author=display.author_text, doi_hints=candidate.doi_hints,
+            feed_year_hints=candidate.feed_year_hints,
+        ):
+            applicable_bibliographies[candidate.stable_url] = review
     if len(candidates) > options.max_candidates:
         raise PipelineError(
             f"search has {len(candidates)} candidates, exceeding max_candidates="
@@ -426,7 +441,10 @@ def run_paper_search(
     with httpx.Client(
         headers={"User-Agent": DEFAULT_USER_AGENT}, follow_redirects=True, timeout=30
     ) as client:
-        dois = tuple(sorted({d for c in candidates for d in c.doi_hints}))
+        dois = tuple(sorted(
+            {d for c in candidates for d in c.doi_hints}
+            | {review.doi for review in applicable_bibliographies.values()}
+        ))
         for offset in range(0, len(dois), MAX_DOI_BATCH_SIZE):
             try:
                 found = doi_lookup(
@@ -471,24 +489,55 @@ def run_paper_search(
                 if openalex_blocked:
                     break
         all_works_index = _OpenAlexIdentityIndex(tuple(openalex.values()))
+        reviewed_doi_index: dict[str, list[OpenAlexWork]] = {}
+        if applicable_bibliographies:
+            reviewed_dois = {review.doi for review in applicable_bibliographies.values()}
+            for value in openalex.values():
+                if value.doi in reviewed_dois:
+                    reviewed_doi_index.setdefault(value.doi, []).append(value)
         for index, candidate in enumerate(candidates, 1):
+            review = applicable_bibliographies.get(candidate.stable_url)
             equivalent = all_works_index.equivalent(candidate)
             work: OpenAlexWork | CrossrefWork | None = None
-            if len(equivalent) > 1 or len(candidate.doi_hints) > 1:
+            reviewed_doi_works = reviewed_doi_index.get(review.doi, ()) if review else ()
+            reviewed_matches = (
+                [
+                    value for value in reviewed_doi_works
+                    if authors_equivalent(review.verified_authors[0], value.authors) is not False
+                    and (
+                        review.publication_year is None
+                        or _year(value.publication_date) in {None, review.publication_year}
+                    )
+                ]
+                if review else []
+            )
+            if (
+                len(candidate.doi_hints) > 1
+                or len(reviewed_matches) > 1
+                or (reviewed_doi_works and not reviewed_matches)
+            ):
                 stats["identity_unverified"] += 1
                 record_unconfirmed(candidate, "identity_unverified")
                 continue
-            if len(equivalent) == 1:
+            if reviewed_matches:
+                work = reviewed_matches[0]
+            elif len(equivalent) > 1 or (
+                review and any(value.doi and value.doi != review.doi for value in equivalent)
+            ):
+                stats["identity_unverified"] += 1
+                record_unconfirmed(candidate, "identity_unverified")
+                continue
+            elif len(equivalent) == 1 and review is None:
                 work = equivalent[0]
             supplementary = None
             # Metadata is needed to establish paper form; missing citation
             # counts alone never trigger extra individual requests.
             native, native_reason = _make_item(candidate, work, now)
-            if native_reason or (
+            if review is None and (native_reason or (
                 options.filters_years
                 and native.publication_year is None
                 and is_supported_work_type(native.work_type)
-            ):
+            )):
                 if crossref_blocked or stats["fallback_requests"] >= options.max_fallbacks:
                     stats["fallback_not_reached"] += 1
                 else:
@@ -520,6 +569,12 @@ def run_paper_search(
                         failures.add("Crossref: paper metadata lookup failed")
                         crossref_blocked = _bibliographic_error_opens_circuit(error)
             item, _ = _make_item(candidate, work, now, supplementary)
+            if review is not None:
+                item = replace(
+                    item, title=review.verified_title, authors=review.verified_authors,
+                    doi=review.doi, publication_year=review.publication_year,
+                    year_source="publisher-document-review" if review.publication_year else None,
+                )
             items.append(item)
             if progress:
                 progress("candidates", index, len(candidates))
@@ -537,7 +592,7 @@ def run_paper_search(
             stats["filtered_out"] += 1
             continue
         resolution = resolve_work_type_evidence(item.type_evidence, default_type="unknown")
-        if type_reviews and not resolution.usable:
+        if type_reviews:
             applicable = [
                 (url, title, type_reviews[url])
                 for url, title in item.source_titles

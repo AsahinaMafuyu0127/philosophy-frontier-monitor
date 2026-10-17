@@ -224,6 +224,11 @@ def render_paper_search(
         ]
     if result.stats.get("excluded_categories_not_loaded", 0):
         lines += ["- 部分排除分类未读取成员记录，无法完整核验这些排除项。"]
+    if result.source_failures:
+        lines += [
+            "- 书目补查来源本次发生失败；已确认篇数只代表本次完成核验的记录，"
+            "不能称为这一检索范围的完整结果。"
+        ]
     lines += [f"- 来源异常：{_safe_text(failure)}。" for failure in result.source_failures]
     if result.unconfirmed_records:
         lines += ["", "<details>", "<summary>自行核对原始记录（可选）</summary>", ""]

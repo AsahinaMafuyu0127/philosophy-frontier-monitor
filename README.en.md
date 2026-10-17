@@ -105,6 +105,27 @@ The latest tagged application release is **v0.4.0**; the current code uses inter
 version **0.6.2**. Scheduled operation has been validated on Windows; macOS and Linux path support
 is in place, with scheduled operation still awaiting real-machine validation.
 
+## Technical update: individual review corrects source labels and truncated bibliographies (17 October 2026)
+
+The shared work-type review used by weekly reports, on-demand pulls, and historical search
+can now adjudicate records with no type label and correct an article label when the original
+publisher identifies a different work form. Search's private queue includes both unresolved
+types and the source labels and evidence fingerprints of papers shown on the current page;
+an old fingerprint cannot override changed source evidence. Historical search can separately
+read a private publisher-checked bibliography review to recover a full title, actual authors,
+DOI, and publication year when an index truncates its title. Work-form and bibliographic
+decisions remain separate, and year-bounded searches still require a publication year.
+A bibliography lookup failure is now explicitly marked as an incomplete search result.
+Offline regression tests cover incorrect editorial labels, unlabeled papers, shortened
+titles, author corrections, stale fingerprints, and source failure. All 472 tests,
+Ruff, and Skill validation passed. No private weekly report was regenerated and
+no new release was created. See the
+[search rules](references/paper-search.md) and
+[work-type policy](references/work-type-policy.md).
+
+<details>
+<summary>Technical update: faster batch bibliography handling in all three modes (17 October 2026)</summary>
+
 ## Technical update: faster batch bibliography handling in all three modes (17 October 2026)
 
 Historical search, on-demand pulls, and weekly reports now share an index of possible OpenAlex
@@ -143,6 +164,8 @@ live collection was repeated and no private monitoring state was rewritten. See 
 [Chinese-source policy](references/chinese-source-expansion.md) and
 [publisher observation protocol](references/publisher-article-observation.md). This synchronization
 does not create a new version tag or GitHub Release.
+
+</details>
 
 <details>
 <summary>View earlier technical updates (19)</summary>

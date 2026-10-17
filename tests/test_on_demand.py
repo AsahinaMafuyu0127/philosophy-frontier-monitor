@@ -29,6 +29,7 @@ from philosophy_frontier_monitor.models import (
     DateValue,
     FreshnessStatus,
     WorkRecord,
+    WorkTypeEvidence,
 )
 from philosophy_frontier_monitor.pipeline import (
     FeedSnapshot,
@@ -57,7 +58,10 @@ from philosophy_frontier_monitor.sources.wanfang import (
     WanfangRecord,
     WanfangScan,
 )
-from philosophy_frontier_monitor.work_type_reviews import ReviewedWorkType
+from philosophy_frontier_monitor.work_type_reviews import (
+    ReviewedWorkType,
+    work_type_evidence_fingerprint,
+)
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
 CONFIG = load_watchlist(FIXTURE_DIR / "watchlist_minimal.yaml")
@@ -1502,6 +1506,40 @@ def test_document_review_resolves_same_window_type_conflict_without_changing_dat
     stale = replace(review, evidence_fingerprint="0" * 64)
     unchanged = run_on_demand(CONFIG, **kwargs, type_reviews={stale.record_url: stale})
     assert unchanged.stats["structured_work_type_conflicts"] == 1
+
+
+def test_publisher_editorial_review_removes_structured_article_from_pull_now():
+    record = entry("EDITORIAL", published_text=None, description="2026.")
+    openalex_id = "https://openalex.org/W-EDITORIAL"
+
+    def title_batch(_titles, _config, attempted_at):
+        return (OpenAlexWork(
+            openalex_id=openalex_id, doi=None, title="Paper EDITORIAL",
+            authors=("Ada Scholar",),
+            publication_date=DateValue(
+                date(2026, 9, 8), DatePrecision.DAY, "openalex", retrieved_at=attempted_at,
+            ),
+            work_type="article", stable_url=openalex_id, raw={},
+        ),)
+
+    kwargs = dict(
+        now=REQUEST_TIME, feed_loader=loader_with(record),
+        batch_title_resolver=title_batch,
+        resolver=lambda *_args, **_kwargs: None,
+        allow_development_fixture=True,
+    )
+    first = run_on_demand(CONFIG, **kwargs)
+    assert first.stats["matched_confirmed_new"] == 1
+    review = ReviewedWorkType(
+        record.source_id, "Paper EDITORIAL", "editorial",
+        work_type_evidence_fingerprint((
+            WorkTypeEvidence("openalex", "article", "article", openalex_id),
+        )),
+        ("https://example.org/publisher/editorial",), REQUEST_TIME,
+        "Original journal labels this work Editorial.",
+    )
+    corrected = run_on_demand(CONFIG, **kwargs, type_reviews={record.source_id: review})
+    assert corrected.stats["matched_confirmed_new"] == 0
 
 
 def test_repeated_pull_uses_positive_per_title_batch_cache():

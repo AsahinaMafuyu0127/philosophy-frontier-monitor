@@ -14,7 +14,9 @@ from philosophy_frontier_monitor.review_feed_snapshots import (
 )
 from philosophy_frontier_monitor.sources.philpapers_rss import FeedEntry
 from philosophy_frontier_monitor.work_type_reviews import (
+    ReviewedWorkType,
     WorkTypeReviewError,
+    apply_work_type_review,
     load_work_type_reviews,
     work_type_evidence_fingerprint,
 )
@@ -108,6 +110,34 @@ def test_inspected_document_type_resolves_original_source_conflict():
     )
     assert resolved.work_type == "manuscript"
     assert resolved.status is WorkTypeStatus.REVIEWED
+
+
+@pytest.mark.parametrize("source_type,reviewed_type", [
+    ("article", "editorial"),
+    ("unknown", "article"),
+])
+def test_shared_document_review_corrects_confirmed_or_defaulted_type(
+    source_type, reviewed_type,
+):
+    evidence = (
+        (WorkTypeEvidence("openalex", "article", "article", "W1"),)
+        if source_type == "article" else ()
+    )
+    resolved = resolve_work_type_evidence(evidence, default_type="unknown")
+    review = ReviewedWorkType(
+        "https://philpapers.org/rec/EXAMPLE", "Example paper", reviewed_type,
+        work_type_evidence_fingerprint(evidence),
+        ("https://example.org/paper",), datetime(2026, 10, 10, tzinfo=UTC),
+        "Inspected the publisher record and complete work.",
+    )
+    corrected = apply_work_type_review(
+        resolved, review, record_url=review.record_url, title=review.title,
+    )
+    assert corrected.work_type == reviewed_type
+    assert corrected.status is WorkTypeStatus.REVIEWED
+    assert apply_work_type_review(
+        corrected, review, record_url=review.record_url, title=review.title,
+    ) == corrected
 
 
 def test_review_can_bind_two_observed_source_combinations(tmp_path):

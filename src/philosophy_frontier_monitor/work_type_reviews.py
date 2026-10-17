@@ -86,7 +86,7 @@ def apply_work_type_review(
 
     if (
         review is None
-        or resolution.status not in {WorkTypeStatus.CONFLICT, WorkTypeStatus.UNKNOWN}
+        or resolution.status is WorkTypeStatus.REVIEWED
         or not review.applies_to(
             record_url=record_url, title=title, evidence=resolution.evidence
         )
