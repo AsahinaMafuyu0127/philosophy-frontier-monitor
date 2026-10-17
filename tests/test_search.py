@@ -432,9 +432,15 @@ def test_merged_type_conflict_can_be_reviewed_with_exact_evidence():
 
     def fallback(title, **kwargs):
         return CrossrefWork(
-            "10.1234/test", title, ("Ada Scholar",), None,
+            "10.1234/test",
+            title,
+            ("Ada Scholar",),
+            None,
             "book" if title == "First title" else "journal-article",
-            "https://doi.org/10.1234/test", None, None, {},
+            "https://doi.org/10.1234/test",
+            None,
+            None,
+            {},
         )
 
     first = run(entries, fallback_lookup=fallback)
@@ -451,7 +457,8 @@ def test_merged_type_conflict_can_be_reviewed_with_exact_evidence():
         "Inspected the full document and its publication metadata.",
     )
     confirmed = run(
-        entries, fallback_lookup=fallback,
+        entries,
+        fallback_lookup=fallback,
         type_reviews={pending.review_record_url: review},
     )
     assert confirmed.total_matches == 1
@@ -471,8 +478,12 @@ def test_reviewed_paper_keeps_historical_year_filter():
     first = run((entry("A", "Paper", "Manuscript. 2024."),), (oa("Paper", kind="book"),))
     pending = first.unconfirmed_records[0]
     review = ReviewedWorkType(
-        pending.review_record_url, pending.review_title, "article",
-        pending.evidence_fingerprint, ("https://philpapers.org/rec/A",), NOW,
+        pending.review_record_url,
+        pending.review_title,
+        "article",
+        pending.evidence_fingerprint,
+        ("https://philpapers.org/rec/A",),
+        NOW,
         "Inspected the full document.",
     )
     result = run(
@@ -495,9 +506,9 @@ def test_search_private_review_queue_contains_exact_type_evidence(tmp_path):
     assert payload["items"][0]["evidence_fingerprint"] == (
         result.unconfirmed_records[0].evidence_fingerprint
     )
-    assert cli.build_parser().parse_args([
-        "search", "--review-queue-file", str(path), "--type-reviews", str(path)
-    ]).type_reviews == str(path)
+    assert cli.build_parser().parse_args(
+        ["search", "--review-queue-file", str(path), "--type-reviews", str(path)]
+    ).type_reviews == str(path)
 
 
 def test_fallback_budget_is_disclosed_and_unknown_not_defaulted():
@@ -573,6 +584,80 @@ def test_shared_doi_merges_records_before_all_tag_filter():
     assert result.total_matches == 1
     assert len(result.items[0].source_urls) == 2
     assert result.items[0].citation_count == 10  # never sum duplicate counts
+
+
+def test_identifier_bridge_merges_both_prior_groups():
+    from collections import Counter
+
+    from philosophy_frontier_monitor.search import PaperSearchItem, _merge_items
+
+    base = PaperSearchItem(
+        "First",
+        ("Author",),
+        None,
+        None,
+        ("https://example.org/a",),
+        ("a",),
+        (),
+        "article",
+        (),
+        2026,
+        "fixture",
+        4,
+        "OpenAlex",
+        NOW,
+    )
+    second = replace(
+        base, title="Second", source_urls=("https://example.org/b",), category_ids=("b",)
+    )
+    bridge = replace(
+        base,
+        title="Bridge",
+        source_urls=("https://example.org/a", "https://example.org/b"),
+        category_ids=("c",),
+    )
+    stats = Counter()
+    merged = _merge_items([base, second, bridge], stats)
+    assert len(merged) == 1
+    assert merged[0].source_urls == ("https://example.org/a", "https://example.org/b")
+    assert merged[0].category_ids == ("a", "b", "c")
+    assert stats["duplicate_records_merged"] == 2
+
+
+def test_openalex_identity_index_preserves_all_equivalence_routes():
+    from philosophy_frontier_monitor.pipeline import MergedCandidate
+    from philosophy_frontier_monitor.search import _OpenAlexIdentityIndex
+
+    base = MergedCandidate(
+        "PhilPapers",
+        "https://philpapers.org/rec/INDEX",
+        "Ada, Scholar: Distinct Title",
+        "https://philpapers.org/rec/INDEX",
+        frozenset({"74924"}),
+        NOW,
+        "fixture",
+    )
+    # Same author tokens in a different order can match even when parsed surnames differ.
+    fuzzy = oa("Distinct Titles", key="fuzzy")
+    assert _OpenAlexIdentityIndex((fuzzy,)).equivalent(base) == [fuzzy]
+
+    # Exact title and a shared DOI each remain possible without comparable authors.
+    exact = replace(oa("Exact Title", key="exact"), authors=())
+    assert _OpenAlexIdentityIndex((exact,)).equivalent(
+        replace(base, display_title="Exact Title")
+    ) == [exact]
+    ambiguous = (
+        exact,
+        replace(exact, openalex_id="https://openalex.org/second"),
+        replace(exact, openalex_id="https://openalex.org/third"),
+    )
+    assert _OpenAlexIdentityIndex(ambiguous).equivalent(
+        replace(base, display_title="Exact Title")
+    ) == list(ambiguous[:2])
+    shared = replace(oa("Unrelated Title", key="shared", doi="10.1234/shared"), authors=())
+    assert _OpenAlexIdentityIndex((shared,)).equivalent(
+        replace(base, doi_hints=("10.1234/shared",))
+    ) == [shared]
 
 
 def test_ambiguous_openalex_versions_withheld_instead_of_highest_citation():

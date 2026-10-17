@@ -97,15 +97,17 @@ def _names(value: object, field: str) -> tuple[str, ...]:
     return tuple(_text(item, field) for item in value)
 
 
-def _same(left: str, right: str) -> bool:
-    def compact(value: str) -> str:
-        return "".join(
-            character
-            for character in unicodedata.normalize("NFKC", value).casefold()
-            if character.isalnum()
-        )
+def _compact(value: str) -> str:
+    return "".join(
+        character
+        for character in unicodedata.normalize("NFKC", value).casefold()
+        if character.isalnum()
+    )
 
-    return bool(compact(left)) and compact(left) == compact(right)
+
+def _same(left: str, right: str) -> bool:
+    normalized = _compact(left)
+    return bool(normalized) and normalized == _compact(right)
 
 
 def _issue(value: str) -> str:
@@ -254,9 +256,15 @@ def assess_cnki_overlaps(
 ) -> tuple[CnkiOverlap, ...]:
     """Flag exact-title overlap in the inspected PhilPapers subset, without merging."""
 
+    peers_by_title = {}
+    for peer in peers:
+        title = _compact(peer.title)
+        if title:
+            peers_by_title.setdefault(title, []).append(peer)
+
     overlaps = []
     for record in records:
-        matches = [peer for peer in peers if _same(record.title, peer.title)]
+        matches = peers_by_title.get(_compact(record.title), ())
         if not matches:
             continue
         exact = [
