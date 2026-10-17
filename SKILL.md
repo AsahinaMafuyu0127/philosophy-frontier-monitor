@@ -19,7 +19,12 @@ scholarly quality and importance; available citation counts only order search re
   Only supported paper forms may enter results. Missing citation data must not
   remove a verified paper or be represented as zero.
   With year bounds, exclude records without a feed year hint before bibliographic
-  lookups. Without year bounds, include all verified matching papers even when
+  lookups unless an exact, publisher-checked `--bibliographic-reviews` entry
+  supplies the publication year. A `--type-reviews` entry alone never bypasses
+  this date gate. The private search review queue lists these records as
+  `year_review_pending`, with their source URL, title, and author; inspect
+  accessible promising works and save an exact bibliography decision before
+  rerunning. Without year bounds, include all verified matching papers even when
   feed dates, year hints, or publication dates are missing; do not impose the
   default yearly-result page size or invent a recent-year window. In user
   reports, mention unresolved paper types or bibliographic identities without

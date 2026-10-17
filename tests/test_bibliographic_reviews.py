@@ -37,6 +37,33 @@ def test_publisher_review_requires_matching_feed_identity(tmp_path):
     assert not review.applies_to(**{**params, "feed_year_hints": (2025,)})
 
 
+def test_publisher_review_accepts_year_without_doi_but_rejects_feed_doi(tmp_path):
+    entry = _entry()
+    entry["doi"] = None
+    path = tmp_path / "bibliographic.json"
+    path.write_text(json.dumps({"schema_version": 1, "reviews": [entry]}), encoding="utf-8")
+    review = load_bibliographic_reviews(path)[entry["record_url"]]
+    assert review.applies_to(
+        record_url=review.record_url, title=review.source_title,
+        author=review.source_author, doi_hints=(), feed_year_hints=(),
+    )
+    assert not review.applies_to(
+        record_url=review.record_url, title=review.source_title,
+        author=review.source_author, doi_hints=("10.5840/another",),
+        feed_year_hints=(),
+    )
+
+
+def test_publisher_review_cannot_omit_both_doi_and_year(tmp_path):
+    entry = _entry()
+    entry["doi"] = None
+    entry["publication_year"] = None
+    path = tmp_path / "bibliographic.json"
+    path.write_text(json.dumps({"schema_version": 1, "reviews": [entry]}), encoding="utf-8")
+    with pytest.raises(BibliographicReviewError, match="DOI or publication year"):
+        load_bibliographic_reviews(path)
+
+
 @pytest.mark.parametrize("field,value", [
     ("record_url", "https://other.example/rec/EXAMPLE"),
     ("doi", "example"),

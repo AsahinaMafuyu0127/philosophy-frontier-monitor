@@ -967,6 +967,17 @@ def _write_search_review_queue(path: Path, result: PaperSearchResult) -> None:
             {
                 "record_url": record.review_record_url,
                 "title": record.review_title,
+                "source_author": record.review_author,
+                "source_urls": record.source_urls,
+                "reason": "year_review_pending",
+                "work_type_evidence": [],
+                "evidence_fingerprint": None,
+            }
+            for record in result.year_review_candidates
+        ] + [
+            {
+                "record_url": record.review_record_url,
+                "title": record.review_title,
                 "source_urls": record.source_urls,
                 "reason": record.reason,
                 "work_type_evidence": [asdict(evidence) for evidence in record.work_type_evidence],

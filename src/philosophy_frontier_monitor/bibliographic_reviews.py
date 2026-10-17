@@ -23,7 +23,7 @@ class ReviewedBibliography:
     source_author: str
     verified_title: str
     verified_authors: tuple[str, ...]
-    doi: str
+    doi: str | None
     publication_year: int | None
     evidence_urls: tuple[str, ...]
     reviewed_at: datetime
@@ -38,7 +38,7 @@ class ReviewedBibliography:
             and normalize_title(self.source_title) == normalize_title(title)
             and authors_equivalent(author, (self.source_author,)) is True
             and authors_equivalent(self.source_author, self.verified_authors) is True
-            and (not doi_hints or doi_hints == (self.doi,))
+            and (not doi_hints or (self.doi is not None and doi_hints == (self.doi,)))
             and (
                 self.publication_year is None
                 or not feed_year_hints
@@ -61,7 +61,7 @@ def load_bibliographic_reviews(path: str | Path) -> dict[str, ReviewedBibliograp
         if not isinstance(entry, dict):
             raise BibliographicReviewError(f"review {index} must be an object")
         url = entry.get("record_url")
-        fields = ("source_title", "source_author", "verified_title", "doi", "note")
+        fields = ("source_title", "source_author", "verified_title", "note")
         if not isinstance(url, str) or not RECORD_URL.fullmatch(url):
             raise BibliographicReviewError(f"review {index} needs a PhilPapers record URL")
         if any(
@@ -71,9 +71,10 @@ def load_bibliographic_reviews(path: str | Path) -> dict[str, ReviewedBibliograp
             for field in fields
         ):
             raise BibliographicReviewError(f"review {index} needs bounded source facts")
-        doi = normalize_doi(entry["doi"])
-        if doi is None:
-            raise BibliographicReviewError(f"review {index} needs an exact DOI")
+        raw_doi = entry.get("doi")
+        doi = normalize_doi(raw_doi) if isinstance(raw_doi, str) else None
+        if raw_doi is not None and doi is None:
+            raise BibliographicReviewError(f"review {index} has an invalid DOI")
         authors = entry.get("verified_authors")
         if (
             not isinstance(authors, list)
@@ -87,6 +88,8 @@ def load_bibliographic_reviews(path: str | Path) -> dict[str, ReviewedBibliograp
         year = entry.get("publication_year")
         if year is not None and (type(year) is not int or not 1 <= year <= 9999):
             raise BibliographicReviewError(f"review {index} has invalid publication year")
+        if doi is None and year is None:
+            raise BibliographicReviewError(f"review {index} needs an exact DOI or publication year")
         evidence_urls = entry.get("evidence_urls")
         if (
             not isinstance(evidence_urls, list)

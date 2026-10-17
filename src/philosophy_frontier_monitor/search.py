@@ -142,6 +142,7 @@ class UnconfirmedSearchRecord:
     evidence_fingerprint: str | None = None
     review_record_url: str | None = None
     review_title: str | None = None
+    review_author: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,6 +163,7 @@ class PaperSearchResult:
     limitations: tuple[str, ...]
     source_failures: tuple[str, ...]
     unconfirmed_records: tuple[UnconfirmedSearchRecord, ...] = ()
+    year_review_candidates: tuple[UnconfirmedSearchRecord, ...] = ()
     coverage: str = "current_category_feed_inventory"
     state_mutated: bool = False
     cnki_candidates: tuple[CnkiRecord, ...] = ()
@@ -399,12 +401,8 @@ def run_paper_search(
             ),
         }
     )
-    # Only a year-bounded search excludes missing feed year hints. An undated
-    # record remains eligible for a tag-only search, subject to paper evidence.
-    if options.filters_years:
-        stats["no_feed_year_hint"] = sum(not c.feed_year_hints for c in candidates)
-        candidates = [c for c in candidates if c.feed_year_hints]
-    candidates = [c for c in candidates if not _reject_explicit(c, stats)]
+    # Resolve exact, publisher-checked corrections before the year-hint gate.
+    # A type review supplies form only; it cannot supply a missing year.
     applicable_bibliographies: dict[str, ReviewedBibliography] = {}
     for candidate in candidates:
         review = (bibliographic_reviews or {}).get(candidate.stable_url)
@@ -417,6 +415,34 @@ def run_paper_search(
             feed_year_hints=candidate.feed_year_hints,
         ):
             applicable_bibliographies[candidate.stable_url] = review
+    year_review_candidates: list[UnconfirmedSearchRecord] = []
+    if options.filters_years:
+        for candidate in candidates:
+            review = applicable_bibliographies.get(candidate.stable_url)
+            if candidate.feed_year_hints or (review and review.publication_year is not None):
+                continue
+            display = split_display_bibliography(candidate.display_title)
+            year_review_candidates.append(
+                UnconfirmedSearchRecord(
+                    display.title, (candidate.stable_url,), "year_review_pending",
+                    review_record_url=candidate.stable_url,
+                    review_title=display.title,
+                    review_author=display.author_text,
+                )
+            )
+        stats["no_feed_year_hint"] = len(year_review_candidates)
+        candidates = [
+            c for c in candidates
+            if c.feed_year_hints or (
+                (review := applicable_bibliographies.get(c.stable_url)) is not None
+                and review.publication_year is not None
+            )
+        ]
+    candidates = [c for c in candidates if not _reject_explicit(c, stats)]
+    active_urls = {c.stable_url for c in candidates}
+    applicable_bibliographies = {
+        url: review for url, review in applicable_bibliographies.items() if url in active_urls
+    }
     if len(candidates) > options.max_candidates:
         raise PipelineError(
             f"search has {len(candidates)} candidates, exceeding max_candidates="
@@ -443,7 +469,7 @@ def run_paper_search(
     ) as client:
         dois = tuple(sorted(
             {d for c in candidates for d in c.doi_hints}
-            | {review.doi for review in applicable_bibliographies.values()}
+            | {review.doi for review in applicable_bibliographies.values() if review.doi}
         ))
         for offset in range(0, len(dois), MAX_DOI_BATCH_SIZE):
             try:
@@ -491,7 +517,9 @@ def run_paper_search(
         all_works_index = _OpenAlexIdentityIndex(tuple(openalex.values()))
         reviewed_doi_index: dict[str, list[OpenAlexWork]] = {}
         if applicable_bibliographies:
-            reviewed_dois = {review.doi for review in applicable_bibliographies.values()}
+            reviewed_dois = {
+                review.doi for review in applicable_bibliographies.values() if review.doi
+            }
             for value in openalex.values():
                 if value.doi in reviewed_dois:
                     reviewed_doi_index.setdefault(value.doi, []).append(value)
@@ -521,6 +549,19 @@ def run_paper_search(
                 continue
             if reviewed_matches:
                 work = reviewed_matches[0]
+            elif review and review.doi is None and len(equivalent) == 1:
+                possible = equivalent[0]
+                if (
+                    authors_equivalent(review.verified_authors[0], possible.authors) is False
+                    or (
+                        review.publication_year is not None
+                        and _year(possible.publication_date) not in {None, review.publication_year}
+                    )
+                ):
+                    stats["identity_unverified"] += 1
+                    record_unconfirmed(candidate, "identity_unverified")
+                    continue
+                work = possible
             elif len(equivalent) > 1 or (
                 review and any(value.doi and value.doi != review.doi for value in equivalent)
             ):
@@ -572,7 +613,7 @@ def run_paper_search(
             if review is not None:
                 item = replace(
                     item, title=review.verified_title, authors=review.verified_authors,
-                    doi=review.doi, publication_year=review.publication_year,
+                    doi=review.doi or item.doi, publication_year=review.publication_year,
                     year_source="publisher-document-review" if review.publication_year else None,
                 )
             items.append(item)
@@ -806,14 +847,15 @@ def run_paper_search(
         wanfang_scan=wanfang_scan,
         wanfang_discovery=wanfang_discovery,
         unconfirmed_records=tuple(unconfirmed),
+        year_review_candidates=tuple(year_review_candidates),
         limitations=(
             "范围是已配置 PhilPapers 分类 feed 本次返回的记录，不保证覆盖完整历史索引。",
             "标签交集及排除仅依据所读取 feed 的成员关系，不能证明一篇论文的完整分类集合。",
             "引用量来自 OpenAlex；已知值降序，缺失置后。同值按年份降序、题名和来源链接排列。",
             "只纳入有论文类型证据的记录；未知或冲突类型不默认视为论文。",
             (
-                "本次限制年份：没有 feed 年份提示的记录直接排除，不进入补查或自行核对材料；"
-                "年份提示不代替正式发表日期。"
+                "本次限制年份：缺少 feed 年份提示且没有适用的刊方年份复核的记录在书目"
+                "查询前排除；私人队列可供逐篇补证。年份提示不代替正式发表日期。"
                 if options.filters_years
                 else "本次不限制年份：符合标签且已确认论文类型与身份的记录均可纳入，"
                 "不因缺少 feed 日期、年份提示或正式发表年份而排除。"
