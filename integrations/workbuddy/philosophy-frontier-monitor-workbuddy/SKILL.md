@@ -3,26 +3,20 @@ name: philosophy-frontier-monitor-workbuddy
 description: Use the locally installed Philosophy Frontier Monitor to search existing philosophy papers, pull recent records, and preview weekly reports with source evidence.
 description_zh: 在 WorkBuddy 中调用本机哲学论文监测项目，按来源证据检索已有论文、即时拉取和预览周报。
 description_en: Use a local Philosophy Frontier Monitor installation for evidence-based paper search and reports.
-version: 0.1.0
+version: 0.2.0
 author: Asahina Mafuyu
 ---
 
 # Philosophy Frontier Monitor for WorkBuddy
 
-This Skill is a local bridge. The project and its `pfm` CLI must already be installed. The ZIP contains instructions only: no program, watchlist, report, or credential.
+This local Skill package contains a snapshot of the project's public Skill and its referenced policies. The `pfm` program is installed separately. The ZIP contains no watchlist, private report, state database, or credential.
 
-## Before running
+Before a request, read @references/project/SKILL.md and the policy files it names for the selected mode. The packaged snapshot records the evidence rules used to make this ZIP. Locate the local project root, then compare its root `SKILL.md` SHA-256 with `source_skill_sha256` in @references/package-manifest.json. If they differ, identify the mismatch and rebuild the package from that project or select the matching checkout before running a report. Read the selected project's current policies as well. Do not combine one version's instructions with another version's CLI silently.
 
-Ask for the local project root if it is not already in this workspace. Check its root `SKILL.md`, `pyproject.toml`, and `pfm` entry point. Read that root Skill and the policies for the requested mode before collecting papers. The repository is authoritative for category, date, work type, bibliographic identity, evidence conflict, and privacy decisions. Adapt Codex-specific installer or scheduler steps to WorkBuddy without changing these evidence rules.
+Run the CLI from the matching project root. On Windows use `.venv\Scripts\pfm.exe`; on macOS/Linux use `.venv/bin/pfm`. Start with `pfm doctor` and `pfm onboarding-status`, and confirm `doctor` reports that project root. If the virtual environment points to another checkout, reinstall the editable project in the selected root before using private data. If WorkBuddy cannot read the project or run commands, explain the missing access.
 
-Run commands from the project root using its existing virtual environment: `.venv\Scripts\pfm.exe` on Windows or `.venv/bin/pfm` on macOS/Linux. Start with `pfm doctor` and `pfm onboarding-status`. Confirm that the root reported by `doctor` is the selected project root; an existing virtual environment may still point to a different checkout. Reinstall the editable project in that environment before using private configuration if the roots differ. If WorkBuddy cannot access the repository or execute the CLI, describe the missing access; do not simulate results.
+Use `pfm search` for historical search under the requested category, year, and type scope; it is not restricted to seven days. Use `pfm pull-now` for an immediate recent window. Run `pfm weekly-run --dry-run` and inspect the private review queue before a committed weekly report. A committed weekly run changes state and must follow the project's prerequisites and the user's requested scope.
 
-## Route the request
+Apply the packaged and current project policies to source classification, publication dates, bibliographic identity, work type, and unresolved evidence. Inspect conflicting works individually when the policy requires it. A work-type decision alone does not establish a date or identity. Preserve evidence fingerprints, the selected search or time window, and source coverage limits.
 
-- **Historical search:** use `pfm search` with the confirmed local watchlist and requested year, category, and type filters. Historical search has no automatic seven-day limit.
-- **Immediate pull:** use `pfm pull-now` with the confirmed watchlist and recent window; default seven days. Keep unresolved evidence in the private review queue.
-- **Weekly report:** run `pfm weekly-run --dry-run` first, inspect its report and queue, and follow the root policy before a committed run. A committed run writes state and requires the user's request for that run.
-
-When structured sources disagree about a work's type, inspect the individual work or publisher record, especially for dates in the recent window. Record a supported decision in the private review file and apply it using `--type-reviews` where appropriate. Preserve the evidence fingerprint and original window or search constraints. A type decision alone never proves publication date or bibliographic identity. Leave cases unresolved when original evidence cannot be inspected. Report observed source coverage and failures.
-
-Keep watchlists, state, review decisions, credentials, and private reports local. Do not paste secrets into chat or package them into this Skill. Ask before sending private content to an external service. This bridge does not configure WorkBuddy scheduling or notifications.
+Keep credentials, watchlists, review decisions, state, and private reports local. Do not paste them into chat or upload them with this Skill. This pilot does not configure WorkBuddy scheduling or notifications.

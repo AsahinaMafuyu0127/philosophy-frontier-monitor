@@ -105,6 +105,23 @@ The latest tagged application release is **v0.4.0**; the current code uses inter
 version **0.6.2**. Scheduled operation has been validated on Windows; macOS and Linux path support
 is in place, with scheduled operation still awaiting real-machine validation.
 
+## Technical update: WorkBuddy pilot package tracks the project Skill (17 October 2026)
+
+The WorkBuddy pilot ZIP now includes the selected project's public `SKILL.md`, its 16 referenced
+policy files, and the public journal catalog. A manifest records SHA-256 digests for the source
+Skill and packaged files. Rebuilding after a policy change creates a matching snapshot; check
+that the local project and CLI point to that version before running. The [pilot guide](references/workbuddy-local-pilot.md)
+covers building, importing, and acceptance. We built a 20-file ZIP from the selected local
+revision and checked its file list, digests, Skill metadata, Ruff, and the read-only release
+audit. Client import and operation remain unverified. This
+is a branch update without a new version tag or GitHub Release.
+
+<details>
+<summary>View earlier technical updates (21)</summary>
+
+<details>
+<summary>Technical update: faster batch bibliography handling in all three modes (17 October 2026)</summary>
+
 ## Technical update: faster batch bibliography handling in all three modes (17 October 2026)
 
 Historical search, on-demand pulls, and weekly reports now share an index of possible OpenAlex
@@ -127,8 +144,7 @@ comparison checks were run. This is a code branch update without a new version t
 Release. See the [search rules](references/paper-search.md) and
 [monitoring policy](references/monitoring-policy.md) for identity and date thresholds.
 
-<details>
-<summary>View earlier technical updates (20)</summary>
+</details>
 
 <details>
 <summary>Technical update: local WorkBuddy Skill pilot (12 October 2026)</summary>

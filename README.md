@@ -86,6 +86,21 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 最近发布的应用版本标签为 **v0.4.0**；当前代码的内部证据管线版本为 **0.6.2**。
 实机定时运行已在 Windows 验证；macOS／Linux 已适配路径，定时运行仍待实机验证。
 
+## 技术更新：WorkBuddy 试点包同步项目 Skill（2026-10-17）
+
+WorkBuddy 试点包现在会收录选定项目的公开 `SKILL.md`、它引用的 16 份政策文件和公开
+期刊目录，并写入来源 Skill 与各文件的 SHA-256 摘要。项目证据规则更新后，重新构建即可
+得到对应快照；运行前还须核对本机项目及 CLI 指向同一版本。[试点说明](references/workbuddy-local-pilot.md)
+给出构建、导入和验收步骤。本次从选定的本地修订版生成 20 文件 ZIP，离线核对了文件清单、
+摘要、Skill 元数据、Ruff 和只读发布检查。本次尚未执行 WorkBuddy 客户端导入与实际运行验收；
+这是分支更新，没有创建新版本标签或 GitHub Release。
+
+<details>
+<summary>查看往期技术更新（21 条）</summary>
+
+<details>
+<summary>技术更新：三种模式的批量书目处理提速（2026-10-17）</summary>
+
 ## 技术更新：三种模式的批量书目处理提速（2026-10-17）
 
 历史检索、即时拉取和周报现在共用 OpenAlex 书目候选索引。索引只缩小需要比较的范围；
@@ -104,8 +119,7 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 详细的书目身份和日期门槛见[历史检索规则](references/paper-search.md)与
 [监测政策](references/monitoring-policy.md)。
 
-<details>
-<summary>查看往期技术更新（20 条）</summary>
+</details>
 
 <details>
 <summary>技术更新：WorkBuddy 本地 Skill 试点（2026-10-12）</summary>

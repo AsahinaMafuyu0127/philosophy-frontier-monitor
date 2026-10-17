@@ -1,25 +1,29 @@
 # WorkBuddy 本地 Skill 试点
 
-本试点把仓库的现有 CLI 与证据政策接到 WorkBuddy 的“导入本地技能包”入口。ZIP 只包含 WorkBuddy 入口 `SKILL.md`；实际运行仍需本机的项目、Python 环境和可访问的 `pfm` 命令。它不会把私人 watchlist、状态、报告或凭据装进包中。
+本试点把项目现有 CLI 与证据政策接到 WorkBuddy 的本地技能导入入口。ZIP 包含 WorkBuddy 入口、选定项目根目录的公开 `SKILL.md`、该 Skill 引用的 16 份公开政策以及公开期刊目录，并附文件摘要清单。程序本身仍需在本机安装；私人 watchlist、状态、报告和凭据不进入包中。
 
-## 构建和导入
+## 选择来源并构建
 
-在项目根目录运行：
+在本试点分支的项目根目录运行：
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\build_workbuddy_skill.py
+.\.venv\Scripts\python.exe scripts\build_workbuddy_skill.py --source-root '<项目根目录>'
 ```
 
-输出为 Git 忽略的 `var/workbuddy-pilot/philosophy-frontier-monitor-workbuddy.zip`。在 WorkBuddy 客户端进入“技能市场 → 添加技能 → 创建／上传本地技能包”，选择该 ZIP。不要上传整个项目目录或私人配置。导入后，把本地项目根目录作为 WorkBuddy 可访问的工作区；客户端需具备读取本机文件和执行命令的能力。若尚未建立虚拟环境，先按[安装说明](installation.md)安装项目。这里不需要把任何 API key 粘贴到对话里。
+省略 `--source-root` 时使用当前试点工作树。若要打包另一份正在修改的项目，明确指定其根目录；构建器只读取该目录的公开 Skill、政策、公开目录和项目元数据，不修改来源项目。新增政策链接若尚未进入打包白名单，构建会停止，避免遗漏新规则。输出放在 Git 忽略的 `var/workbuddy-pilot/`，文件名含来源 Skill 的 SHA-256 前缀，便于区分不同快照。
 
-试点包不会自动下载项目，也不配置 WorkBuddy 的定时任务或通知。它借用项目根目录的 `SKILL.md` 和现有政策文件，因此后续证据规则更新仍以本地项目为准。
+在 WorkBuddy 客户端进入“技能市场 → 添加技能 → 创建／上传本地技能包”，选择新生成的 ZIP。不要上传整个项目目录或私人配置。让 WorkBuddy 能读取与快照对应的本机项目，并允许它执行该项目虚拟环境中的 `pfm`。若尚未建立虚拟环境，先按[安装说明](installation.md)安装项目。
+
+包内的 `references/package-manifest.json` 保存来源 Skill 及各公开文件的 SHA-256。运行前核对本机项目根目录的 `SKILL.md` 与 `source_skill_sha256` 一致；若不一致，应重新打包当前项目或改用匹配的项目。 `pfm doctor` 报告的根目录也须与选定项目相同。如虚拟环境仍指向旧工作树，在当前项目目录运行 `uv sync --locked` 重新绑定。
+
+试点包不会自动下载项目，也不配置 WorkBuddy 的定时任务或通知。更新项目 Skill 或政策后，重新构建并导入新 ZIP。
 
 ## 客户端验收
 
-1. 确认本地 Skill 能导入并被选中，且能读取项目根目录的 `SKILL.md`。
-2. 要求 WorkBuddy 在项目根目录运行 `pfm doctor` 与 `pfm onboarding-status`，核对 CLI 可用性及 `doctor` 返回的项目根目录。如虚拟环境仍指向旧工作树，先在当前项目目录运行 `uv sync --locked` 重新绑定，再做私人检索。
-3. 在用户已经确认的私人配置上，分别试一个指定年份的历史检索、一个七日即时拉取，以及周报的 `--dry-run`。对比直接使用 CLI 的范围、来源状态与待复核队列。
+1. 导入并选中本地 Skill，确认 WorkBuddy 能读取包内的项目 Skill 快照和所需政策。
+2. 在匹配的项目根目录运行 `pfm doctor` 与 `pfm onboarding-status`，核对 CLI 和根目录。
+3. 在用户已确认的私人配置上，分别试指定年份的历史检索、七日即时拉取，以及周报 `--dry-run`。对比直接使用 CLI 的范围、来源状态与待复核队列。
 4. 如遇作品类型冲突，核对 WorkBuddy 是否逐篇读取原件或出版方记录，并按证据指纹保存私人裁定；无法取得原件时保持未定。
 5. 核对私人配置、报告和凭据没有进入 ZIP、公开仓库或外部对话。
 
-本次只完成了离线构建和本机检查；未安装 WorkBuddy 客户端，因此上述导入与实际运行验收仍待客户端可用时执行。
+没有 WorkBuddy 客户端时，只能完成包结构、文件摘要和本机 CLI 的离线验证，不能声称客户端导入或实际运行通过。
