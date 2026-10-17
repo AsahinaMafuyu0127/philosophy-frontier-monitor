@@ -110,10 +110,12 @@ is in place, with scheduled operation still awaiting real-machine validation.
 The WorkBuddy pilot ZIP now includes the selected project's public `SKILL.md`, its 16 referenced
 policy files, and the public journal catalog. A manifest records SHA-256 digests for the source
 Skill and packaged files. Rebuilding after a policy change creates a matching snapshot; check
-that the local project and CLI point to that version before running. The [pilot guide](references/workbuddy-local-pilot.md)
-covers building, importing, and acceptance. We built a 20-file ZIP from the selected local
-revision and checked its file list, digests, Skill metadata, Ruff, and the read-only release
-audit. Client import and operation remain unverified. This
+that the local project and CLI point to that version before running. The file name now changes
+with any bundled public file, and the WorkBuddy package version is 0.2.1. The [pilot guide](references/workbuddy-local-pilot.md)
+covers building, importing, and acceptance. We rebuilt the 20-file ZIP after the source
+project changed and checked its file list, digests, Skill metadata, Ruff, and the read-only release
+audit. The Skill now distinguishes the default `doctor` fixture from the configured production
+taxonomy. Client import and operation remain unverified. This
 is a branch update without a new version tag or GitHub Release.
 
 <details>

@@ -48,7 +48,7 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _validate_wrapper(data: bytes) -> None:
+def _validate_wrapper(data: bytes) -> str:
     text = data.decode("utf-8-sig").replace("\r\n", "\n")
     if not text.startswith("---\n") or "---\n" not in text[4:]:
         raise ValueError("WorkBuddy Skill needs YAML frontmatter")
@@ -63,6 +63,7 @@ def _validate_wrapper(data: bytes) -> None:
             raise ValueError(f"missing WorkBuddy metadata: {key}")
     if values["name"] != SKILL_NAME:
         raise ValueError("Skill name must match its ZIP root")
+    return values["version"]
 
 
 def _read_public_file(source_root: Path, relative: str) -> bytes:
@@ -79,7 +80,7 @@ def build(source_root: Path, output: Path | None = None) -> Path:
         raise ValueError("selected source is not the monitor project")
 
     wrapper = WRAPPER.read_bytes()
-    _validate_wrapper(wrapper)
+    package_version = _validate_wrapper(wrapper)
     project_skill = _read_public_file(source_root, "SKILL.md")
     skill_text = project_skill.decode("utf-8-sig")
     referenced = set(re.findall(r"references/[A-Za-z0-9_-]+\.md", skill_text))
@@ -108,7 +109,8 @@ def build(source_root: Path, output: Path | None = None) -> Path:
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     ).encode("utf-8")
     if output is None:
-        output = OUTPUT_DIR / f"{SKILL_NAME}-{skill_hash[:12]}.zip"
+        bundle_hash = _sha256(wrapper + files[ZIP_PREFIX + "references/package-manifest.json"])
+        output = OUTPUT_DIR / f"{SKILL_NAME}-{package_version}-{bundle_hash[:12]}.zip"
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(output, "w") as archive:

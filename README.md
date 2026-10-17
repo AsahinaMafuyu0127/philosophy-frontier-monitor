@@ -90,9 +90,11 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 
 WorkBuddy 试点包现在会收录选定项目的公开 `SKILL.md`、它引用的 16 份政策文件和公开
 期刊目录，并写入来源 Skill 与各文件的 SHA-256 摘要。项目证据规则更新后，重新构建即可
-得到对应快照；运行前还须核对本机项目及 CLI 指向同一版本。[试点说明](references/workbuddy-local-pilot.md)
-给出构建、导入和验收步骤。本次从选定的本地修订版生成 20 文件 ZIP，离线核对了文件清单、
-摘要、Skill 元数据、Ruff 和只读发布检查。本次尚未执行 WorkBuddy 客户端导入与实际运行验收；
+得到对应快照；文件名随整套公开快照变化，并提升 WorkBuddy Skill 包版本至 0.2.1。运行前
+还须核对本机项目及 CLI 指向同一版本。[试点说明](references/workbuddy-local-pilot.md)
+给出构建、导入和验收步骤。本次在来源项目更新后重建 20 文件 ZIP，离线核对了文件清单、
+摘要、Skill 元数据、Ruff 和只读发布检查。入口说明现区分 `doctor` 默认的离线样本与
+私人配置中的正式 taxonomy。本次尚未执行 WorkBuddy 客户端导入与实际运行验收；
 这是分支更新，没有创建新版本标签或 GitHub Release。
 
 <details>
