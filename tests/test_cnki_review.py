@@ -11,6 +11,9 @@ from uuid import uuid4
 import pytest
 import yaml
 
+from philosophy_frontier_monitor.cnki_dates import (
+    enrich_cnki_issues_with_dates as _cnki_issues_with_dates,
+)
 from philosophy_frontier_monitor.cnki_review import (
     BibliographicPeer,
     CnkiReviewError,
@@ -18,7 +21,7 @@ from philosophy_frontier_monitor.cnki_review import (
     assess_cnki_record,
     load_reviewed_evidence,
 )
-from philosophy_frontier_monitor.pipeline import _cnki_issues_in_window, _cnki_issues_with_dates
+from philosophy_frontier_monitor.pipeline import _cnki_issues_in_window
 from philosophy_frontier_monitor.sources.cnki_space import CnkiIssue, parse_result_page
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -97,7 +100,7 @@ def test_overlap_index_preserves_normalized_title_and_review_status() -> None:
 
 
 def test_official_date_index_matches_normalized_issue_identity() -> None:
-    from philosophy_frontier_monitor.pipeline import _official_months_for_cnki
+    from philosophy_frontier_monitor.cnki_dates import _official_months_for_cnki
 
     issue = CnkiIssue("issue", "哲学分析", 2026, "09", None, (RECORD,), (),
                       datetime(2026, 10, 16, tzinfo=UTC))

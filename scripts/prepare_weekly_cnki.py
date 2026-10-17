@@ -7,9 +7,9 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from philosophy_frontier_monitor.cnki_dates import enrich_cnki_scan_with_dates
 from philosophy_frontier_monitor.config import load_watchlist
 from philosophy_frontier_monitor.pipeline import (
-    _cnki_scan_with_dates,
     _load_cnki_issues,
     latest_due_week,
     on_demand_window,
@@ -63,7 +63,7 @@ def main() -> int:
         scan = _load_cnki_issues(
             config, window_start=start, window_end=end, checked_at=now, loader=scan_cnki_space,
         )
-    scan = _cnki_scan_with_dates(config, scan) if scan else None
+    scan = enrich_cnki_scan_with_dates(config, scan) if scan else None
     issues = scan.issues if scan else ()
     if args.mode == "search":
         issues = tuple(issue for issue in issues

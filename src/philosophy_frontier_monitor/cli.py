@@ -30,6 +30,7 @@ from .journal_collection import (
 from .journal_collection import (
     check_publisher_articles,
     collect_publisher,
+    import_reviewed_toc,
     issue_coverage_summary,
     measurement_summary,
     observation_summary,
@@ -1015,6 +1016,14 @@ def _journal_watch(args: argparse.Namespace) -> int:
         )
         _emit({"ok": True, "operation": "journal-watch", "issue": asdict(reviewed)})
         return 0
+    if args.action == "import-toc":
+        if not args.input or not args.confirm_evidence:
+            raise ValueError("import-toc requires --input and --confirm-evidence")
+        result = import_reviewed_toc(
+            Path(args.input), db_path, catalog_path=catalog_path,
+        )
+        _emit({"ok": True, "operation": "journal-watch", "toc": result})
+        return 0
     if args.action == "scan":
         if not args.journal:
             raise ValueError("scan requires --journal")
@@ -1214,10 +1223,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     journal_watch.add_argument(
         "action", choices=("catalog", "list", "pending", "review", "observe",
+                           "import-toc",
                            "scan", "check", "run", "summary", "audit", "classify")
     )
     journal_watch.add_argument("--catalog", default=str(CATALOG_PATH))
     journal_watch.add_argument("--db", default=str(DEFAULT_DB_PATH))
+    journal_watch.add_argument("--input", help="reviewed complete TOC JSON")
     journal_watch.add_argument("--journal")
     journal_watch.add_argument("--year", type=int)
     journal_watch.add_argument("--issue")

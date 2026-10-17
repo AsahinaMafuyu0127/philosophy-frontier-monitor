@@ -104,6 +104,18 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 详细的书目身份和日期门槛见[历史检索规则](references/paper-search.md)与
 [监测政策](references/monitoring-policy.md)。
 
+本次工作区同步还纳入此前仅保留在本地的两项实现。知网候选的刊方日期补证集中到
+`cnki_dates.py`，由周报、即时拉取、历史检索和只读候选准备脚本共用；显式期次月份、
+逐篇日期、冲突及证据链接继续按同一规则处理。`journal-watch import-toc` 支持在浏览器
+人工核实**已知官方公众号原帖**后，导入有上限的完整作者题名目录；它要求同一原帖 URL
+已有复核过的期次，并校验日期、条数与重复题名。《现代哲学》2026 年第 5 期原帖明示
+9 月号、10 月 9 日公告，18 条目录曾导入 Git 忽略的本地观察库；作品类型、兴趣判断及
+知网／万方逐篇可见性仍未由此确认。新路径不把公告日当作逐篇发表日，也不绕过微信验证页。
+合并后 456 项测试和 Ruff 检查通过；没有重新执行线上采集或改写私人监测状态。
+相关边界见[中文来源政策](references/chinese-source-expansion.md)和
+[刊方观察规则](references/publisher-article-observation.md)。此次同步不创建新版本标签或
+GitHub Release。
+
 <details>
 <summary>查看往期技术更新（19 条）</summary>
 

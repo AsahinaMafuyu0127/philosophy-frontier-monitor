@@ -82,6 +82,22 @@ watchlist's `sources.wanfang.enabled` also defaults to false and is independent
 of the journal-watch option. A private opt-in must not be copied into public
 defaults or assumed for another user.
 Only `reviewed` observations enter search, pull-now, or weekly issue leads.
+When an official WeChat TOC appears before the registered website, open the exact
+post in a browser and verify the account, issue label, any explicit month on the
+cover, announcement date, and the complete title/author list. A command-line
+HTTP redirect to a WeChat challenge is a source access failure, not an empty TOC;
+do not automate challenge completion or infer a month from the issue number.
+Record the issue with `journal-watch observe --evidence-kind official-wechat`
+and the separately verified `--label-month` / `--announcement-on` fields.
+For a complete browser-reviewed TOC, keep a minimal JSON file outside Git with
+`journal`, `year`, `issue`, `source_url`, matching date fields,
+`complete_toc: true`, `article_count`, and `articles` containing only `title`
+and `author`; then use `journal-watch import-toc --input <file>
+--confirm-evidence`. The importer requires an already reviewed issue with the
+same URL and date evidence. It saves local publisher leads and a complete-TOC
+audit denominator, but does not classify paper type, interest, institutional
+affiliation, or first publication day. This is a browser-assisted path for a
+known official post, not an unattended feed of an account's future posts.
 Weekly reports mention an issue only in the window of its first review; a
 month label alone must not repeat the same issue in every week of that month.
 Treat an official WeChat posting date as an announcement date, not a journal
@@ -125,8 +141,7 @@ or the regular weekly `catch-up` once. Do not rerun a committed successful windo
 its presentation; preserve an original private report and amend the saved report
 without changing committed checkpoints or notification history. The work-type
 conflict review below uses an uncommitted first pass and an exact-window follow-up.
-A formerly
-monthless CNKI observation remains eligible after later date corroboration.
+A formerly monthless CNKI observation remains eligible after later date corroboration.
 An optional Git-ignored `sources.cnki_space.reviewed_evidence` file holds
 manually checked journal or catalog bibliographies. The source page must support
 the stated title, authors, journal, year, issue, and any publication-time China

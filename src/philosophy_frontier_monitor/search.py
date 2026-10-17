@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 import httpx
 
 from .bibliographic_index import OpenAlexIdentityIndex
+from .cnki_dates import enrich_cnki_scan_with_dates
 from .cnki_review import (
     BibliographicPeer,
     CnkiAssessment,
@@ -21,7 +22,11 @@ from .cnki_review import (
     assess_cnki_overlaps,
 )
 from .config import WatchlistConfig
-from .identity import IdentityMatchLevel, IdentityReviewRequired, compare_bibliographic_identity
+from .identity import (
+    IdentityMatchLevel,
+    IdentityReviewRequired,
+    compare_bibliographic_identity,
+)
 from .models import DateValue, WorkTypeEvidence
 from .pipeline import (
     EXPLICIT_UNSUPPORTED_TITLE_HINTS,
@@ -31,7 +36,6 @@ from .pipeline import (
     ProgressReporter,
     _bibliographic_error_opens_circuit,
     _cnki_review_assessments,
-    _cnki_scan_with_dates,
     _load_all_feeds,
     _load_runtime,
     load_philpapers_feed,
@@ -281,6 +285,8 @@ def _merge_items(items: list[PaperSearchItem], stats: Counter) -> list[PaperSear
 
     for group_id, item in enumerate(items):
         matches = set().union(*(identifier_groups.get(key, ()) for key in identifiers(item)))
+        # IDs increase with insertion order. Reverse order matches the original
+        # pop-from-list behavior when one item joins several existing groups.
         for index in sorted(matches, reverse=True):
             previous = groups.pop(index)
             for key in identifiers(previous):
@@ -623,7 +629,7 @@ def run_paper_search(
         except Exception as error:  # Optional source failure is disclosed.
             cnki_coverage = f"CNKI Space 检索失败：{type(error).__name__}。"
         else:
-            cnki_scan = _cnki_scan_with_dates(config, cnki_scan)
+            cnki_scan = enrich_cnki_scan_with_dates(config, cnki_scan)
             cnki_candidates = tuple(
                 record
                 for record in cnki_scan.records

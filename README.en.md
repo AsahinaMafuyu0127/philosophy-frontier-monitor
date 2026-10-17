@@ -127,6 +127,23 @@ comparison checks were run. This is a code branch update without a new version t
 Release. See the [search rules](references/paper-search.md) and
 [monitoring policy](references/monitoring-policy.md) for identity and date thresholds.
 
+This workspace synchronization also includes two implementations previously held only in the
+local checkout. Publisher-date corroboration for bounded CNKI candidates now lives in
+`cnki_dates.py`, shared by weekly reports, on-demand pulls, historical search, and the read-only
+candidate preparation script. Explicit issue months, article dates, conflicts, and evidence URLs
+retain the same rules. `journal-watch import-toc` accepts a bounded complete title-and-author
+list after a reviewer checks a **known official WeChat post** in a browser. The same post URL must
+already identify a reviewed issue, and the importer validates dates, row count, and duplicate
+titles. The official *Modern Philosophy* 2026 issue 5 post explicitly labels September and was
+announced on 9 October; 18 TOC rows were previously imported into a Git-ignored local observation
+store. Their work forms, interest relevance, and article-level CNKI/Wanfang visibility remain
+unconfirmed. The posting day is not treated as an article publication day, and this path does not
+bypass WeChat's browser challenge. After combining the branches, 456 tests and Ruff passed. No
+live collection was repeated and no private monitoring state was rewritten. See the
+[Chinese-source policy](references/chinese-source-expansion.md) and
+[publisher observation protocol](references/publisher-article-observation.md). This synchronization
+does not create a new version tag or GitHub Release.
+
 <details>
 <summary>View earlier technical updates (19)</summary>
 

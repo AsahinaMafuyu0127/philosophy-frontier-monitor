@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from philosophy_frontier_monitor import cli
+from philosophy_frontier_monitor.cnki_dates import _official_months_for_cnki
 from philosophy_frontier_monitor.official_journals import (
     issues_in_window,
     list_issues,
@@ -20,10 +21,7 @@ from philosophy_frontier_monitor.official_journals import (
     record_issue,
     review_observed_issue,
 )
-from philosophy_frontier_monitor.pipeline import (
-    _official_issues_for_window,
-    _official_months_for_cnki,
-)
+from philosophy_frontier_monitor.pipeline import _official_issues_for_window
 from philosophy_frontier_monitor.sources.cnki_space import CnkiIssue
 
 
