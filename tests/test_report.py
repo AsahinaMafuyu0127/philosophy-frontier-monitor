@@ -100,6 +100,21 @@ def test_zero_results_does_not_claim_none_exist_when_source_failed(taxonomy):
     assert "这不等于本周没有相关新作" in report
 
 
+def test_local_only_official_source_does_not_make_successful_sources_fail(taxonomy):
+    profile = build_interest_profile("我研究《泰阿泰德》。", taxonomy, now=START)
+    report = render_weekly_report(
+        profile=profile, snapshot=taxonomy, works={}, matches=(),
+        window_start=START, window_end=END,
+        coverage=(
+            SourceCoverage("philpapers-rss", "success", END, "feed read"),
+            SourceCoverage("official-journals", "local_only", END, "local review only"),
+        ),
+    )
+    assert "本周在已成功检查的数据源中" in report
+    assert "No work passed both the new-paper and category gates" in report
+    assert "由于至少一个来源未成功检查" not in report
+
+
 def test_official_issue_evidence_precedes_cnki_leads_in_both_languages(taxonomy):
     profile = build_interest_profile("我研究《泰阿泰德》。", taxonomy, now=START)
     official = new_observation(
@@ -127,6 +142,10 @@ def test_official_issue_evidence_precedes_cnki_leads_in_both_languages(taxonomy)
     assert report.index("## 期刊官方发布渠道") < report.index("## 中文期刊新期次观察")
     assert report.index("## Publisher issue leads") < report.index(
         "## Chinese journal issue observations"
+    )
+    assert report.index("## 中文期刊新期次观察") < report.index("## 匹配论文")
+    assert report.index("## Chinese journal issue observations") < report.index(
+        "## Matching papers"
     )
     on_demand = render_on_demand_report(
         profile=profile,
@@ -196,6 +215,7 @@ def test_cnki_issue_observation_keeps_issue_number_distinct_from_month(taxonomy)
     assert "2026年第9期" in report
     assert "2026年9月刊" not in report
     assert "作为基线观察" in report
+    assert "缺月、日期冲突及窗外期次不列题名" in report
     assert "private term" not in report
     assert "issue 9 (month unverified)" in report
 

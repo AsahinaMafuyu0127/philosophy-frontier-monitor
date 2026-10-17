@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 
 import httpx
 
+from .bibliographic_index import OpenAlexIdentityIndex
+from .cnki_dates import enrich_cnki_scan_with_dates
 from .cnki_review import (
     BibliographicPeer,
     CnkiAssessment,
@@ -20,7 +22,11 @@ from .cnki_review import (
     assess_cnki_overlaps,
 )
 from .config import WatchlistConfig
-from .identity import IdentityMatchLevel, IdentityReviewRequired, compare_bibliographic_identity
+from .identity import (
+    IdentityMatchLevel,
+    IdentityReviewRequired,
+    compare_bibliographic_identity,
+)
 from .models import DateValue, WorkTypeEvidence
 from .pipeline import (
     EXPLICIT_UNSUPPORTED_TITLE_HINTS,
@@ -167,6 +173,24 @@ def _identity(candidate: MergedCandidate, work: OpenAlexWork | CrossrefWork) -> 
     ).level
 
 
+class _OpenAlexIdentityIndex:
+    """Apply historical-search equivalence rules to possible OpenAlex works."""
+
+    def __init__(self, works: tuple[OpenAlexWork, ...]) -> None:
+        self.index = OpenAlexIdentityIndex(works)
+
+    def equivalent(self, candidate: MergedCandidate, *, limit: int = 2) -> list[OpenAlexWork]:
+        """Return enough matches to distinguish zero, one, and ambiguous."""
+        display = split_display_bibliography(candidate.display_title)
+        matches = []
+        for work in self.index.possible(display.title, display.author_text, candidate.doi_hints):
+            if _identity(candidate, work) is IdentityMatchLevel.EQUIVALENT:
+                matches.append(work)
+                if len(matches) == limit:
+                    break
+        return matches
+
+
 def _signals(candidate: MergedCandidate) -> tuple[WorkTypeSignal, ...]:
     display = split_display_bibliography(candidate.display_title)
     explicit = tuple(
@@ -239,17 +263,28 @@ def _make_item(
 
 def _merge_items(items: list[PaperSearchItem], stats: Counter) -> list[PaperSearchItem]:
     """Union proven identifiers before evaluating all-tag and exclusion filters."""
-    groups: list[PaperSearchItem] = []
-    for item in items:
-        matches = [
-            index
-            for index, previous in enumerate(groups)
-            if (item.doi and item.doi == previous.doi)
-            or (item.openalex_id and item.openalex_id == previous.openalex_id)
-            or set(item.source_urls).intersection(previous.source_urls)
-        ]
-        for index in reversed(matches):
+    groups: dict[int, PaperSearchItem] = {}
+    identifier_groups: dict[tuple[str, str], set[int]] = {}
+
+    def identifiers(item: PaperSearchItem):
+        if item.doi:
+            yield "doi", item.doi
+        if item.openalex_id:
+            yield "openalex", item.openalex_id
+        for url in item.source_urls:
+            yield "url", url
+
+    for group_id, item in enumerate(items):
+        matches = set().union(*(identifier_groups.get(key, ()) for key in identifiers(item)))
+        # IDs increase with insertion order. Reverse order matches the original
+        # pop-from-list behavior when one item joins several existing groups.
+        for index in sorted(matches, reverse=True):
             previous = groups.pop(index)
+            for key in identifiers(previous):
+                members = identifier_groups[key]
+                members.discard(index)
+                if not members:
+                    del identifier_groups[key]
             resolution = resolve_work_type_evidence(
                 previous.type_evidence + item.type_evidence, default_type="unknown"
             )
@@ -275,8 +310,10 @@ def _merge_items(items: list[PaperSearchItem], stats: Counter) -> list[PaperSear
                 else None,
             )
             stats["duplicate_records_merged"] += 1
-        groups.append(item)
-    return groups
+        groups[group_id] = item
+        for key in identifiers(item):
+            identifier_groups.setdefault(key, set()).add(group_id)
+    return list(groups.values())
 
 
 def run_paper_search(
@@ -394,14 +431,13 @@ def run_paper_search(
                 progress("doi_batch", min(offset + MAX_DOI_BATCH_SIZE, len(dois)), len(dois))
             if openalex_blocked:
                 break
+        doi_index = _OpenAlexIdentityIndex(tuple(openalex.values()))
         titles = tuple(
             sorted(
                 {
                     split_display_bibliography(c.display_title).title
                     for c in candidates
-                    if not any(
-                        _identity(c, w) is IdentityMatchLevel.EQUIVALENT for w in openalex.values()
-                    )
+                    if not doi_index.equivalent(c, limit=1)
                 }
             )
         )
@@ -423,12 +459,9 @@ def run_paper_search(
                     )
                 if openalex_blocked:
                     break
+        all_works_index = _OpenAlexIdentityIndex(tuple(openalex.values()))
         for index, candidate in enumerate(candidates, 1):
-            equivalent = [
-                w
-                for w in openalex.values()
-                if _identity(candidate, w) is IdentityMatchLevel.EQUIVALENT
-            ]
+            equivalent = all_works_index.equivalent(candidate)
             work: OpenAlexWork | CrossrefWork | None = None
             if len(equivalent) > 1 or len(candidate.doi_hints) > 1:
                 stats["identity_unverified"] += 1
@@ -564,6 +597,7 @@ def run_paper_search(
         except Exception as error:  # Optional source failure is disclosed.
             cnki_coverage = f"CNKI Space 检索失败：{type(error).__name__}。"
         else:
+            cnki_scan = enrich_cnki_scan_with_dates(config, cnki_scan)
             cnki_candidates = tuple(
                 record
                 for record in cnki_scan.records
@@ -584,6 +618,19 @@ def run_paper_search(
                 f"知网空间 {cnki_scan.status}：完成 {cnki_scan.result_pages}/"
                 f"{cnki_scan.requested_pages} 页；截断 {len(cnki_scan.incomplete_queries)} 项；"
                 f"失败 {len(cnki_scan.failures)} 项。仅为候选题录，未确认全库覆盖。"
+            )
+            stats["cnki_date_month_unknown"] = sum(
+                record.label_month is None for record in cnki_candidates
+            )
+            stats["cnki_date_conflicts"] = sum(record.date_conflict for record in cnki_candidates)
+            stats["cnki_publisher_date_supported"] = sum(
+                bool(record.date_evidence_urls) and not record.date_conflict
+                for record in cnki_candidates
+            )
+            cnki_coverage += (
+                f" 日期证据：刊方支持 {stats['cnki_publisher_date_supported']} 条；"
+                f"月份未核实 {stats['cnki_date_month_unknown']} 条；"
+                f"日期冲突 {stats['cnki_date_conflicts']} 条。"
             )
             # Keep structured review details aligned with the locally filtered
             # candidates shown to the user; the source scan itself is unchanged.

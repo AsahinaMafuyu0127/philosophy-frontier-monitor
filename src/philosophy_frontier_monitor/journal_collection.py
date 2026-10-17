@@ -6,6 +6,7 @@ A search miss observes this public search surface, not an entire licensed databa
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from collections.abc import Iterator
@@ -474,6 +475,81 @@ def _save_articles(db: sqlite3.Connection, articles: list[PublisherArticle], obs
 
 def _title_digest(titles: list[str]) -> str:
     return sha256("\n".join(sorted(titles)).encode("utf-8")).hexdigest()
+
+
+def import_reviewed_toc(
+    input_path: Path, db_path: Path, *, catalog_path: Path = CATALOG_PATH,
+) -> dict:
+    """Import a human-checked, complete official TOC without fetching its page.
+
+    A browser-readable WeChat post may be unavailable to the HTTP collector. The
+    exact issue URL must already have been reviewed in the private issue store.
+    """
+    if input_path.stat().st_size > 50_000:
+        raise ValueError("toc_input_too_large")
+    try:
+        payload = json.loads(input_path.read_text(encoding="utf-8"))
+    except (UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError("toc_input_invalid_json") from error
+    if not isinstance(payload, dict) or payload.get("complete_toc") is not True:
+        raise ValueError("toc_requires_confirmed_completeness")
+    journal_id, year, issue = (
+        payload.get("journal"), payload.get("year"), payload.get("issue")
+    )
+    source_url = payload.get("source_url")
+    if (not isinstance(journal_id, str) or type(year) is not int
+            or not isinstance(issue, str) or not isinstance(source_url, str)):
+        raise ValueError("toc_issue_identity_invalid")
+    journal = next((j for j in load_catalog(catalog_path) if j.id == journal_id), None)
+    if journal is None:
+        raise ValueError("toc_journal_not_registered")
+    reviewed = [
+        item for item in list_issues(db_path, reviewed_only=True)
+        if (item.journal_id, item.year, item.issue, item.evidence_url)
+        == (journal_id, year, issue, source_url)
+    ]
+    if len(reviewed) != 1:
+        raise ValueError("toc_source_issue_not_reviewed")
+    if (payload.get("label_month") != reviewed[0].label_month
+            or payload.get("announcement_on") != reviewed[0].announcement_on):
+        raise ValueError("toc_date_evidence_mismatch")
+    raw_articles = payload.get("articles")
+    if (not isinstance(raw_articles, list) or not 5 <= len(raw_articles) <= MAX_ARTICLES
+            or type(payload.get("article_count")) is not int
+            or payload["article_count"] != len(raw_articles)):
+        raise ValueError("toc_article_count_invalid")
+    observed = datetime.now().astimezone().isoformat(timespec="seconds")
+    articles: list[PublisherArticle] = []
+    for item in raw_articles:
+        if not isinstance(item, dict):
+            raise ValueError("toc_article_invalid")
+        title, author = item.get("title"), item.get("author")
+        if (not isinstance(title, str) or title != title.strip()
+                or not 4 <= len(title) <= 250 or "\n" in title
+                or not isinstance(author, str) or author != author.strip()
+                or not 1 <= len(author) <= 200 or "\n" in author):
+            raise ValueError("toc_article_invalid")
+        articles.append(PublisherArticle(
+            journal_id, year, issue, title, author, source_url, source_url, observed,
+        ))
+    if len({article.title for article in articles}) != len(articles):
+        raise ValueError("toc_duplicate_titles")
+    with _connect(db_path) as db:
+        _save_articles(db, articles, observed)
+        db.execute(
+            """INSERT INTO publisher_issue_scans VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(journal_id, year, issue) DO UPDATE SET
+                issue_url=excluded.issue_url,
+                last_completed_at=excluded.last_completed_at,
+                pages=excluded.pages,
+                article_count=excluded.article_count,
+                title_digest=excluded.title_digest""",
+            (journal_id, year, issue, source_url, observed, observed, 1,
+             len(articles), _title_digest([article.title for article in articles])),
+        )
+    return {"journal": journal_id, "year": year, "issue": issue,
+            "articles": len(articles), "issue_url": source_url,
+            "collection": "browser_reviewed_import"}
 
 
 def collect_publisher(

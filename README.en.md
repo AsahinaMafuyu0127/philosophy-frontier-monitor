@@ -92,6 +92,119 @@ The latest tagged application release is **v0.3.0**; the internal evidence-pipel
 Formal real-machine acceptance has been completed on Windows. macOS and Linux paths are supported,
 but have not yet received equivalent real scheduled-run validation.
 
+<a id="technical-update-2026-10-16-local-hotspots"></a>
+
+## Technical update: faster search merging and Chinese evidence matching (2026-10-16)
+
+Historical search now indexes proven identifiers during result merging. Publisher issue-date
+evidence is indexed by the exact normalized journal, year, and issue identity; CNKI/PhilPapers
+overlap hints are indexed by normalized title. Exact-identifier merging, unresolved identities,
+date conflicts, and source-status decisions retain their existing rules. In an offline synthetic
+benchmark with 1,000 records, the median times for these three local steps fell from 72, 1,463,
+and 1,533 ms to 1.5, 4.1, and 3.1 ms respectively (three runs each on one machine).
+A bounded in-memory cache also reuses pure title and author normalization during
+bibliographic identity checks. An offline full historical search with 600 candidates and
+600 highly similar synthetic OpenAlex records fell from 12.6 to about 4.9 seconds; all
+ambiguous identities remained unconfirmed. These measurements do not include network
+latency. OpenAlex works are now indexed by exact title, shared DOI, and potentially
+compatible first author before full identity comparison. With 600 candidates and 600
+similarly titled but differently authored synthetic works, offline full search fell from
+about 5.0 to 0.07 seconds while retaining all 600 results. Comparison now stops after
+the second equivalent work establishes ambiguity. In a stress case with the same author
+and highly similar titles, runtime fell from about 5.4 to 0.08 seconds; all 600 ambiguous
+identities remain unconfirmed. Neither scenario measures live network latency. When no
+work matches, or only one does, all potentially compatible works are still checked. The full test
+suite, Ruff, skill validation, and differential comparison checks passed. Local changes have not been pushed or tagged as a release.
+
+<a id="technical-update-2026-10-13-cnki-date-module"></a>
+
+## Technical update: a module boundary for CNKI date evidence (2026-10-13)
+
+Publisher date corroboration for bounded CNKI candidates now lives in `cnki_dates.py` rather
+than the weekly pipeline. Weekly reports, on-demand pulls, historical search, and the read-only
+candidate preparation script use the same entrypoint. Reviewed publisher issues and exact
+article bibliographies share the rule for month labels, conflicts, and source URL deduplication.
+Explicit issue labels retain priority; conflicting evidence remains unresolved and never by
+itself establishes newness or an interest match. This refactor does not change Chinese-source
+coverage, report decisions, or private state. Verification: 421 tests, Ruff, and skill validation.
+The read-only release audit is blocked by an untracked separate worktree
+and this new module. This is a local code and documentation update without a push, version tag,
+or GitHub Release.
+
+<a id="technical-update-2026-10-09-wechat-toc"></a>
+
+## Technical update: browser-assisted official WeChat TOCs (2026-10-09)
+
+When a journal's website lags its official account, a **known official post** can
+be reviewed first. The reviewer checks the account, issue, explicitly printed
+month, announcement date, and complete title/author list. `pfm journal-watch
+import-toc --input <local JSON> --confirm-evidence` requires a previously
+reviewed issue with the exact post URL and checks the issue, dates, row count,
+and duplicate titles. It keeps article-level publisher leads in the private
+store without treating the announcement as an article publication day or
+unclassified TOC rows as matched papers.
+
+In a browser, the [publisher's *Modern Philosophy* 2026 issue 5 post](https://mp.weixin.qq.com/s/cOimuAyoAiR-WV87o_I1rw)
+showed an explicit September label and an October 9 announcement. Its 18
+author-bearing TOC rows were imported into the Git-ignored local observation
+store. The issue audit has a complete TOC denominator of 18; research-paper and
+interest denominators remain unknown. Direct HTTP access redirects to a WeChat
+challenge, so this workflow needs a verifiable post link and browser-assisted
+reading. No unattended listing of that account's future posts has been verified.
+CNKI and Wanfang have not been checked article by article for this issue;
+Wanfang remains off by default. See the [Chinese-source policy](references/chinese-source-expansion.md)
+and [observation protocol](references/publisher-article-observation.md#2026-10-09-现代哲学公众号目录补入).
+All 421 tests, Ruff, skill validation, and the read-only release audit passed.
+This is a local code and documentation update, without a push, version tag, or
+GitHub Release.
+
+<a id="technical-update-2026-10-07-weekly-coverage"></a>
+
+## Technical update: weekly source status and deduplication coverage (2026-10-07)
+
+Weekly reports now distinguish `local_only` reviewed publisher issues from source failures.
+When checked network sources succeed and the local publisher-issue store has no newly reviewed
+issue, the report no longer claims that a source check failed. CNKI and Wanfang coverage now
+states how many eligible issue or article leads were listed previously, reconciling the candidate
+total with missing months, outside-window leads, and the current report. Previously listed leads
+remain deduplicated. Text corrections to an already successful report retain a private original
+and do not rerun its window or advance checkpoints. All 420 tests, Ruff, skill validation, and
+the read-only release audit passed. This is a local code and documentation update, without a push,
+version tag, or GitHub Release.
+
+<a id="technical-update-2026-09-28-weekly-months"></a>
+
+## Technical update: shared Chinese-journal dates and weekly section order (2026-09-28)
+
+Both complete language versions of weekly reports now list Chinese publisher, CNKI, and Wanfang
+leads before PhilPapers papers. The first CNKI baseline also applies the publication-month gate:
+only month-supported issues overlapping the weekly window display article titles. Earlier issues,
+missing months, and conflicting dates remain in coverage counts. Issue numbers, query dates, and
+announcement dates cannot supply a publication month. Announcement-only publisher issues are
+withheld from weekly reports; explicit issue labels and an earlier release day remain separate facts.
+
+When CNKI lacks dates, `scripts/prepare_weekly_cnki.py --config config/watchlist.yaml` produces a
+bounded, read-only candidate list for review against the publisher's same-article or same-issue page.
+Weekly preparation remains the default; `--mode pull-now --days N` and
+`--mode search --year-from YYYY --year-to YYYY` align preparation with the other two modes.
+All three modes share the evidence logic and consistent issue/article fields. Search JSON and Markdown
+show reviewed dates, publisher links, and missing/conflicting months. Historical candidates still
+follow the requested year scope; they are not automatically described as recent papers.
+The private reviewed-bibliography file accepts optional `issue_label_month` and `publication_date`
+fields. Only fully matching publisher bibliographies can supplement dates; catalog records cannot.
+Month filtering precedes article-level Wanfang checks. A previously undated observation can become
+eligible after corroboration, and an older catch-up window cannot consume a future issue early.
+Previously eligible issues remain deduplicated. See the
+[Chinese-source policy](references/chinese-source-expansion.md#43-月份精度与新期次观察).
+
+All 419 tests and Ruff passed, covering first-scan filtering, earlier and undated exclusions,
+bibliographic conflicts, invalid dates, early publication, later corroboration, future-window
+eligibility, both language orders, shared evidence across search and immediate results, year scopes,
+and read-only weekly state. The program consumes manually verified dates; the preparation
+script does not automatically interpret publisher dates, confirm first publication within the week,
+or establish interest-category membership. This is a local code and documentation update, without
+a push, version tag, or GitHub Release.
+
 <a id="technical-update-2026-09-28-journal-p2"></a>
 
 ## Technical update: ninth publisher TOC and stricter arrival evidence (2026-09-28)

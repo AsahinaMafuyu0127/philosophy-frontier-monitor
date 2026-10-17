@@ -1321,6 +1321,46 @@ def test_on_demand_resolves_candidates_with_batched_title_and_author_match():
     assert result.stats["matched"] == 1
 
 
+def test_on_demand_keeps_three_indexed_title_matches_ambiguous():
+    fallback_calls = []
+
+    def title_batch(_titles, _config, _attempted_at):
+        return tuple(
+            OpenAlexWork(
+                openalex_id=f"https://openalex.org/W-AMBIG-{index}",
+                doi=None,
+                title="Paper AMBIG",
+                authors=("Ada Scholar",),
+                publication_date=None,
+                work_type="article",
+                stable_url=f"https://openalex.org/W-AMBIG-{index}",
+                raw={},
+            )
+            for index in range(3)
+        )
+
+    def unresolved(candidate, *_args):
+        fallback_calls.append(candidate.source_id)
+        return ResolutionResult(
+            candidate, None, "semantic_identity_review_required", "synthetic ambiguity"
+        )
+
+    result = run_on_demand(
+        CONFIG,
+        now=REQUEST_TIME,
+        feed_loader=loader_with(entry("AMBIG", published_text=None, description="2026")),
+        resolver=unresolved,
+        batch_title_resolver=title_batch,
+        allow_development_fixture=True,
+    )
+
+    assert fallback_calls == ["https://philpapers.org/rec/AMBIG"]
+    assert result.stats["title_batch_resolved_candidates"] == 0
+    assert result.stats["fallback_candidates"] == 1
+    assert result.stats["matched"] == 0
+    assert result.stats["unresolved"] == 1
+
+
 def test_on_demand_keeps_single_title_batch_type_conflict_out_of_fallback():
     def title_batch(_titles, _config, attempted_at):
         return (

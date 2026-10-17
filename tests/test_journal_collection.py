@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -28,14 +29,55 @@ from philosophy_frontier_monitor.journal_collection import (
     _sysu_toc,
     check_publisher_articles,
     collect_publisher,
+    import_reviewed_toc,
     issue_coverage_summary,
     measurement_summary,
     observation_summary,
     review_publisher_article,
     run_publisher_cycle,
 )
+from philosophy_frontier_monitor.official_journals import new_observation, record_issue
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def test_browser_reviewed_toc_import_requires_matching_official_issue(tmp_path) -> None:
+    db = tmp_path / "journal.sqlite3"
+    url = "https://mp.weixin.qq.com/s/example-issue-toc"
+    payload = {
+        "journal": "xiandai-zhexue", "year": 2026, "issue": "5",
+        "source_url": url, "label_month": "2026-09",
+        "announcement_on": "2026-10-09", "complete_toc": True,
+        "article_count": 5,
+        "articles": [
+            {"title": f"哲学问题研究之{i}", "author": f"作者{i}"}
+            for i in range(5)
+        ],
+    }
+    source = tmp_path / "toc.json"
+    source.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ValueError, match="not_reviewed"):
+        import_reviewed_toc(source, db)
+    record_issue(db, new_observation(
+        "xiandai-zhexue", 2026, "5", url, "official-wechat",
+        label_month="2026-09", announcement_on="2026-10-09", status="reviewed",
+    ))
+    result = import_reviewed_toc(source, db)
+    assert result["articles"] == 5
+    assert issue_coverage_summary(db)[0]["reference_denominator"] == 5
+    with _connect(db) as saved:
+        assert saved.execute("SELECT COUNT(*) FROM publisher_articles").fetchone()[0] == 5
+    payload["label_month"] = "2026-10"
+    source.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ValueError, match="date_evidence_mismatch"):
+        import_reviewed_toc(source, db)
+    payload["label_month"] = "2026-09"
+    payload["articles"][1]["title"] = payload["articles"][0]["title"]
+    source.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ValueError, match="duplicate_titles"):
+        import_reviewed_toc(source, db)
+    with _connect(db) as saved:
+        assert saved.execute("SELECT COUNT(*) FROM publisher_articles").fetchone()[0] == 5
 
 
 def test_jdn_toc_keeps_article_and_author() -> None:
