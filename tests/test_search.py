@@ -632,6 +632,109 @@ def test_type_and_publisher_bibliography_reviews_jointly_restore_year_bounded_pa
     assert result.items[0].citation_count is None
 
 
+def test_publisher_year_review_restores_missing_feed_hint_without_external_metadata():
+    source = entry("ZHAAFT", "Approaching from the Desert", "")
+    first = run(
+        (source,), options=SearchOptions(year_from=2026, year_to=2026,
+                                        max_fallbacks=0),
+    )
+    assert first.total_matches == 0
+    bibliography = ReviewedBibliography(
+        source.link, "Approaching from the Desert", "Ada Scholar",
+        "Approaching from the Desert", ("Ada Scholar",),
+        "10.5840/example2026", 2026,
+        ("https://example.org/publisher/article",), NOW,
+        "Publisher gives the article's year and DOI.",
+    )
+    type_review = ReviewedWorkType(
+        source.link, "Approaching from the Desert", "article",
+        work_type_evidence_fingerprint(()),
+        ("https://example.org/publisher/article",), NOW,
+        "Publisher volume contains a full article.",
+    )
+    result = run(
+        (source,), options=SearchOptions(year_from=2026, year_to=2026,
+                                        max_fallbacks=0),
+        doi_lookup=lambda *a, **k: {}, title_lookup=lambda *a, **k: (),
+        type_reviews={source.link: type_review},
+        bibliographic_reviews={source.link: bibliography},
+    )
+    assert result.total_matches == 1
+    assert result.stats["no_feed_year_hint"] == 0
+    assert result.items[0].year_source == "publisher-document-review"
+    assert result.items[0].citation_count is None
+    outside = run(
+        (source,), options=SearchOptions(year_from=2025, year_to=2025,
+                                        max_fallbacks=0),
+        doi_lookup=lambda *a, **k: {}, title_lookup=lambda *a, **k: (),
+        type_reviews={source.link: type_review},
+        bibliographic_reviews={source.link: bibliography},
+    )
+    assert outside.total_matches == 0
+
+
+def test_reviewed_conference_paper_without_doi_can_enter_year_bounded_search():
+    source = entry("BAUACF-2", "A Conference Paper", "")
+    bibliography = ReviewedBibliography(
+        source.link, "A Conference Paper", "Ada Scholar", "A Conference Paper",
+        ("Ada Scholar",), None, 2026,
+        ("https://example.org/proceedings/2026",), NOW,
+        "The society proceedings identify the paper and year.",
+    )
+    type_review = ReviewedWorkType(
+        source.link, "A Conference Paper", "conference-paper",
+        work_type_evidence_fingerprint(()),
+        ("https://example.org/proceedings/2026",), NOW,
+        "The full conference paper appears in the proceedings.",
+    )
+    result = run(
+        (source,), options=SearchOptions(year_from=2026, year_to=2026,
+                                        max_fallbacks=0),
+        doi_lookup=lambda *a, **k: pytest.fail("no DOI lookup expected"),
+        title_lookup=lambda *a, **k: (),
+        type_reviews={source.link: type_review},
+        bibliographic_reviews={source.link: bibliography},
+    )
+    assert result.total_matches == 1
+    assert result.items[0].work_type == "conference-paper"
+    assert result.items[0].doi is None
+
+
+def test_type_review_alone_never_bypasses_missing_feed_year_gate():
+    source = entry("BAUACF-2", "A Conference Paper", "")
+    type_review = ReviewedWorkType(
+        source.link, "A Conference Paper", "conference-paper",
+        work_type_evidence_fingerprint(()),
+        ("https://example.org/proceedings/2026",), NOW,
+        "The full conference paper appears in the proceedings.",
+    )
+    result = run(
+        (source,), options=SearchOptions(year_from=2026, year_to=2026),
+        type_reviews={source.link: type_review},
+    )
+    assert result.total_matches == 0
+    assert result.stats["no_feed_year_hint"] == 1
+
+
+def test_private_queue_exposes_missing_feed_year_for_bibliographic_review(tmp_path):
+    source = entry("ZHAAFT", "Approaching from the Desert", "")
+    result = run((source,), options=SearchOptions(year_from=2026, year_to=2026))
+    assert result.unconfirmed_records == ()
+    assert len(result.year_review_candidates) == 1
+    path = tmp_path / "review-queue.json"
+    cli._write_search_review_queue(path, result)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["items"] == [{
+        "record_url": source.link,
+        "title": "Approaching from the Desert",
+        "source_author": "Scholar, Ada",
+        "source_urls": [source.link],
+        "reason": "year_review_pending",
+        "work_type_evidence": [],
+        "evidence_fingerprint": None,
+    }]
+
+
 def test_fallback_budget_is_disclosed_and_unknown_not_defaulted():
     result = run((entry("A"), entry("B")), options=SearchOptions(max_fallbacks=0))
     assert result.total_matches == 0

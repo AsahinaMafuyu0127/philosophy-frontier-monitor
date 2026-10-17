@@ -105,6 +105,24 @@ The latest tagged application release is **v0.4.0**; the current code uses inter
 version **0.6.2**. Scheduled operation has been validated on Windows; macOS and Linux path support
 is in place, with scheduled operation still awaiting real-machine validation.
 
+## Technical update: publisher-reviewed years restore papers missing feed year hints (18 October 2026)
+
+In a year-bounded historical search, an exact publisher-reviewed bibliography with a
+publication year can now keep a record whose PhilPapers feed lacks a year hint eligible
+for the ordinary type, identity, and year checks. A conference paper without a DOI may
+use its publisher's matching bibliography and year; DOI and citation count remain
+missing unless independently verified. A work-type decision alone does not supply a
+year, and out-of-range years are still excluded. This changes the historical-search
+year gate only; weekly and on-demand reports retain their seven-day and newness rules.
+The private review queue now lists records missing feed year hints for individual
+bibliographic checking. Offline regression covers the year gate, private queue,
+a DOI-less proceedings paper, out-of-range years, and type-only reviews.
+This is a code branch update without a new version tag or
+GitHub Release. See the [search rules](references/paper-search.md).
+
+<details>
+<summary>Technical update: individual review corrects source labels and truncated bibliographies (17 October 2026)</summary>
+
 ## Technical update: individual review corrects source labels and truncated bibliographies (17 October 2026)
 
 The shared work-type review used by weekly reports, on-demand pulls, and historical search
@@ -122,6 +140,8 @@ Ruff, and Skill validation passed. No private weekly report was regenerated and
 no new release was created. See the
 [search rules](references/paper-search.md) and
 [work-type policy](references/work-type-policy.md).
+
+</details>
 
 <details>
 <summary>Technical update: faster batch bibliography handling in all three modes (17 October 2026)</summary>
@@ -168,7 +188,7 @@ does not create a new version tag or GitHub Release.
 </details>
 
 <details>
-<summary>View earlier technical updates (19)</summary>
+<summary>View earlier technical updates (20)</summary>
 
 <details>
 <summary>Technical update: document review across all three modes (12 October 2026)</summary>
@@ -630,7 +650,8 @@ no separate version tag or GitHub Release has been created for it.
 
 **Without year bounds**, missing feed dates, year hints, or publication dates do not exclude a
 verified paper, and all verified matches are returned by default. Explicit result limits still
-enable pagination. **With year bounds**, records without feed year hints are excluded before
+enable pagination. **With year bounds**, records without feed year hints or an applicable
+publisher-checked publication-year review are excluded before
 bibliographic lookup; the final year filter uses bibliographic publication-date evidence.
 
 Available OpenAlex citation counts sort descending, with missing values labelled and placed last;
