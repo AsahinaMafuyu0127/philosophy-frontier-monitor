@@ -61,6 +61,11 @@ from .sources.wanfang import (
     scan_wanfang_discovery,
 )
 from .taxonomy import expand_selected_categories
+from .work_type_reviews import (
+    ReviewedWorkType,
+    apply_work_type_review,
+    work_type_evidence_fingerprint,
+)
 from .work_types import (
     SUPPORTED_CANONICAL_WORK_TYPES,
     WorkTypeSignal,
@@ -121,15 +126,20 @@ class PaperSearchItem:
     citation_count: int | None
     citation_source: str | None
     citation_retrieved_at: datetime | None
+    source_titles: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class UnconfirmedSearchRecord:
-    """Existing source evidence for optional user review, never a retry queue."""
+    """Existing source evidence; type conflicts can enter private document review."""
 
     title: str
     source_urls: tuple[str, ...]
     reason: str
+    work_type_evidence: tuple[WorkTypeEvidence, ...] = ()
+    evidence_fingerprint: str | None = None
+    review_record_url: str | None = None
+    review_title: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,7 +212,7 @@ def _signals(candidate: MergedCandidate) -> tuple[WorkTypeSignal, ...]:
     )
     return explicit + tuple(
         WorkTypeSignal(
-            "philpapers-rss-description", kind, candidate.source_id, "explicit-bibliographic-label"
+            "philpapers-rss-description", kind, candidate.source_id, "explicit-feed-label"
         )
         for kind in candidate.work_type_hints
     )
@@ -230,8 +240,6 @@ def _make_item(
             record_id = metadata.openalex_id if isinstance(metadata, OpenAlexWork) else metadata.doi
             signals += (WorkTypeSignal(source, metadata.work_type, record_id),)
     resolved = resolve_work_type(signals, default_type="unknown")
-    if not resolved.usable or resolved.work_type == "unknown":
-        return None, "type_unverified"
     display = split_display_bibliography(candidate.display_title)
     year = _year(work.publication_date) if work else None
     year_source = work.publication_date.source if work and year is not None else None
@@ -258,7 +266,8 @@ def _make_item(
         citation_retrieved_at=(work.retrieved_at or queried_at)
         if isinstance(work, OpenAlexWork) and count is not None
         else None,
-    ), None
+        source_titles=((candidate.stable_url, display.title),),
+    ), "type_unverified" if not resolved.usable or resolved.work_type == "unknown" else None
 
 
 def _merge_items(items: list[PaperSearchItem], stats: Counter) -> list[PaperSearchItem]:
@@ -298,6 +307,7 @@ def _merge_items(items: list[PaperSearchItem], stats: Counter) -> list[PaperSear
                 doi=item.doi or previous.doi,
                 openalex_id=item.openalex_id or previous.openalex_id,
                 source_urls=tuple(sorted(set(item.source_urls + previous.source_urls))),
+                source_titles=tuple(sorted(set(item.source_titles + previous.source_titles))),
                 category_ids=tuple(sorted(set(item.category_ids + previous.category_ids))),
                 work_type=resolution.work_type,
                 type_evidence=resolution.evidence,
@@ -330,6 +340,7 @@ def run_paper_search(
     cnki_loader: Callable[..., CnkiScan] = scan_cnki_space,
     wanfang_loader: Callable[..., WanfangScan] = scan_wanfang_cnki,
     wanfang_discovery_loader: Callable[..., WanfangDiscoveryScan] = scan_wanfang_discovery,
+    type_reviews: dict[str, ReviewedWorkType] | None = None,
 ) -> PaperSearchResult:
     """Search configured interests; dependencies may be injected for offline tests."""
     options = options or SearchOptions()
@@ -472,8 +483,8 @@ def run_paper_search(
             supplementary = None
             # Metadata is needed to establish paper form; missing citation
             # counts alone never trigger extra individual requests.
-            native, _ = _make_item(candidate, work, now)
-            if native is None or (
+            native, native_reason = _make_item(candidate, work, now)
+            if native_reason or (
                 options.filters_years
                 and native.publication_year is None
                 and is_supported_work_type(native.work_type)
@@ -508,12 +519,8 @@ def run_paper_search(
                     except CrossrefError as error:
                         failures.add("Crossref: paper metadata lookup failed")
                         crossref_blocked = _bibliographic_error_opens_circuit(error)
-            item, reason = _make_item(candidate, work, now, supplementary)
-            if item is not None:
-                items.append(item)
-            elif reason:
-                stats[reason] += 1
-                record_unconfirmed(candidate, reason)
+            item, _ = _make_item(candidate, work, now, supplementary)
+            items.append(item)
             if progress:
                 progress("candidates", index, len(candidates))
     if progress:
@@ -529,6 +536,22 @@ def run_paper_search(
         if not (all(matches) if options.match == "all" else any(matches)):
             stats["filtered_out"] += 1
             continue
+        resolution = resolve_work_type_evidence(item.type_evidence, default_type="unknown")
+        if type_reviews and not resolution.usable:
+            applicable = [
+                (url, title, type_reviews[url])
+                for url, title in item.source_titles
+                if url in type_reviews
+                and type_reviews[url].applies_to(
+                    record_url=url, title=title, evidence=resolution.evidence
+                )
+            ]
+            if len({review.work_type for _, _, review in applicable}) == 1:
+                url, title, review = applicable[0]
+                resolution = apply_work_type_review(resolution, review, record_url=url, title=title)
+                item = replace(
+                    item, work_type=resolution.work_type, type_evidence=resolution.evidence
+                )
         if not is_supported_work_type(item.work_type):
             stats[
                 "type_unverified"
@@ -536,8 +559,17 @@ def run_paper_search(
                 else "unsupported_type"
             ] += 1
             if item.work_type in {"unknown", "conflict"}:
+                review_url, review_title = item.source_titles[0]
                 unconfirmed.append(
-                    UnconfirmedSearchRecord(item.title, item.source_urls, "type_unverified")
+                    UnconfirmedSearchRecord(
+                        item.title,
+                        item.source_urls,
+                        "type_unverified",
+                        item.type_evidence,
+                        work_type_evidence_fingerprint(item.type_evidence),
+                        review_url,
+                        review_title,
+                    )
                 )
             continue
         if options.work_types and item.work_type not in options.work_types:

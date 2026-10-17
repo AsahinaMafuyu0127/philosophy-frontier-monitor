@@ -61,6 +61,7 @@ from .models import (
     SelectedCategory,
     TaxonomySnapshot,
     WorkRecord,
+    WorkTypeEvidence,
     WorkTypeStatus,
 )
 from .normalize import normalize_doi, normalize_title
@@ -106,6 +107,7 @@ from .sources.philpapers_rss import (
 )
 from .sources.philpapers_rss import (
     FeedEntry,
+    direct_feed_request,
     discover_feed_request,
     fetch_feed,
     parse_feed,
@@ -130,6 +132,11 @@ from .state import (
     UnresolvedUpdate,
 )
 from .taxonomy import expand_selected_categories, load_taxonomy, require_production_taxonomy
+from .work_type_reviews import (
+    ReviewedWorkType,
+    apply_work_type_review,
+    work_type_evidence_fingerprint,
+)
 from .work_types import (
     WorkTypeResolution,
     WorkTypeSignal,
@@ -139,7 +146,7 @@ from .work_types import (
 
 SOURCE_NAME = "philpapers-rss"
 NOTIFICATION_TYPE = "weekly_new_papers"
-PIPELINE_VERSION = "0.6.0"
+PIPELINE_VERSION = "0.6.2"
 MATCHING_RULE_VERSION = "set_intersection_v1"
 RECORD_PATH = re.compile(r"/rec/(?!\.{1,2}/?$)[A-Za-z0-9._~-]+/?")
 FEED_YEAR_HINT = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
@@ -226,6 +233,7 @@ class MergedCandidate:
     oai_year_hints: tuple[int, ...] = ()
     oai_record_ids: tuple[str, ...] = ()
     oai_work_type_hints: tuple[str, ...] = ()
+    type_review: ReviewedWorkType | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,6 +242,8 @@ class ResolutionResult:
     work: WorkRecord | None
     reason_code: str | None = None
     detail: str | None = None
+    work_type_evidence: tuple[WorkTypeEvidence, ...] = ()
+    review_publication_date: DateValue | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -253,6 +263,7 @@ class WeeklyRunResult:
     report_path: Path | None
     report_markdown: str
     stats: dict[str, int]
+    human_review_items: tuple[HumanReviewItem, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,6 +273,8 @@ class OnDemandRunResult:
     window_end: datetime
     report_markdown: str
     stats: dict[str, int]
+    human_review_items: tuple[HumanReviewItem, ...] = ()
+    feed_snapshots: tuple[FeedSnapshot, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -659,7 +672,11 @@ def load_philpapers_feed(
     *,
     client: httpx.Client | None = None,
 ) -> FeedSnapshot:
-    request = discover_feed_request(feed.url, client=client)
+    request = (
+        direct_feed_request(feed.url, feed.category_id, feed.official_rss_url)
+        if feed.official_rss_url is not None
+        else discover_feed_request(feed.url, client=client)
+    )
     if request.category_id != feed.category_id:
         raise PipelineError(
             f"PhilPapers page {feed.url} resolved to cId={request.category_id}, "
@@ -1085,18 +1102,80 @@ def _work_type_resolution(
                 source_record_id=openalex.openalex_id,
             )
         )
-    return resolve_work_type(tuple(signals), default_type=default_type)
+    resolved = resolve_work_type(tuple(signals), default_type=default_type)
+    return apply_work_type_review(
+        resolved,
+        candidate.type_review,
+        record_url=candidate.stable_url,
+        title=split_display_bibliography(candidate.display_title).title,
+    )
+
+
+def _attach_type_reviews(
+    candidates: tuple[MergedCandidate, ...],
+    reviews: dict[str, ReviewedWorkType] | None,
+) -> tuple[MergedCandidate, ...]:
+    if not reviews:
+        return candidates
+    return tuple(
+        replace(candidate, type_review=reviews.get(candidate.stable_url))
+        for candidate in candidates
+    )
+
+
+def _review_record_url(work: WorkRecord) -> str | None:
+    return next(
+        (
+            source_id
+            for source, source_id in work.source_ids
+            if source == SOURCE_NAME and source_id.startswith("https://philpapers.org/rec/")
+        ),
+        None,
+    )
+
+
+def _apply_type_review_to_work(
+    work: WorkRecord,
+    reviews: dict[str, ReviewedWorkType] | None,
+) -> WorkRecord:
+    if not reviews:
+        return work
+    record_url = _review_record_url(work)
+    review = reviews.get(record_url) if record_url else None
+    if review is None:
+        return work
+    resolved = apply_work_type_review(
+        WorkTypeResolution(work.work_type, work.work_type_status, work.work_type_evidence),
+        review,
+        record_url=record_url,
+        title=work.title,
+    )
+    return replace(
+        work,
+        work_type=resolved.work_type,
+        work_type_status=resolved.status,
+        work_type_evidence=resolved.evidence,
+    )
 
 
 def _work_type_resolution_failure(
     candidate: MergedCandidate,
     resolution: WorkTypeResolution,
+    *,
+    publication_date: DateValue | None = None,
 ) -> ResolutionResult | None:
     failure = WORK_TYPE_FAILURE_DETAILS.get(resolution.status)
     if failure is None:
         return None
     reason_code, detail = failure
-    return ResolutionResult(candidate, None, reason_code=reason_code, detail=detail)
+    return ResolutionResult(
+        candidate,
+        None,
+        reason_code=reason_code,
+        detail=detail,
+        work_type_evidence=resolution.evidence,
+        review_publication_date=publication_date,
+    )
 
 
 def _native_arrival_eligible(
@@ -1186,7 +1265,9 @@ def _resolve_philpapers_arrival(
         )
 
     type_resolution = _work_type_resolution(candidate)
-    type_failure = _work_type_resolution_failure(candidate, type_resolution)
+    type_failure = _work_type_resolution_failure(
+        candidate, type_resolution, publication_date=publication_date
+    )
     if type_failure is not None:
         return type_failure
     return ResolutionResult(
@@ -1306,7 +1387,15 @@ def _enrich_native_arrival(
         openalex=openalex,
         default_type=native.work.work_type,
     )
-    type_failure = _work_type_resolution_failure(candidate, type_resolution)
+    type_failure = _work_type_resolution_failure(
+        candidate,
+        type_resolution,
+        publication_date=(
+            publication_date
+            or (crossref.publication_date if crossref is not None else None)
+            or (openalex.publication_date if openalex is not None else None)
+        ),
+    )
     if type_failure is not None:
         return type_failure
     source_ids = set(native.work.source_ids)
@@ -1525,7 +1614,14 @@ def resolve_bibliography(
         crossref=crossref,
         openalex=openalex,
     )
-    type_failure = _work_type_resolution_failure(candidate, type_resolution)
+    type_failure = _work_type_resolution_failure(
+        candidate,
+        type_resolution,
+        publication_date=(
+            (crossref.publication_date if crossref is not None else None)
+            or (openalex.publication_date if openalex is not None else None)
+        ),
+    )
     if type_failure is not None:
         return type_failure
 
@@ -1672,7 +1768,9 @@ def _resolve_batched_openalex(
     if not _candidate_matches_openalex(candidate, openalex):
         return None
     type_resolution = _work_type_resolution(candidate, openalex=openalex)
-    type_failure = _work_type_resolution_failure(candidate, type_resolution)
+    type_failure = _work_type_resolution_failure(
+        candidate, type_resolution, publication_date=openalex.publication_date
+    )
     if type_failure is not None:
         return type_failure
     if openalex.publication_date is None:
@@ -2111,15 +2209,13 @@ def _official_issues_for_window(
         candidates = issues_in_window(all_reviewed, local_start, local_last)
     if not first_observed_only:
         return distinct_issue_leads(candidates)
-    first_review_by_issue = {
-        (issue.journal_id, issue.year, issue.issue): min(
-            datetime.fromisoformat(other.reviewed_at or other.observed_at)
-            for other in all_reviewed
-            if (other.journal_id, other.year, other.issue)
-            == (issue.journal_id, issue.year, issue.issue)
-        )
-        for issue in candidates
-    }
+    first_review_by_issue = {}
+    for issue in all_reviewed:
+        key = issue.journal_id, issue.year, issue.issue
+        reviewed_at = datetime.fromisoformat(issue.reviewed_at or issue.observed_at)
+        previous = first_review_by_issue.get(key)
+        if previous is None or reviewed_at < previous:
+            first_review_by_issue[key] = reviewed_at
     return distinct_issue_leads(tuple(
         issue
         for issue in candidates
@@ -2398,6 +2494,8 @@ def run_on_demand(
     allow_development_fixture: bool = False,
     progress: ProgressReporter | None = None,
     show_recently_changed: bool = False,
+    type_reviews: dict[str, ReviewedWorkType] | None = None,
+    reviewed_feed_snapshots: tuple[FeedSnapshot, ...] | None = None,
     cnki_loader: Callable[..., CnkiScan] = scan_cnki_space,
     wanfang_loader: Callable[..., WanfangScan] = scan_wanfang_cnki,
     wanfang_discovery_loader: Callable[..., WanfangDiscoveryScan] = scan_wanfang_discovery,
@@ -2440,16 +2538,35 @@ def run_on_demand(
     )
     if progress is not None:
         progress("feeds", 0, len(config.feeds))
-    feed_snapshots = _load_all_feeds(
-        config,
-        checked_at=requested_at,
-        loader=feed_loader,
-        progress=(
-            (lambda completed, total: progress("feeds", completed, total))
-            if progress is not None
-            else None
-        ),
-    )
+    if reviewed_feed_snapshots is None:
+        feed_snapshots = _load_all_feeds(
+            config,
+            checked_at=requested_at,
+            loader=feed_loader,
+            progress=(
+                (lambda completed, total: progress("feeds", completed, total))
+                if progress is not None
+                else None
+            ),
+        )
+    else:
+        configured = {feed.feed_key: feed for feed in config.feeds}
+        if len(reviewed_feed_snapshots) != len(configured) or {
+            item.feed_key for item in reviewed_feed_snapshots
+        } != set(configured):
+            raise PipelineError("review feed snapshot does not match configured feeds")
+        for item in reviewed_feed_snapshots:
+            feed = configured[item.feed_key]
+            if (
+                item.category_id != feed.category_id
+                or item.category_url != feed.url
+                or item.checked_at.tzinfo is None
+                or item.checked_at.astimezone(UTC) != window_end.astimezone(UTC)
+            ):
+                raise PipelineError("review feed snapshot has inconsistent category or window")
+        feed_snapshots = reviewed_feed_snapshots
+        if progress is not None:
+            progress("feeds", len(feed_snapshots), len(feed_snapshots))
     current_candidates = merge_feed_snapshots(feed_snapshots)
     oai_snapshot: OAIWindowSnapshot | None = None
     oai_failure: str | None = None
@@ -2468,6 +2585,7 @@ def run_on_demand(
             current_candidates = enrich_candidates_with_oai(current_candidates, oai_snapshot)
         if progress is not None:
             progress("oai", 1, 1)
+    current_candidates = _attach_type_reviews(current_candidates, type_reviews)
     window_years = set(
         range(
             window_start.astimezone(config.timezone).year,
@@ -2848,6 +2966,13 @@ def run_on_demand(
                         author_text=display.author_text or None,
                         stable_url=result.candidate.stable_url,
                         reason_code=result.reason_code,
+                        work_type_evidence=result.work_type_evidence,
+                        evidence_fingerprint=(
+                            work_type_evidence_fingerprint(result.work_type_evidence)
+                            if result.work_type_evidence
+                            else None
+                        ),
+                        publication_date=result.review_publication_date,
                     )
                 )
             continue
@@ -2857,6 +2982,8 @@ def run_on_demand(
         )
 
     for work_id, work in tuple(works.items()):
+        work = _apply_type_review_to_work(work, type_reviews)
+        works[work_id] = work
         failure = WORK_TYPE_FAILURE_DETAILS.get(work.work_type_status)
         if failure is None:
             continue
@@ -2867,8 +2994,15 @@ def run_on_demand(
             HumanReviewItem(
                 title=work.title,
                 author_text="; ".join(work.authors) or None,
-                stable_url=work.stable_url,
+                stable_url=_review_record_url(work) or work.stable_url,
                 reason_code=reason_code,
+                work_type_evidence=work.work_type_evidence,
+                evidence_fingerprint=(
+                    work_type_evidence_fingerprint(work.work_type_evidence)
+                    if work.work_type_evidence
+                    else None
+                ),
+                publication_date=work.publication_date,
             )
         )
         del works[work_id]
@@ -3226,6 +3360,8 @@ def run_on_demand(
         window_end=window_end,
         report_markdown=report_markdown,
         stats=stats,
+        human_review_items=tuple(human_review_items),
+        feed_snapshots=feed_snapshots,
     )
 
 
@@ -3244,6 +3380,7 @@ def run_weekly(
     before_commit: Callable[[], None] | None = None,
     defer_uncertain_until_later_window: bool = False,
     show_recently_changed: bool = False,
+    type_reviews: dict[str, ReviewedWorkType] | None = None,
     cnki_loader: Callable[..., CnkiScan] = scan_cnki_space,
     wanfang_loader: Callable[..., WanfangScan] = scan_wanfang_cnki,
     wanfang_discovery_loader: Callable[..., WanfangDiscoveryScan] = scan_wanfang_discovery,
@@ -3301,6 +3438,7 @@ def run_weekly(
             oai_failure = str(error)
         else:
             current_candidates = enrich_candidates_with_oai(current_candidates, oai_snapshot)
+    current_candidates = _attach_type_reviews(current_candidates, type_reviews)
     current_by_key = {(item.source, item.source_id): item for item in current_candidates}
     current_ids = {item.source_id for item in current_candidates}
     known_ids = state.known_source_ids(SOURCE_NAME, current_ids)
@@ -3323,7 +3461,12 @@ def run_weekly(
     unavailable_bibliographic_sources: dict[str, str] = {}
     circuit_skip_counts: dict[str, int] = {}
     resolution_results = _resolve_candidates_with_connection_reuse(
-        tuple(sorted(to_process.values(), key=lambda item: item.source_id)),
+        tuple(
+            sorted(
+                _attach_type_reviews(tuple(to_process.values()), type_reviews),
+                key=lambda item: item.source_id,
+            )
+        ),
         snapshot,
         config,
         window_start,
@@ -3374,6 +3517,13 @@ def run_weekly(
                         author_text=display.author_text or None,
                         stable_url=result.candidate.stable_url,
                         reason_code=result.reason_code,
+                        work_type_evidence=result.work_type_evidence,
+                        evidence_fingerprint=(
+                            work_type_evidence_fingerprint(result.work_type_evidence)
+                            if result.work_type_evidence
+                            else None
+                        ),
+                        publication_date=result.review_publication_date,
                     )
                 )
             outcomes.append(
@@ -3391,21 +3541,17 @@ def run_weekly(
             result.work if current_work is None else _merge_work(current_work, result.work)
         )
 
-    failed_work_ids = {
-        work_id for work_id, work in works.items()
-        if work.work_type_status in WORK_TYPE_FAILURE_DETAILS
-    }
-    sources_by_failed_work: dict[str, list[tuple[str, str]]] = {}
-    if failed_work_ids:
-        for key, work_id in source_to_work.items():
-            if work_id in failed_work_ids:
-                sources_by_failed_work.setdefault(work_id, []).append(key)
+    sources_by_work: dict[str, list[tuple[str, str]]] = {}
+    for key, work_id in source_to_work.items():
+        sources_by_work.setdefault(work_id, []).append(key)
     for work_id, work in tuple(works.items()):
+        work = _apply_type_review_to_work(work, type_reviews)
+        works[work_id] = work
         failure = WORK_TYPE_FAILURE_DETAILS.get(work.work_type_status)
         if failure is None:
             continue
         reason_code, detail = failure
-        for key in sources_by_failed_work.get(work_id, ()):
+        for key in sources_by_work.get(work_id, ()):
             source, source_id = key
             unresolved_updates.append(
                 UnresolvedUpdate(
@@ -3421,8 +3567,15 @@ def run_weekly(
                 HumanReviewItem(
                     title=work.title,
                     author_text="; ".join(work.authors) or None,
-                    stable_url=work.stable_url,
+                    stable_url=_review_record_url(work) or work.stable_url,
                     reason_code=reason_code,
+                    work_type_evidence=work.work_type_evidence,
+                    evidence_fingerprint=(
+                        work_type_evidence_fingerprint(work.work_type_evidence)
+                        if work.work_type_evidence
+                        else None
+                    ),
+                    publication_date=work.publication_date,
                 )
             )
             outcomes.append(
@@ -3790,6 +3943,7 @@ def run_weekly(
         report_path=report_path,
         report_markdown=report_markdown,
         stats=stats,
+        human_review_items=tuple(human_review_items),
     )
 
 

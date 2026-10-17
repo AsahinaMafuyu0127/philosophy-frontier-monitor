@@ -23,8 +23,12 @@ scholarly quality and importance; available citation counts only order search re
   feed dates, year hints, or publication dates are missing; do not impose the
   default yearly-result page size or invent a recent-year window. In user
   reports, mention unresolved paper types or bibliographic identities without
-  counts. Offer existing source links for optional user review; do not initiate
-  another search or investigation to resolve those records.
+  counts. For type conflicts and unknown controlled values, follow the individual
+  document-review process in [work-type-policy.md](references/work-type-policy.md):
+  generate a private search review queue, inspect each accessible work, save
+  evidence-bound decisions, and rerun the same search filters with `--type-reviews`.
+  Keep unresolved bibliographic identities available for optional user review.
+  Do not raise search budgets or broaden the user's category/year scope to resolve them.
 - **Monitor new papers:** follow the onboarding and monitoring workflow below.
   `pull-now` remains a recent-paper request, separate from historical search.
 
@@ -133,10 +137,11 @@ lists. Historical `search` retains candidates within the requested year scope,
 explicitly marking unknown or conflicting months rather than calling them recent.
 Both structured search results and Markdown show publisher dates and source URLs;
 a month-only source stays month-only. Then run the requested `pull-now` or `search`,
-or the regular weekly `catch-up` once. Do not rerun a successful window to correct
+or the regular weekly `catch-up` once. Do not rerun a committed successful window to correct
 its presentation; preserve an original private report and amend the saved report
-without changing committed checkpoints or notification history. A formerly
-monthless CNKI observation remains eligible after later date corroboration.
+without changing committed checkpoints or notification history. The work-type
+conflict review below uses an uncommitted first pass and an exact-window follow-up.
+A formerly monthless CNKI observation remains eligible after later date corroboration.
 An optional Git-ignored `sources.cnki_space.reviewed_evidence` file holds
 manually checked journal or catalog bibliographies. The source page must support
 the stated title, authors, journal, year, issue, and any publication-time China
@@ -252,6 +257,15 @@ for existing schedules and configuration consistency.
    the same official JSON response in a private browser session and validate it
    with `pfm taxonomy-import`; do not impersonate a browser or reuse cookies to
    bypass the challenge.
+   If a selected category page is challenged but its ordinary browser page
+   presents an `RSS feed` control, the user may generate the official link there
+   and save it as `official_rss_url` beside that category's `url` in the private,
+   Git-ignored watchlist. Validate that the link's host, category ID, slug,
+   unfiltered scope and RSS parameters match the confirmed category. This link
+   is an optional direct feed entrypoint, not a replacement for the taxonomy or
+   a way to solve or bypass a challenge. Never paste its opaque `dg` value into
+   public files or logs. If a required category remains challenged and no
+   verified link is available, stop the complete `pull-now` or weekly run.
 2. When a new taxonomy snapshot is obtained, retain the old file and run
    `pfm taxonomy-audit` before changing the private watchlist. Read
    [taxonomy-lifecycle.md](references/taxonomy-lifecycle.md). Never infer a
@@ -357,6 +371,41 @@ for existing schedules and configuration consistency.
    source-specific type evidence, distinguish OpenAlex `book-review` from its
    `review` article type, and withhold supported-versus-unsupported conflicts
    or unknown controlled values instead of defaulting them to `article`.
+   Treat this as a provisional classification, not the end of the investigation.
+   When the report has work-type conflicts, Codex must work through the complete
+   review queue itself, prioritizing candidates with publication or arrival
+   evidence inside the requested seven-day window. Run `pull-now` with
+   `--review-queue-file` in the private state directory, or `weekly-run --dry-run`
+   with that option before committing a weekly report. Open each conflicting
+   PhilPapers/PhilArchive record and, where available, the actual manuscript,
+   paper, or publisher page. Verify identity and inspect enough of the work
+   (title page, body, structure, references and source designation) to decide
+   whether it is a supported paper form, manuscript/preprint, or an excluded
+   book, chapter, abstract, review, dataset, etc. Do not infer type solely from
+   a file extension, an abstract using the word "paper", or a database label.
+   Do not ask the user to routinely classify these items. If neither the work
+   nor sufficiently specific primary bibliographic evidence is accessible,
+   leave that item unresolved and state the precise evidence gap.
+   Save each justified decision in a Git-ignored private JSON file in the
+   schema of [references/work-type-policy.md](references/work-type-policy.md),
+   using the queue's exact PhilPapers URL, title and evidence fingerprint.
+   Re-run `pull-now` with `--as-of` equal to the initial queue's `window_end`,
+   `--review-queue-input` pointing to the initial queue, and `--type-reviews`
+   pointing to the decisions. The private queue preserves the exact first-pass
+   category-feed inventory, so the second pass does not re-fetch and backdate
+   a changed RSS feed. A historical `--as-of` supplied on the first pass cannot
+   reconstruct a feed that was not saved at that earlier time; label such a
+   result as a retrospective projection, not observed historical arrival.
+   For weekly work, use the same
+   explicit window in a final `weekly-run --dry-run` to confirm the result,
+   then make the authorized committed run once. Compare the second queue with
+   the first for changed evidence; source changes invalidate old decisions
+   unless the private review explicitly lists that second, already-inspected
+   evidence fingerprint as described in the work-type policy.
+   Reassess dates independently: a document review settles work form only and
+   must never turn an archive upload date into a publication date or relax the
+   seven-day gate. Report how many conflicts were resolved, still lack source
+   evidence, and qualified for the paper list.
    Batch DOI and normalized-title candidates through OpenAlex, then use bounded
    Crossref/OpenAlex individual lookup for unresolved fallbacks. Compare
    bibliographic identity by a hierarchy of shared identifiers, compatible

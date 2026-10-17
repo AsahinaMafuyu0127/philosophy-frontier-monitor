@@ -215,8 +215,8 @@ def render_paper_search(
     if unresolved:
         lines += [
             f"- 存在{'或'.join(unresolved)}尚未确认的记录，未纳入论文结果。"
-            "如有需要，用户可根据原始来源自行核对论文类型与书目身份；"
-            "这是可选事项，skill 不再为这些记录继续补查或重新运行检索。"
+            "类型冲突或未知类型可依据下列证据逐篇打开原文复核；"
+            "书目身份未确认的记录保留供用户核对。"
         ]
     if result.stats.get("year_unknown", 0):
         lines += [
@@ -231,6 +231,15 @@ def render_paper_search(
             reason = "论文类型未确认" if record.reason == "type_unverified" else "书目身份未确认"
             sources = "、".join(f"[PhilPapers 原始记录]({url})" for url in record.source_urls)
             lines += [f"- {_safe_text(record.title)}：{reason}；{sources}。"]
-        lines += ["", "以上仅列出本次已经取得的来源材料，供自行核对。", "", "</details>"]
+            if record.reason == "type_unverified" and record.work_type_evidence:
+                signals = "；".join(
+                    f"{_safe_text(e.source)}: {_safe_text(e.raw_type)}"
+                    f" → {_safe_text(e.normalized_type or '未映射')}"
+                    for e in record.work_type_evidence
+                )
+                lines += [f"  - 结构化类型证据：{signals}。"]
+            if record.reason == "type_unverified" and record.evidence_fingerprint:
+                lines += [f"  - 证据指纹：`{record.evidence_fingerprint}`。"]
+        lines += ["", "类型裁定须与本次证据指纹一致；来源变化时重新复核。", "", "</details>"]
     lines += ["", "检索不写入订阅配置、周报通知历史或缓存。", ""]
     return "\n".join(lines)

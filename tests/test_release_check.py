@@ -113,6 +113,22 @@ def test_release_check_blocks_complete_philpapers_taxonomy_outside_private_cache
     assert item.details == ("tests/fixtures/taxonomy.json",)
 
 
+def test_linked_worktree_git_pointer_is_not_a_public_file(release_root, monkeypatch):
+    root = make_project(release_root)
+    (root / ".git").write_text("gitdir: ../private-git-metadata\n", encoding="utf-8")
+    tracked_files = tuple(
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.is_file() and path.name != ".git"
+    )
+    monkeypatch.setattr(release_check, "_git_repository", lambda root: (True, root, tracked_files))
+
+    audit = audit_release(root)
+
+    assert check(audit, "git_repository").status == "pass"
+    assert check(audit, "untracked_public_files").status == "pass"
+
+
 @pytest.mark.parametrize("tracked", [False, True])
 def test_git_history_bundle_is_private_and_blocked_if_tracked(release_root, monkeypatch, tracked):
     root = make_project(release_root)

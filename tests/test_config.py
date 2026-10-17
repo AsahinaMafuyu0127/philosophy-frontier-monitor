@@ -60,6 +60,25 @@ def test_public_schema_five_example_records_onboarding_without_account_access():
     assert config.onboarding.public_profile_url is None
 
 
+def test_private_watchlist_accepts_only_matching_official_rss_link(workspace_tmp_path):
+    source = FIXTURE_DIR.parents[1] / "config" / "watchlist.example.yaml"
+    payload = yaml.safe_load(source.read_text(encoding="utf-8"))
+    feed = payload["sources"]["philpapers_category_pages"][0]
+    feed["official_rss_url"] = (
+        "https://philpapers.org/browse/plato-theaetetus/"
+        "?cId=74924&catId=74924&cn=plato-theaetetus&dg=example123"
+        "&format=rss&import_options=1&new=1&proOnly=on&search_inside=1&sort=cat"
+    )
+    target = workspace_tmp_path / "watchlist.yaml"
+    target.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+
+    assert load_watchlist(target).feeds[0].official_rss_url == feed["official_rss_url"]
+    feed["official_rss_url"] += "&publishedOnly=1"
+    target.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(ConfigError, match="official_rss_url"):
+        load_watchlist(target)
+
+
 @pytest.mark.parametrize("field,value", [("max_discovery_terms", 4), ("max_discovery_pages", 3)])
 def test_wanfang_discovery_request_budget_is_bounded(workspace_tmp_path, field, value):
     source = FIXTURE_DIR.parents[1] / "config" / "watchlist.example.yaml"
