@@ -9,6 +9,7 @@ from html import escape
 from urllib.parse import quote
 
 from .cnki_review import CnkiAssessment, CnkiOverlap
+from .identity import IdentityComparison
 from .models import (
     DateValue,
     FreshnessStatus,
@@ -43,6 +44,8 @@ class HumanReviewItem:
     work_type_evidence: tuple[WorkTypeEvidence, ...] = ()
     evidence_fingerprint: str | None = None
     publication_date: DateValue | None = None
+    identity_comparisons: tuple[IdentityComparison, ...] = ()
+    identity_fingerprints: tuple[str, ...] = ()
 
 
 UNRESOLVED_REASON_LABELS = {
@@ -155,8 +158,8 @@ def _safe_text(value: str) -> str:
 def _chinese_sources_first(lines: list[str], *, english: bool) -> None:
     headings = (
         ("## Publisher issue leads", "## Chinese journal issue observations", "## Wanfang ")
-        if english else
-        ("## 期刊官方发布渠道", "## 中文期刊新期次观察", "## 万方中文期刊")
+        if english
+        else ("## 期刊官方发布渠道", "## 中文期刊新期次观察", "## 万方中文期刊")
     )
     start = next((i for i, line in enumerate(lines) if line.startswith(headings)), None)
     if start is None:

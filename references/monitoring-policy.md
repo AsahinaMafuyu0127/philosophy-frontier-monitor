@@ -259,6 +259,10 @@ manuscript、working paper、preprint、accepted manuscript 或 forthcoming 类�
   `fallback_deferred` 诊断，但不再公开容易误读的 `machine_deferred` 别名；
 - `human_review_required`：译名／大幅改题的语义同一性、冲突 DOI、支持与不支持作品类型冲突，
   或尚未识别的结构化类型；只有这一栏构成实际人工复核工作量；
+
+语义同一性条目的私人队列需列出引发疑问的 Crossref／OpenAlex 外部记录，
+并可按[逐对同一性复核规则](identity-review-policy.md)以证据指纹绑定裁定。
+周报与即时拉取共用裁定解释，但仍各自执行原有的七日新近性及状态规则。
 - `automatic_retry_required`：书目来源失败导致旧作检查未完成，应由程序在以后运行中自动重试。
 
 产品目标是尽量让 `human_review_required` 保持在个位数，同时继续透明披露本次未轮到远程核验的

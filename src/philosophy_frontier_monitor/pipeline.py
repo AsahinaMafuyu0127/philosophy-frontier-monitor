@@ -39,9 +39,15 @@ from .config import ConfirmedCategoryConfig, FeedConfig, WatchlistConfig
 from .freshness import assess_freshness
 from .http_retry import BoundedRequestError
 from .identity import (
+    IdentityComparison,
     IdentityMatchLevel,
     IdentityReviewRequired,
     compare_bibliographic_identity,
+)
+from .identity_reviews import (
+    ReviewedIdentity,
+    identity_evidence_fingerprint,
+    resolve_identity_review,
 )
 from .matching import match_work
 from .models import (
@@ -244,6 +250,7 @@ class ResolutionResult:
     detail: str | None = None
     work_type_evidence: tuple[WorkTypeEvidence, ...] = ()
     review_publication_date: DateValue | None = None
+    identity_comparisons: tuple[IdentityComparison, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -1451,6 +1458,7 @@ def resolve_bibliography(
     source_failures: dict[str, str] | None = None,
     unavailable_sources: dict[str, str] | None = None,
     circuit_skip_counts: dict[str, int] | None = None,
+    identity_reviews: dict[tuple[str, str, str], ReviewedIdentity] | None = None,
 ) -> ResolutionResult:
     """Resolve exact bibliography and obtain independent publication evidence."""
 
@@ -1467,6 +1475,7 @@ def resolve_bibliography(
     openalex: OpenAlexWork | None = None
     lookup_failures: list[str] = []
     identity_review_sources: list[str] = []
+    identity_comparisons: list[IdentityComparison] = []
     cached_crossref = (
         bibliography_cache.lookup_crossref(
             display.title,
@@ -1490,8 +1499,19 @@ def resolve_bibliography(
                 mailto=config.crossref_mailto,
                 client=crossref_client,
             )
-        except IdentityReviewRequired:
-            identity_review_sources.append("Crossref")
+        except IdentityReviewRequired as error:
+            reviewed, pending = resolve_identity_review(
+                error,
+                record_url=candidate.stable_url,
+                title=display.title,
+                author=display.author_text,
+                reviews=identity_reviews,
+                source_doi_hints=candidate.doi_hints,
+            )
+            crossref = reviewed if isinstance(reviewed, CrossrefWork) else None
+            if pending or not error.comparisons:
+                identity_review_sources.append("Crossref")
+                identity_comparisons.extend(pending)
         except CrossrefError as error:
             detail = str(error)
             lookup_failures.append(detail)
@@ -1542,8 +1562,19 @@ def resolve_bibliography(
                     mailto=config.openalex_mailto,
                     client=openalex_client,
                 )
-            except IdentityReviewRequired:
-                identity_review_sources.append("OpenAlex")
+            except IdentityReviewRequired as error:
+                reviewed, pending = resolve_identity_review(
+                    error,
+                    record_url=candidate.stable_url,
+                    title=display.title,
+                    author=display.author_text,
+                    reviews=identity_reviews,
+                    source_doi_hints=candidate.doi_hints,
+                )
+                openalex = reviewed if isinstance(reviewed, OpenAlexWork) else None
+                if pending or not error.comparisons:
+                    identity_review_sources.append("OpenAlex")
+                    identity_comparisons.extend(pending)
             except OpenAlexError as error:
                 detail = str(error)
                 lookup_failures.append(detail)
@@ -1574,6 +1605,7 @@ def resolve_bibliography(
                 "retitled version. Semantic identity review is required before notification "
                 f"({', '.join(identity_review_sources)})."
             ),
+            identity_comparisons=tuple(identity_comparisons),
         )
 
     if crossref is None and openalex is None:
@@ -2199,7 +2231,8 @@ def _official_issues_for_window(
     all_reviewed = list_issues(db_path, reviewed_only=True)
     if publication_month_only:
         candidates = tuple(
-            issue for issue in all_reviewed
+            issue
+            for issue in all_reviewed
             if (value := issue.label_month or issue.issue_published_on) is not None
             and (local_start.year, local_start.month)
             <= (int(value[:4]), int(value[5:7]))
@@ -2216,13 +2249,15 @@ def _official_issues_for_window(
         previous = first_review_by_issue.get(key)
         if previous is None or reviewed_at < previous:
             first_review_by_issue[key] = reviewed_at
-    return distinct_issue_leads(tuple(
-        issue
-        for issue in candidates
-        if window_start
-        <= first_review_by_issue[(issue.journal_id, issue.year, issue.issue)]
-        < window_end
-    ))
+    return distinct_issue_leads(
+        tuple(
+            issue
+            for issue in candidates
+            if window_start
+            <= first_review_by_issue[(issue.journal_id, issue.year, issue.issue)]
+            < window_end
+        )
+    )
 
 
 def _wanfang_records_in_window(
@@ -2282,7 +2317,11 @@ def _load_wanfang_discovery(
 
 
 def _wanfang_discovery_coverage(
-    scan: WanfangDiscoveryScan, *, displayed: int, missing_month: int, outside_window: int,
+    scan: WanfangDiscoveryScan,
+    *,
+    displayed: int,
+    missing_month: int,
+    outside_window: int,
     previously_seen: int = 0,
 ) -> SourceCoverage:
     return SourceCoverage(
@@ -2413,6 +2452,7 @@ def _resolve_candidates_with_connection_reuse(
     source_failures: dict[str, str] | None = None,
     unavailable_sources: dict[str, str] | None = None,
     circuit_skip_counts: dict[str, int] | None = None,
+    identity_reviews: dict[tuple[str, str, str], ReviewedIdentity] | None = None,
     progress: Callable[[int, int], None] | None = None,
 ) -> tuple[ResolutionResult, ...]:
     """Resolve candidates while pooling default bibliographic connections."""
@@ -2440,6 +2480,7 @@ def _resolve_candidates_with_connection_reuse(
                     source_failures=source_failures,
                     unavailable_sources=unavailable_sources,
                     circuit_skip_counts=circuit_skip_counts,
+                    identity_reviews=identity_reviews,
                 )
             else:
                 result = resolver(
@@ -2495,6 +2536,7 @@ def run_on_demand(
     progress: ProgressReporter | None = None,
     show_recently_changed: bool = False,
     type_reviews: dict[str, ReviewedWorkType] | None = None,
+    identity_reviews: dict[tuple[str, str, str], ReviewedIdentity] | None = None,
     reviewed_feed_snapshots: tuple[FeedSnapshot, ...] | None = None,
     cnki_loader: Callable[..., CnkiScan] = scan_cnki_space,
     wanfang_loader: Callable[..., WanfangScan] = scan_wanfang_cnki,
@@ -2922,6 +2964,7 @@ def run_on_demand(
         source_failures=bibliographic_source_failures,
         unavailable_sources=unavailable_bibliographic_sources,
         circuit_skip_counts=circuit_skip_counts,
+        identity_reviews=identity_reviews,
         progress=(
             (lambda completed, total: progress("fallback", completed, total))
             if progress is not None
@@ -2973,6 +3016,17 @@ def run_on_demand(
                             else None
                         ),
                         publication_date=result.review_publication_date,
+                        identity_comparisons=result.identity_comparisons,
+                        identity_fingerprints=tuple(
+                            identity_evidence_fingerprint(
+                                result.candidate.stable_url,
+                                display.title,
+                                display.author_text,
+                                comparison,
+                                source_doi_hints=result.candidate.doi_hints,
+                            )
+                            for comparison in result.identity_comparisons
+                        ),
                     )
                 )
             continue
@@ -3381,6 +3435,7 @@ def run_weekly(
     defer_uncertain_until_later_window: bool = False,
     show_recently_changed: bool = False,
     type_reviews: dict[str, ReviewedWorkType] | None = None,
+    identity_reviews: dict[tuple[str, str, str], ReviewedIdentity] | None = None,
     cnki_loader: Callable[..., CnkiScan] = scan_cnki_space,
     wanfang_loader: Callable[..., WanfangScan] = scan_wanfang_cnki,
     wanfang_discovery_loader: Callable[..., WanfangDiscoveryScan] = scan_wanfang_discovery,
@@ -3476,6 +3531,7 @@ def run_weekly(
         source_failures=bibliographic_source_failures,
         unavailable_sources=unavailable_bibliographic_sources,
         circuit_skip_counts=circuit_skip_counts,
+        identity_reviews=identity_reviews,
     )
 
     deferred_keys: set[tuple[str, str]] = set()
@@ -3524,6 +3580,17 @@ def run_weekly(
                             else None
                         ),
                         publication_date=result.review_publication_date,
+                        identity_comparisons=result.identity_comparisons,
+                        identity_fingerprints=tuple(
+                            identity_evidence_fingerprint(
+                                result.candidate.stable_url,
+                                display.title,
+                                display.author_text,
+                                comparison,
+                                source_doi_hints=result.candidate.doi_hints,
+                            )
+                            for comparison in result.identity_comparisons
+                        ),
                     )
                 )
             outcomes.append(
@@ -3691,7 +3758,10 @@ def run_weekly(
     )
     try:
         official_issues = _official_issues_for_window(
-            config, window_start, window_end, first_observed_only=True,
+            config,
+            window_start,
+            window_end,
+            first_observed_only=True,
             publication_month_only=True,
         )
     except (OSError, ValueError, sqlite3.DatabaseError):
@@ -3736,7 +3806,9 @@ def run_weekly(
     if cnki_scan is not None:
         cnki_scan = _cnki_scan_with_dates(config, cnki_scan)
         cnki_window, missing_month, outside_window = _cnki_issues_in_window(
-            cnki_scan.issues, window_start=window_start, window_end=window_end,
+            cnki_scan.issues,
+            window_start=window_start,
+            window_end=window_end,
             timezone=config.timezone,
         )
     if cnki_scan is None:
@@ -3752,14 +3824,20 @@ def run_weekly(
         )
     if cnki_scan is not None:
         report_scan = replace(
-            cnki_scan, issues=cnki_report_issues or (),
+            cnki_scan,
+            issues=cnki_report_issues or (),
             records=tuple(record for issue in cnki_report_issues or () for record in issue.records),
         )
-        coverage += (_cnki_coverage(
-            cnki_scan, recent_issues=cnki_report_issues or (), missing_month=missing_month,
-            outside_window=outside_window, weekly=True,
-            previously_seen=len(cnki_window) - len(cnki_report_issues or ()),
-        ),)
+        coverage += (
+            _cnki_coverage(
+                cnki_scan,
+                recent_issues=cnki_report_issues or (),
+                missing_month=missing_month,
+                outside_window=outside_window,
+                weekly=True,
+                previously_seen=len(cnki_window) - len(cnki_report_issues or ()),
+            ),
+        )
         cnki_assessments, review_coverage = _cnki_review_assessments(config, report_scan)
         cnki_overlaps = _cnki_work_overlaps(report_scan, works)
         wanfang_records = tuple(
@@ -3922,10 +4000,15 @@ def run_weekly(
             # Future/earlier dated issues are counted in scan coverage, but must not
             # consume a later eligible window during sequential catch-up. Keep
             # undated observations so later corroboration retains their first sighting.
-            cnki_issues=(tuple(
-                issue for issue in cnki_scan.issues
-                if issue in cnki_window or issue.label_month is None or issue.date_conflict
-            ) if cnki_scan is not None else ()),
+            cnki_issues=(
+                tuple(
+                    issue
+                    for issue in cnki_scan.issues
+                    if issue in cnki_window or issue.label_month is None or issue.date_conflict
+                )
+                if cnki_scan is not None
+                else ()
+            ),
             cnki_scan_completed=(cnki_scan is not None and not cnki_scan.failures),
             wanfang_discovery_ids=tuple(record.record_id for record in wanfang_window),
             wanfang_discovery_completed=(

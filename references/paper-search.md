@@ -90,6 +90,13 @@ OpenAlex 的 `cited_by_count` 仅作为可选展示数据。整数且非负才�
 同题名出现多个不能唯一确定的 OpenAlex 作品时，报告书目身份未确认，不随意选择引用量最大的
 版本。引用数据带来源、来源记录 ID 和取得时间，不构成论文质量或阅读价值的判断。
 
+对于译名或大幅改题引发的书目同一性疑问，`--review-queue-file` 的私人队列保存
+具体的 Crossref／OpenAlex 比较对象。逐对核查后可用 `--identity-reviews` 回填
+`equivalent` 或 `distinct`；证据格式和失效规则见
+[作品同一性逐对复核](identity-review-policy.md)。这不同于 `--bibliographic-reviews`
+对本篇出版方 DOI、作者与年份的补证。若有年份范围且 feed 缺年份提示，仍先经过
+前述年份入口；同一性裁定不能替代出版方年份证据。
+
 CLI 返回 JSON，包含结构化 `items` 与中文 `report_markdown`，可由后续网站入口复用核心函数
 `run_paper_search` 的相同结果。每条有题名、作者、年份及来源、论文类型证据、匹配分类、引用
 数据和 PhilPapers 原始链接。`total_matches` 是本次已核验匹配数，不能当作数据库全部命中数。
