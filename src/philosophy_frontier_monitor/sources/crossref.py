@@ -10,6 +10,7 @@ import httpx
 
 from ..http_retry import BoundedRequestError, request_with_retry
 from ..identity import (
+    IdentityComparison,
     IdentityMatchLevel,
     IdentityReviewRequired,
     compare_bibliographic_identity,
@@ -174,7 +175,8 @@ def find_exact_work(
             active_client.close()
 
     candidates: list[CrossrefWork] = []
-    review_required = False
+    comparisons: list[IdentityComparison] = []
+    ambiguous: list[CrossrefWork] = []
     for item in items:
         parsed = parse_crossref_work(item, retrieved_at=retrieved_at)
         if parsed is None:
@@ -188,11 +190,29 @@ def find_exact_work(
         if decision.level is IdentityMatchLevel.EQUIVALENT:
             candidates.append(parsed)
         elif decision.level is IdentityMatchLevel.REVIEW_REQUIRED:
-            review_required = True
+            ambiguous.append(parsed)
+            comparisons.append(
+                IdentityComparison(
+                    source="Crossref",
+                    record_id=parsed.doi,
+                    stable_url=parsed.stable_url,
+                    title=parsed.title,
+                    authors=parsed.authors,
+                    doi=parsed.doi,
+                    publication_date=(
+                        str(parsed.publication_date.value) if parsed.publication_date else None
+                    ),
+                    reason=decision.reason,
+                    evidence=decision.evidence,
+                )
+            )
 
-    if review_required:
+    if comparisons:
         raise IdentityReviewRequired(
-            "Crossref returned a possible translated or substantially retitled version."
+            "Crossref returned a possible translated or substantially retitled version.",
+            comparisons=tuple(comparisons),
+            equivalent_works=tuple(candidates),
+            ambiguous_works=tuple(ambiguous),
         )
 
     unique_by_doi = {candidate.doi: candidate for candidate in candidates}

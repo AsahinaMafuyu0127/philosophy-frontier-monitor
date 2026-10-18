@@ -24,10 +24,16 @@ from .cnki_review import (
 )
 from .config import WatchlistConfig
 from .identity import (
+    IdentityComparison,
     IdentityMatchLevel,
     IdentityReviewRequired,
     authors_equivalent,
     compare_bibliographic_identity,
+)
+from .identity_reviews import (
+    ReviewedIdentity,
+    identity_evidence_fingerprint,
+    resolve_identity_review,
 )
 from .models import DateValue, WorkTypeEvidence
 from .pipeline import (
@@ -143,6 +149,8 @@ class UnconfirmedSearchRecord:
     review_record_url: str | None = None
     review_title: str | None = None
     review_author: str | None = None
+    identity_comparisons: tuple[IdentityComparison, ...] = ()
+    identity_fingerprints: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -346,6 +354,7 @@ def run_paper_search(
     wanfang_discovery_loader: Callable[..., WanfangDiscoveryScan] = scan_wanfang_discovery,
     type_reviews: dict[str, ReviewedWorkType] | None = None,
     bibliographic_reviews: dict[str, ReviewedBibliography] | None = None,
+    identity_reviews: dict[tuple[str, str, str], ReviewedIdentity] | None = None,
 ) -> PaperSearchResult:
     """Search configured interests; dependencies may be injected for offline tests."""
     options = options or SearchOptions()
@@ -410,8 +419,10 @@ def run_paper_search(
             continue
         display = split_display_bibliography(candidate.display_title)
         if review.applies_to(
-            record_url=candidate.stable_url, title=display.title,
-            author=display.author_text, doi_hints=candidate.doi_hints,
+            record_url=candidate.stable_url,
+            title=display.title,
+            author=display.author_text,
+            doi_hints=candidate.doi_hints,
             feed_year_hints=candidate.feed_year_hints,
         ):
             applicable_bibliographies[candidate.stable_url] = review
@@ -424,7 +435,9 @@ def run_paper_search(
             display = split_display_bibliography(candidate.display_title)
             year_review_candidates.append(
                 UnconfirmedSearchRecord(
-                    display.title, (candidate.stable_url,), "year_review_pending",
+                    display.title,
+                    (candidate.stable_url,),
+                    "year_review_pending",
                     review_record_url=candidate.stable_url,
                     review_title=display.title,
                     review_author=display.author_text,
@@ -432,8 +445,10 @@ def run_paper_search(
             )
         stats["no_feed_year_hint"] = len(year_review_candidates)
         candidates = [
-            c for c in candidates
-            if c.feed_year_hints or (
+            c
+            for c in candidates
+            if c.feed_year_hints
+            or (
                 (review := applicable_bibliographies.get(c.stable_url)) is not None
                 and review.publication_year is not None
             )
@@ -453,12 +468,28 @@ def run_paper_search(
     items: list[PaperSearchItem] = []
     unconfirmed: list[UnconfirmedSearchRecord] = []
 
-    def record_unconfirmed(candidate: MergedCandidate, reason: str) -> None:
+    def record_unconfirmed(
+        candidate: MergedCandidate,
+        reason: str,
+        comparisons: tuple[IdentityComparison, ...] = (),
+    ) -> None:
+        display = split_display_bibliography(candidate.display_title)
         unconfirmed.append(
             UnconfirmedSearchRecord(
-                split_display_bibliography(candidate.display_title).title,
+                display.title,
                 (candidate.stable_url,),
                 reason,
+                review_record_url=candidate.stable_url,
+                review_title=display.title,
+                review_author=display.author_text,
+                identity_comparisons=comparisons,
+                identity_fingerprints=tuple(
+                    identity_evidence_fingerprint(
+                        candidate.stable_url, display.title, display.author_text, comparison,
+                        source_doi_hints=candidate.doi_hints,
+                    )
+                    for comparison in comparisons
+                ),
             )
         )
 
@@ -467,10 +498,12 @@ def run_paper_search(
     with httpx.Client(
         headers={"User-Agent": DEFAULT_USER_AGENT}, follow_redirects=True, timeout=30
     ) as client:
-        dois = tuple(sorted(
-            {d for c in candidates for d in c.doi_hints}
-            | {review.doi for review in applicable_bibliographies.values() if review.doi}
-        ))
+        dois = tuple(
+            sorted(
+                {d for c in candidates for d in c.doi_hints}
+                | {review.doi for review in applicable_bibliographies.values() if review.doi}
+            )
+        )
         for offset in range(0, len(dois), MAX_DOI_BATCH_SIZE):
             try:
                 found = doi_lookup(
@@ -526,18 +559,74 @@ def run_paper_search(
         for index, candidate in enumerate(candidates, 1):
             review = applicable_bibliographies.get(candidate.stable_url)
             equivalent = all_works_index.equivalent(candidate)
+            display = split_display_bibliography(candidate.display_title)
+            pending_comparisons: list[IdentityComparison] = []
+            for possible in all_works_index.index.possible(
+                display.title, display.author_text, candidate.doi_hints
+            ):
+                if (
+                    review is not None
+                    and review.doi == possible.doi
+                    and authors_equivalent(review.verified_authors[0], possible.authors)
+                    is not False
+                    and (
+                        review.publication_year is None
+                        or _year(possible.publication_date) in {None, review.publication_year}
+                    )
+                ):
+                    continue
+                if _identity(candidate, possible) is not IdentityMatchLevel.REVIEW_REQUIRED:
+                    continue
+                decision = compare_bibliographic_identity(
+                    display.title,
+                    display.author_text,
+                    possible.title,
+                    possible.authors,
+                    shared_identifier=possible.doi is not None
+                    and possible.doi in candidate.doi_hints,
+                )
+                comparison = IdentityComparison(
+                    source="OpenAlex",
+                    record_id=possible.openalex_id,
+                    stable_url=possible.stable_url,
+                    title=possible.title,
+                    authors=possible.authors,
+                    doi=possible.doi,
+                    publication_date=(
+                        str(possible.publication_date.value) if possible.publication_date else None
+                    ),
+                    reason=decision.reason,
+                    evidence=decision.evidence,
+                )
+                fingerprint = identity_evidence_fingerprint(
+                    candidate.stable_url, display.title, display.author_text, comparison,
+                    source_doi_hints=candidate.doi_hints,
+                )
+                pair_review = (identity_reviews or {}).get(
+                    (candidate.stable_url.rstrip("/"), comparison.source, comparison.record_id)
+                )
+                if pair_review is None or pair_review.evidence_fingerprint != fingerprint:
+                    pending_comparisons.append(comparison)
+                elif pair_review.decision == "equivalent":
+                    equivalent.append(possible)
+            if pending_comparisons:
+                stats["identity_unverified"] += 1
+                record_unconfirmed(candidate, "identity_unverified", tuple(pending_comparisons))
+                continue
             work: OpenAlexWork | CrossrefWork | None = None
             reviewed_doi_works = reviewed_doi_index.get(review.doi, ()) if review else ()
             reviewed_matches = (
                 [
-                    value for value in reviewed_doi_works
+                    value
+                    for value in reviewed_doi_works
                     if authors_equivalent(review.verified_authors[0], value.authors) is not False
                     and (
                         review.publication_year is None
                         or _year(value.publication_date) in {None, review.publication_year}
                     )
                 ]
-                if review else []
+                if review
+                else []
             )
             if (
                 len(candidate.doi_hints) > 1
@@ -551,12 +640,9 @@ def run_paper_search(
                 work = reviewed_matches[0]
             elif review and review.doi is None and len(equivalent) == 1:
                 possible = equivalent[0]
-                if (
-                    authors_equivalent(review.verified_authors[0], possible.authors) is False
-                    or (
-                        review.publication_year is not None
-                        and _year(possible.publication_date) not in {None, review.publication_year}
-                    )
+                if authors_equivalent(review.verified_authors[0], possible.authors) is False or (
+                    review.publication_year is not None
+                    and _year(possible.publication_date) not in {None, review.publication_year}
                 ):
                     stats["identity_unverified"] += 1
                     record_unconfirmed(candidate, "identity_unverified")
@@ -574,11 +660,14 @@ def run_paper_search(
             # Metadata is needed to establish paper form; missing citation
             # counts alone never trigger extra individual requests.
             native, native_reason = _make_item(candidate, work, now)
-            if review is None and (native_reason or (
-                options.filters_years
-                and native.publication_year is None
-                and is_supported_work_type(native.work_type)
-            )):
+            if review is None and (
+                native_reason
+                or (
+                    options.filters_years
+                    and native.publication_year is None
+                    and is_supported_work_type(native.work_type)
+                )
+            ):
                 if crossref_blocked or stats["fallback_requests"] >= options.max_fallbacks:
                     stats["fallback_not_reached"] += 1
                 else:
@@ -602,18 +691,42 @@ def run_paper_search(
                             work = fallback
                         else:
                             supplementary = fallback
-                    except IdentityReviewRequired:
-                        stats["identity_unverified"] += 1
-                        record_unconfirmed(candidate, "identity_unverified")
-                        continue
+                    except IdentityReviewRequired as error:
+                        resolved, pending = resolve_identity_review(
+                            error,
+                            record_url=candidate.stable_url,
+                            title=display.title,
+                            author=display.author_text,
+                            reviews=identity_reviews,
+                            source_doi_hints=candidate.doi_hints,
+                        )
+                        if pending or not error.comparisons:
+                            stats["identity_unverified"] += 1
+                            record_unconfirmed(candidate, "identity_unverified", pending)
+                            continue
+                        fallback = resolved if isinstance(resolved, CrossrefWork) else None
+                        if fallback is not None and (
+                            _identity(candidate, fallback) is IdentityMatchLevel.DISTINCT
+                            or (work is not None and work.doi and fallback.doi != work.doi)
+                        ):
+                            stats["identity_unverified"] += 1
+                            record_unconfirmed(candidate, "identity_unverified")
+                            continue
+                        if work is None:
+                            work = fallback
+                        else:
+                            supplementary = fallback
                     except CrossrefError as error:
                         failures.add("Crossref: paper metadata lookup failed")
                         crossref_blocked = _bibliographic_error_opens_circuit(error)
             item, _ = _make_item(candidate, work, now, supplementary)
             if review is not None:
                 item = replace(
-                    item, title=review.verified_title, authors=review.verified_authors,
-                    doi=review.doi or item.doi, publication_year=review.publication_year,
+                    item,
+                    title=review.verified_title,
+                    authors=review.verified_authors,
+                    doi=review.doi or item.doi,
+                    publication_year=review.publication_year,
                     year_source="publisher-document-review" if review.publication_year else None,
                 )
             items.append(item)

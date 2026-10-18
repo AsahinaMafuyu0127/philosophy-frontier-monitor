@@ -105,6 +105,23 @@ The latest tagged application release is **v0.4.0**; the current code uses inter
 version **0.6.2**. Scheduled operation has been validated on Windows; macOS and Linux path support
 is in place, with scheduled operation still awaiting real-machine validation.
 
+## Technical update: retain identity comparisons and review each pair (18 October 2026)
+
+When a weekly report, on-demand pull, or historical search encounters a possible
+translation or substantial retitling, its private queue now records the specific
+Crossref or OpenAlex comparison: title, authors, identifiers, date, and comparison
+reason. After checking the two works, `--identity-reviews` accepts an `equivalent`
+or `distinct` decision bound to both records and their current evidence. Changed
+external metadata invalidates the old decision. Identity review settles only this
+pair; publication date, seven-day window, work type, category, and weekly state
+rules still run independently. Offline regression covers queues, follow-up runs,
+and exclusion of older works in all three modes. This is a code branch update,
+without a new version tag or GitHub Release. See the
+[pair-review policy](references/identity-review-policy.md).
+
+<details>
+<summary>Technical update: publisher-reviewed years restore papers missing feed year hints (18 October 2026)</summary>
+
 ## Technical update: publisher-reviewed years restore papers missing feed year hints (18 October 2026)
 
 In a year-bounded historical search, an exact publisher-reviewed bibliography with a
@@ -119,6 +136,8 @@ bibliographic checking. Offline regression covers the year gate, private queue,
 a DOI-less proceedings paper, out-of-range years, and type-only reviews.
 This is a code branch update without a new version tag or
 GitHub Release. See the [search rules](references/paper-search.md).
+
+</details>
 
 <details>
 <summary>Technical update: individual review corrects source labels and truncated bibliographies (17 October 2026)</summary>

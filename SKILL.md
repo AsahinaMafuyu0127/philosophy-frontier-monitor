@@ -422,9 +422,25 @@ for existing schedules and configuration consistency.
    author renderings, diacritic-insensitive spelling, title content tokens, and
    high-confidence orthographic similarity. Do not reduce identity to literal
    title or surname equality. A cross-language title pair without a shared
-   identifier remains `review_required`; Codex may reason about its meaning and
-   ask the user to confirm an alias, but deterministic code must not silently
-   merge it. When the fallback count exceeds the configured maximum, treat that
+   identifier remains `review_required`; the agent may inspect the two works
+   and document an evidence-based pair decision, but deterministic code must not silently
+   merge it.
+   When a specific Crossref or OpenAlex record triggers semantic identity
+   review, write `--review-queue-file` inside the private state directory and
+   inspect its `identity_review_pairs`: source, external record ID, title,
+   authors, DOI, date, comparison reason, and evidence fingerprint. Open the
+   PhilPapers record, external record and available publisher evidence before
+   deciding whether this exact pair is `equivalent` or `distinct`; leave it
+   unresolved when evidence is insufficient. Save the decision with its
+   evidence URLs and note in a private `schema_version: 1` JSON file, following
+   [the pair-review policy](references/identity-review-policy.md), then rerun
+   `weekly-run`, `pull-now`, or `search` with `--identity-reviews`. For an exact
+   pull-now follow-up, also reuse the first window's `--as-of` and
+   `--review-queue-input`. An accepted identity decision only affects the
+   comparison; run the ordinary date, work-type, category and freshness gates.
+   Never infer the final status from a review queue item or a model's semantic
+   guess. If the pair's fingerprint changes, inspect the new evidence again.
+   When the fallback count exceeds the configured maximum, treat that
    maximum as a budget for candidates that really require remote individual
    lookups: resolve every fresh-cache hit without spending a slot, then
    prioritize never-attempted candidates before rotating older completed

@@ -86,6 +86,20 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 最近发布的应用版本标签为 **v0.4.0**；当前代码的内部证据管线版本为 **0.6.2**。
 实机定时运行已在 Windows 验证；macOS／Linux 已适配路径，定时运行仍待实机验证。
 
+## 技术更新：保存书目同一性比较对象并支持逐对复核（2026-10-18）
+
+周报、即时拉取与历史检索发现译名、改题等书目同一性疑问时，私人队列现在保存
+引发疑问的 Crossref／OpenAlex 具体记录：题名、作者、标识符、日期和比较理由。
+逐篇核对后，可用 `--identity-reviews` 提交与两条记录及当前证据绑定的
+`equivalent`／`distinct` 裁定；来源书目变化时旧裁定失效。身份裁定只处理
+这一对作品关系，原有的发表日期、七日窗口、作品类型、分类与周报状态规则
+继续独立执行。三种模式的离线回归已覆盖队列、复跑及旧作拦截。
+这是代码分支更新，没有创建新的版本标签或 GitHub Release。
+格式与命令见[作品同一性逐对复核](references/identity-review-policy.md)。
+
+<details>
+<summary>技术更新：刊方年份补证可恢复缺少年份提示的论文（2026-10-18）</summary>
+
 ## 技术更新：刊方年份补证可恢复缺少年份提示的论文（2026-10-18）
 
 历史检索指定年份时，逐篇核实的刊方书目若给出发表年份，即使 PhilPapers feed
@@ -96,6 +110,8 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 缺少年份提示的记录，供逐篇补查。离线回归覆盖年份入口、私人队列、无 DOI
 会议论文、窗外年份及仅有类型裁定的情况。这是代码分支更新，
 没有创建新的版本标签或 GitHub Release。操作见[历史检索规则](references/paper-search.md)。
+
+</details>
 
 <details>
 <summary>技术更新：逐篇复核可更正来源误标与书目截断（2026-10-17）</summary>

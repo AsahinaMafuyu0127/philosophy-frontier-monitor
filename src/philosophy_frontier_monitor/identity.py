@@ -57,10 +57,38 @@ class IdentityMatchLevel(StrEnum):
 class IdentityReviewRequired(RuntimeError):
     """Raised when a source result may be the same work but needs semantic review."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        comparisons: tuple[IdentityComparison, ...] = (),
+        equivalent_works: tuple[object, ...] = (),
+        ambiguous_works: tuple[object, ...] = (),
+    ) -> None:
+        super().__init__(message)
+        self.comparisons = comparisons
+        self.equivalent_works = equivalent_works
+        self.ambiguous_works = ambiguous_works
+
 
 @dataclass(frozen=True, slots=True)
 class IdentityDecision:
     level: IdentityMatchLevel
+    reason: str
+    evidence: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class IdentityComparison:
+    """Exact external bibliography that caused a semantic identity question."""
+
+    source: str
+    record_id: str
+    stable_url: str
+    title: str
+    authors: tuple[str, ...]
+    doi: str | None
+    publication_date: str | None
     reason: str
     evidence: tuple[str, ...]
 

@@ -24,6 +24,7 @@ from .http_retry import (
     collect_request_telemetry,
     summarize_request_telemetry,
 )
+from .identity_reviews import load_identity_reviews
 from .interest import build_interest_profile
 from .journal_collection import (
     SUPPORTED as SUPPORTED_PUBLISHER_TOCS,
@@ -659,15 +660,24 @@ def _review_queue_path(value: str, config: WatchlistConfig) -> Path:
     return path
 
 
-def _write_review_queue(
-    path: Path, result: OnDemandRunResult | WeeklyRunResult
-) -> None:
+def _write_review_queue(path: Path, result: OnDemandRunResult | WeeklyRunResult) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "schema_version": 1,
         "window_start": result.window_start.isoformat(),
         "window_end": result.window_end.isoformat(),
-        "items": [asdict(item) for item in result.human_review_items],
+        "items": [
+            {
+                **asdict(item),
+                "identity_review_pairs": [
+                    {**asdict(comparison), "evidence_fingerprint": fingerprint}
+                    for comparison, fingerprint in zip(
+                        item.identity_comparisons, item.identity_fingerprints, strict=True
+                    )
+                ],
+            }
+            for item in result.human_review_items
+        ],
     }
     if isinstance(result, OnDemandRunResult):
         payload["feed_snapshots"] = serialize_feed_snapshots(result.feed_snapshots)
@@ -688,6 +698,11 @@ def _weekly_run(args: argparse.Namespace) -> int:
     type_reviews = (
         load_work_type_reviews(_review_queue_path(args.type_reviews, config))
         if args.type_reviews
+        else None
+    )
+    identity_reviews = (
+        load_identity_reviews(_review_queue_path(args.identity_reviews, config))
+        if args.identity_reviews
         else None
     )
     if not config.storage.state_database.is_file():
@@ -712,6 +727,7 @@ def _weekly_run(args: argparse.Namespace) -> int:
             dry_run=args.dry_run,
             show_recently_changed=args.show_recently_changed,
             type_reviews=type_reviews,
+            identity_reviews=identity_reviews,
             **({"oai_loader": oai_cache.load_window} if oai_cache is not None else {}),
         )
     if review_queue_path:
@@ -786,8 +802,17 @@ def _pull_now(args: argparse.Namespace) -> int:
         if args.type_reviews
         else None
     )
-    if args.type_reviews and as_of is not None and not args.review_queue_input:
-        raise ValueError("exact-window type review requires --review-queue-input")
+    identity_reviews = (
+        load_identity_reviews(_review_queue_path(args.identity_reviews, config))
+        if args.identity_reviews
+        else None
+    )
+    if (
+        (args.type_reviews or args.identity_reviews)
+        and as_of is not None
+        and not args.review_queue_input
+    ):
+        raise ValueError("exact-window review requires --review-queue-input")
     if args.review_queue_input and as_of is None:
         raise ValueError("--review-queue-input requires --as-of")
     reviewed_feed_snapshots = (
@@ -841,6 +866,7 @@ def _pull_now(args: argparse.Namespace) -> int:
             progress=_emit_pull_now_progress,
             show_recently_changed=args.show_recently_changed,
             type_reviews=type_reviews,
+            identity_reviews=identity_reviews,
             reviewed_feed_snapshots=reviewed_feed_snapshots,
             **({"oai_loader": oai_cache.load_window} if oai_cache is not None else {}),
         )
@@ -887,11 +913,14 @@ def _search_official_issues(
     db_path: Path, year_from: int | None, year_to: int | None
 ) -> tuple[tuple, str]:
     try:
-        issues = distinct_issue_leads(tuple(
-            issue for issue in list_issues(db_path, reviewed_only=True)
-            if (year_from is None or issue.year >= year_from)
-            and (year_to is None or issue.year <= year_to)
-        ))
+        issues = distinct_issue_leads(
+            tuple(
+                issue
+                for issue in list_issues(db_path, reviewed_only=True)
+                if (year_from is None or issue.year >= year_from)
+                and (year_to is None or issue.year <= year_to)
+            )
+        )
     except (OSError, ValueError, sqlite3.DatabaseError):
         return (), "failed"
     return issues, "local_only"
@@ -912,6 +941,11 @@ def _search(args: argparse.Namespace) -> int:
         if args.bibliographic_reviews
         else None
     )
+    identity_reviews = (
+        load_identity_reviews(_review_queue_path(args.identity_reviews, config))
+        if args.identity_reviews
+        else None
+    )
     options = SearchOptions(
         category_ids=tuple(args.category or ()),
         match=args.match,
@@ -925,17 +959,23 @@ def _search(args: argparse.Namespace) -> int:
     )
     with collect_request_telemetry() as events:
         result = run_paper_search(
-            config, options=options, progress=_emit_search_progress,
-            type_reviews=type_reviews, bibliographic_reviews=bibliographic_reviews,
+            config,
+            options=options,
+            progress=_emit_search_progress,
+            type_reviews=type_reviews,
+            bibliographic_reviews=bibliographic_reviews,
+            identity_reviews=identity_reviews,
         )
     if review_queue_path:
         _write_search_review_queue(review_queue_path, result)
     official_issues, official_issue_status = _search_official_issues(
         config.storage.state_database.parent / "official-journals.sqlite3",
-        args.year_from, args.year_to,
+        args.year_from,
+        args.year_to,
     )
     report = render_paper_search(
-        result, official_issues=official_issues,
+        result,
+        official_issues=official_issues,
         official_issue_status=official_issue_status,
     )
     _emit(
@@ -974,7 +1014,8 @@ def _write_search_review_queue(path: Path, result: PaperSearchResult) -> None:
                 "evidence_fingerprint": None,
             }
             for record in result.year_review_candidates
-        ] + [
+        ]
+        + [
             {
                 "record_url": record.review_record_url,
                 "title": record.review_title,
@@ -982,10 +1023,18 @@ def _write_search_review_queue(path: Path, result: PaperSearchResult) -> None:
                 "reason": record.reason,
                 "work_type_evidence": [asdict(evidence) for evidence in record.work_type_evidence],
                 "evidence_fingerprint": record.evidence_fingerprint,
+                "identity_review_pairs": [
+                    {**asdict(comparison), "evidence_fingerprint": fingerprint}
+                    for comparison, fingerprint in zip(
+                        record.identity_comparisons, record.identity_fingerprints, strict=True
+                    )
+                ],
             }
             for record in result.unconfirmed_records
-            if record.reason == "type_unverified" and record.review_record_url
-        ] + [
+            if record.reason in {"type_unverified", "identity_unverified"}
+            and record.review_record_url
+        ]
+        + [
             {
                 "record_url": url,
                 "title": title,
@@ -1012,9 +1061,7 @@ def _journal_watch(args: argparse.Namespace) -> int:
             journal["toc_collection"] = (
                 "automatic" if journal["id"] in SUPPORTED_PUBLISHER_TOCS else "manual"
             )
-        _emit(
-            {"ok": True, "operation": "journal-watch", "journals": journals}
-        )
+        _emit({"ok": True, "operation": "journal-watch", "journals": journals})
         return 0
     if args.action == "list":
         _emit(
@@ -1027,9 +1074,13 @@ def _journal_watch(args: argparse.Namespace) -> int:
         return 0
     if args.action == "pending":
         _emit(
-            {"ok": True, "operation": "journal-watch",
-             "pending": [asdict(issue) for issue in list_issues(db_path)
-                         if issue.status == "pending"]}
+            {
+                "ok": True,
+                "operation": "journal-watch",
+                "pending": [
+                    asdict(issue) for issue in list_issues(db_path) if issue.status == "pending"
+                ],
+            }
         )
         return 0
     if args.action == "review":
@@ -1038,10 +1089,15 @@ def _journal_watch(args: argparse.Namespace) -> int:
         if not args.confirm_evidence:
             raise ValueError("review requires --confirm-evidence after inspecting the source")
         reviewed = review_observed_issue(
-            db_path, args.journal, args.year, args.issue, args.evidence_url,
+            db_path,
+            args.journal,
+            args.year,
+            args.issue,
+            args.evidence_url,
             label_month=args.label_month,
             issue_published_on=args.issue_published_on,
-            announcement_on=args.announcement_on, catalog_path=catalog_path,
+            announcement_on=args.announcement_on,
+            catalog_path=catalog_path,
         )
         _emit({"ok": True, "operation": "journal-watch", "issue": asdict(reviewed)})
         return 0
@@ -1049,7 +1105,9 @@ def _journal_watch(args: argparse.Namespace) -> int:
         if not args.input or not args.confirm_evidence:
             raise ValueError("import-toc requires --input and --confirm-evidence")
         result = import_reviewed_toc(
-            Path(args.input), db_path, catalog_path=catalog_path,
+            Path(args.input),
+            db_path,
+            catalog_path=catalog_path,
         )
         _emit({"ok": True, "operation": "journal-watch", "toc": result})
         return 0
@@ -1068,9 +1126,13 @@ def _journal_watch(args: argparse.Namespace) -> int:
         if args.with_wanfang and key_file is None and Path(args.config).is_file():
             key_file = load_watchlist(Path(args.config)).wanfang.key_file
         result = check_publisher_articles(
-            args.journal, db_path, catalog_path=catalog_path,
-            max_checks=args.max_checks, min_interval_hours=args.min_interval_hours,
-            with_wanfang=args.with_wanfang, key_file=key_file,
+            args.journal,
+            db_path,
+            catalog_path=catalog_path,
+            max_checks=args.max_checks,
+            min_interval_hours=args.min_interval_hours,
+            with_wanfang=args.with_wanfang,
+            key_file=key_file,
         )
         _emit({"ok": True, "operation": "journal-watch", "check": result})
         return 0
@@ -1079,37 +1141,69 @@ def _journal_watch(args: argparse.Namespace) -> int:
         if args.with_wanfang and key_file is None and Path(args.config).is_file():
             key_file = load_watchlist(Path(args.config)).wanfang.key_file
         result = run_publisher_cycle(
-            db_path, catalog_path=catalog_path,
-            total_checks=args.max_total_checks, checks_per_site=args.max_checks_per_site,
-            min_interval_hours=args.min_interval_hours, with_wanfang=args.with_wanfang,
+            db_path,
+            catalog_path=catalog_path,
+            total_checks=args.max_total_checks,
+            checks_per_site=args.max_checks_per_site,
+            min_interval_hours=args.min_interval_hours,
+            with_wanfang=args.with_wanfang,
             key_file=key_file,
         )
         _emit({"ok": True, "operation": "journal-watch", "cycle": result})
         return 0
     if args.action == "summary":
-        _emit({"ok": True, "operation": "journal-watch",
-               "measurements": measurement_summary(db_path, args.journal),
-               "observations": observation_summary(db_path, args.journal)})
+        _emit(
+            {
+                "ok": True,
+                "operation": "journal-watch",
+                "measurements": measurement_summary(db_path, args.journal),
+                "observations": observation_summary(db_path, args.journal),
+            }
+        )
         return 0
     if args.action == "audit":
         if args.articles and not all((args.journal, args.year, args.issue)):
             raise ValueError("article-level audit requires journal, year and issue")
-        _emit({"ok": True, "operation": "journal-watch",
-               "issue_coverage": issue_coverage_summary(
-                   db_path, journal_id=args.journal, year=args.year, issue=args.issue,
-                   include_articles=args.articles,
-               )})
+        _emit(
+            {
+                "ok": True,
+                "operation": "journal-watch",
+                "issue_coverage": issue_coverage_summary(
+                    db_path,
+                    journal_id=args.journal,
+                    year=args.year,
+                    issue=args.issue,
+                    include_articles=args.articles,
+                ),
+            }
+        )
         return 0
     if args.action == "classify":
-        if not all((args.journal, args.year, args.issue, args.title,
-                    args.article_url, args.work_type, args.interest)):
+        if not all(
+            (
+                args.journal,
+                args.year,
+                args.issue,
+                args.title,
+                args.article_url,
+                args.work_type,
+                args.interest,
+            )
+        ):
             raise ValueError("classify requires exact article, work type and interest decision")
         if not args.confirm_evidence:
             raise ValueError("classify requires --confirm-evidence after source review")
         result = review_publisher_article(
-            db_path, args.journal, args.year, args.issue, args.title,
-            args.article_url, work_type=args.work_type, interest=args.interest,
-            basis_url=args.basis_url, catalog_path=catalog_path,
+            db_path,
+            args.journal,
+            args.year,
+            args.issue,
+            args.title,
+            args.article_url,
+            work_type=args.work_type,
+            interest=args.interest,
+            basis_url=args.basis_url,
+            catalog_path=catalog_path,
         )
         _emit({"ok": True, "operation": "journal-watch", "article_review": result})
         return 0
@@ -1251,9 +1345,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="inspect the curated publisher catalog and record reviewed issue evidence",
     )
     journal_watch.add_argument(
-        "action", choices=("catalog", "list", "pending", "review", "observe",
-                           "import-toc",
-                           "scan", "check", "run", "summary", "audit", "classify")
+        "action",
+        choices=(
+            "catalog",
+            "list",
+            "pending",
+            "review",
+            "observe",
+            "import-toc",
+            "scan",
+            "check",
+            "run",
+            "summary",
+            "audit",
+            "classify",
+        ),
     )
     journal_watch.add_argument("--catalog", default=str(CATALOG_PATH))
     journal_watch.add_argument("--db", default=str(DEFAULT_DB_PATH))
@@ -1284,7 +1390,8 @@ def build_parser() -> argparse.ArgumentParser:
     journal_watch.add_argument("--max-total-checks", type=int, default=0)
     journal_watch.add_argument("--max-checks-per-site", type=int, default=2)
     journal_watch.add_argument(
-        "--with-wanfang", action="store_true",
+        "--with-wanfang",
+        action="store_true",
         help="also query Wanfang for each checked article; off by default",
     )
     journal_watch.add_argument("--key-file")
@@ -1476,6 +1583,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="private JSON decisions bound to inspected source-type evidence",
     )
     weekly.add_argument(
+        "--identity-reviews",
+        help="private pair-specific decisions bound to external bibliography evidence",
+    )
+    weekly.add_argument(
         "--review-queue-file",
         help="write all human-review candidates to an ignored private JSON file",
     )
@@ -1506,6 +1617,10 @@ def build_parser() -> argparse.ArgumentParser:
     pull_now.add_argument(
         "--type-reviews",
         help="private JSON decisions bound to inspected source-type evidence",
+    )
+    pull_now.add_argument(
+        "--identity-reviews",
+        help="private pair-specific decisions bound to external bibliography evidence",
     )
     pull_now.add_argument(
         "--review-queue-file",
@@ -1604,6 +1719,10 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument(
         "--bibliographic-reviews",
         help="read private publisher-checked DOI, author, and publication-year decisions",
+    )
+    search.add_argument(
+        "--identity-reviews",
+        help="read private pair-specific external bibliography decisions",
     )
     search.set_defaults(handler=_search)
 
