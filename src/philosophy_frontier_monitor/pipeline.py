@@ -88,9 +88,9 @@ from .sources.openalex import (
     DEFAULT_USER_AGENT as OPENALEX_USER_AGENT,
 )
 from .sources.openalex import (
+    MAX_BIBLIOGRAPHIC_PAGES,
     MAX_DOI_BATCH_SIZE,
     MAX_TITLE_BATCH_SIZE,
-    MAX_TITLE_SPLIT_DEPTH,
     OpenAlexError,
     OpenAlexWork,
 )
@@ -2764,8 +2764,10 @@ def run_on_demand(
     if progress is not None:
         progress("doi_batch", len(doi_values), len(doi_values))
     doi_batch_request_upper_bound = (
-        len(doi_values_to_query) + MAX_DOI_BATCH_SIZE - 1
-    ) // MAX_DOI_BATCH_SIZE
+        (len(doi_values_to_query) + MAX_DOI_BATCH_SIZE - 1)
+        // MAX_DOI_BATCH_SIZE
+        * MAX_BIBLIOGRAPHIC_PAGES
+    )
     resolution_results: list[ResolutionResult] = list(explicit_unsupported_results)
     title_candidates: list[MergedCandidate] = []
     doi_batch_resolved_count = 0
@@ -2867,7 +2869,7 @@ def run_on_demand(
     initial_title_batches = (
         len(title_queries_to_query) + MAX_TITLE_BATCH_SIZE - 1
     ) // MAX_TITLE_BATCH_SIZE
-    title_batch_request_upper_bound = initial_title_batches * (2 ** (MAX_TITLE_SPLIT_DEPTH + 1) - 1)
+    title_batch_request_upper_bound = initial_title_batches * MAX_BIBLIOGRAPHIC_PAGES
     fallback_candidates: list[MergedCandidate] = []
     fallback_reason_by_source_id: dict[str, str] = {}
     title_batch_resolved_count = 0

@@ -1144,6 +1144,7 @@ def test_openalex_batch_requests_citations_for_both_lookup_routes():
         return httpx.Response(
             200,
             json={
+                "meta": {"count": 1},
                 "results": [
                     {
                         "id": "https://openalex.org/W1",

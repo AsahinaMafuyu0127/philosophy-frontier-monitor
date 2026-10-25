@@ -446,11 +446,12 @@ for existing schedules and configuration consistency.
    prioritize never-attempted candidates before rotating older completed
    attempts. Keep only a hash of the PhilPapers record ID and the last completed
    attempt time for 31 days; transport failures and circuit-skipped candidates
-   must not be marked completed. Within each initial OpenAlex title batch,
-   inspect the first page before re-querying and retry only titles not represented
-   there. Permit only one split level, so one initial title batch produces at
-   most three logical requests. Report the remainder as deferred instead of
-   pretending it was checked. Anonymous OpenAlex access is suitable for casual use; if repeated
+   must not be marked completed. Reconcile each OpenAlex DOI and title batch
+   against its declared result count, fetching later pages only when needed and
+   stopping after three pages. Treat an incomplete or inconsistent batch as a
+   source failure, not a complete identity comparison or a negative lookup.
+   Report the affected coverage rather than pretending it was checked.
+   Anonymous OpenAlex access is suitable for casual use; if repeated
    requests exhaust its daily budget, accept `OPENALEX_API_KEY` from the local
    process environment without printing or persisting it.
    Never read or write weekly notification history, retry state, run history,
@@ -486,7 +487,7 @@ for existing schedules and configuration consistency.
    provider pricing remain external. Before network access, warn that the first
    pull may take longer while it checks all non-quarantined candidates covered
    by the default 300-fallback budget. With the default 1000-candidate and
-   300-fallback limits, the current DOI/title/fallback plan permits at most 470
+   300-fallback limits, the current DOI/title/fallback plan permits at most 510
    OpenAlex and 300 Crossref logical requests before bounded retry attempts.
    By default, use the separate private bibliographic cache for per-DOI
    OpenAlex batch results, positive per-title OpenAlex batch candidates, and

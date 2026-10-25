@@ -253,6 +253,22 @@ data through GitHub Private Vulnerability Reporting as described in [SECURITY.md
 
 ## Technical update
 
+### 25 October 2026: reconcile complete OpenAlex bibliography batches
+
+Following a review of public paper-search skills' pagination and coverage handling, DOI and
+title batch lookups now check OpenAlex's declared result count. They request later pages only
+when needed, up to three pages per batch. A result set beyond that bound, a short page, or
+repeated records is reported as incomplete source evidence rather than treated as a complete
+set of possible works. Weekly monitoring, on-demand pulls, and historical search share this
+rule; their category, date, work-type, and human-review gates still apply. See the
+[design comparison](references/design-lineage.md#7-2026-10-25-论文检索-skill-代码结构复核)
+and [identity-review policy](references/identity-review-policy.md).
+
+This is a code branch update. All 489 tests, Ruff, and skill validation passed, covering
+pagination, malformed responses, and applicable paths across all three workflows. The read-only
+release check also passed on the clean committed checkout. No private paper sources were fetched
+again, and no version tag or GitHub Release was created.
+
 ### 25 October 2026: reorganize the bilingual introduction around user workflows
 
 The introduction now brings together the three workflows, installation steps, copyable prompts,
