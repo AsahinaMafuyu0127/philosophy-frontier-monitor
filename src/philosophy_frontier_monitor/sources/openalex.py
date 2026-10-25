@@ -23,7 +23,7 @@ API_URL = "https://api.openalex.org/works"
 DEFAULT_USER_AGENT = "PhilosophyFrontierMonitor/0.1"
 MAX_DOI_BATCH_SIZE = 50
 MAX_TITLE_BATCH_SIZE = 20
-MAX_TITLE_SPLIT_DEPTH = 1
+MAX_BIBLIOGRAPHIC_PAGES = 3
 
 
 class OpenAlexError(RuntimeError):
@@ -55,6 +55,54 @@ def _add_access_parameters(params: dict[str, str], mailto: str | None) -> None:
     api_key = os.environ.get("OPENALEX_API_KEY")
     if api_key:
         params["api_key"] = api_key
+
+
+def _complete_work_pages(client: httpx.Client, params: dict[str, str]) -> list[dict[str, Any]]:
+    """Return a whole bounded result set, or reject incomplete identity evidence.
+
+    OpenAlex reports the total in ``meta.count``. Most lookups fit in one page;
+    additional requests are made only when that total exceeds the first page.
+    """
+
+    per_page = int(params["per_page"])
+    expected_count: int | None = None
+    results: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for page in range(1, MAX_BIBLIOGRAPHIC_PAGES + 1):
+        page_params = params if page == 1 else {**params, "page": str(page)}
+        response = request_with_retry(
+            lambda page_params=page_params: client.get(API_URL, params=page_params),
+            source="OpenAlex",
+        )
+        payload = response.json()
+        if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
+            raise ValueError("OpenAlex results is not a list")
+        items = payload["results"]
+        if len(items) > per_page or any(not isinstance(item, dict) for item in items):
+            raise ValueError("OpenAlex results have an invalid page shape")
+        meta = payload.get("meta")
+        if not isinstance(meta, dict) or type(meta.get("count")) is not int:
+            raise ValueError("OpenAlex response has no valid result count")
+        count = meta["count"]
+        if count < 0 or (expected_count is not None and count != expected_count):
+            raise OpenAlexError("OpenAlex result count changed during lookup")
+        expected_count = count
+        if count > per_page * MAX_BIBLIOGRAPHIC_PAGES:
+            raise OpenAlexError("OpenAlex lookup exceeds the bounded pagination limit")
+        if len(results) + len(items) > count:
+            raise ValueError("OpenAlex returned more results than its declared count")
+        for item in items:
+            identifier = item.get("id")
+            if isinstance(identifier, str):
+                if identifier in seen_ids:
+                    raise OpenAlexError("OpenAlex repeated a work across lookup pages")
+                seen_ids.add(identifier)
+        results.extend(items)
+        if len(results) == count:
+            return results
+        if len(items) < per_page:
+            raise OpenAlexError("OpenAlex returned an incomplete lookup page")
+    raise OpenAlexError("OpenAlex lookup exceeds the bounded pagination limit")
 
 
 def parse_openalex_work(item: dict[str, Any], *, retrieved_at: datetime) -> OpenAlexWork | None:
@@ -206,14 +254,7 @@ def find_works_by_dois(
                 ),
             }
             _add_access_parameters(params, mailto)
-            response = request_with_retry(
-                lambda params=params: active_client.get(API_URL, params=params),
-                source="OpenAlex",
-            )
-            items = response.json().get("results", [])
-            if not isinstance(items, list):
-                raise ValueError("OpenAlex results is not a list")
-            for item in items:
+            for item in _complete_work_pages(active_client, params):
                 parsed = parse_openalex_work(item, retrieved_at=retrieved_at)
                 if (
                     parsed is None
@@ -261,13 +302,9 @@ def find_works_by_titles(
     )
     retrieved_at = datetime.now(UTC)
     resolved: dict[str, OpenAlexWork] = {}
-    pending = [
-        (queries[offset : offset + MAX_TITLE_BATCH_SIZE], 0)
-        for offset in range(0, len(queries), MAX_TITLE_BATCH_SIZE)
-    ]
     try:
-        while pending:
-            batch, split_depth = pending.pop(0)
+        for offset in range(0, len(queries), MAX_TITLE_BATCH_SIZE):
+            batch = queries[offset : offset + MAX_TITLE_BATCH_SIZE]
             params = {
                 "filter": "title.search.exact:" + "|".join(batch),
                 "per_page": "100",
@@ -276,40 +313,10 @@ def find_works_by_titles(
                 ),
             }
             _add_access_parameters(params, mailto)
-            response = request_with_retry(
-                lambda params=params: active_client.get(API_URL, params=params),
-                source="OpenAlex",
-            )
-            payload = response.json()
-            items = payload.get("results", [])
-            if not isinstance(items, list):
-                raise ValueError("OpenAlex results is not a list")
-            represented_queries: set[str] = set()
-            for item in items:
+            for item in _complete_work_pages(active_client, params):
                 parsed = parse_openalex_work(item, retrieved_at=retrieved_at)
                 if parsed is not None:
                     resolved[parsed.openalex_id] = parsed
-                    normalized_result_title = normalize_title(parsed.title)
-                    if normalized_result_title in batch:
-                        represented_queries.add(normalized_result_title)
-            count = payload.get("meta", {}).get("count", len(items))
-            if (
-                isinstance(count, int)
-                and count > len(items)
-                and len(batch) > 1
-                and split_depth < MAX_TITLE_SPLIT_DEPTH
-            ):
-                missing = tuple(query for query in batch if query not in represented_queries)
-                if not missing:
-                    continue
-                if len(missing) < len(batch):
-                    pending.insert(0, (missing, split_depth + 1))
-                    continue
-                midpoint = len(batch) // 2
-                pending[0:0] = [
-                    (batch[:midpoint], split_depth + 1),
-                    (batch[midpoint:], split_depth + 1),
-                ]
     except BoundedRequestError as error:
         raise OpenAlexError(f"OpenAlex batch title lookup failed: {error}") from error
     except (ValueError, AttributeError) as error:
