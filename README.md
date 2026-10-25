@@ -2,20 +2,122 @@
 
 [English](README.en.md) | 简体中文
 
-**按你确认的研究方向，持续追踪哲学新论文。**
+**从研究方向出发，检索已有哲学论文，持续追踪新作。**
 
-用中文或英文描述研究方向，Skill 会提出经过核验的 PhilPapers 分类，供你逐项确认。此后，
-它按确认的范围生成周报，列出作品题目、作者、日期证据、命中分类、来源链接和待核查记录。
+Philosophy Frontier Monitor 是一个带本地 Python 程序的 Codex Skill。用中文或英文描述研究方向，
+它会提出经过核验的 PhilPapers 分类，供你逐项确认；随后，你可以检索这些分类中的已有论文、
+即时查看近期新作，或按当地时间定期生成周报。
 
-也可以用 `pfm search --config config/watchlist.yaml` 检索已确认分类中的**已有论文**，按年份、
-作品类型或分类筛选；有引用量数据时按引用量排序。检索读取本次取得的分类 feed，
-与定期周报各自独立。具体范围和缺失值处理见[检索用法](references/paper-search.md)。
+每篇结果保留题名、作者、日期证据、命中分类和来源链接，让文献发现与后续阅读衔接起来。
+
+[功能](#功能) · [安装与首次使用](#安装与首次使用) · [用法示例](#用法示例) ·
+[真实报告](#真实报告) · [文档](#文档与来源说明) · [技术更新](#技术更新)
 
 ![从研究方向到每周哲学论文报告的四步流程](assets/demo/philosophy-frontier-monitor-demo.png)
 
-[查看完整公开示例周报](examples/public-demo-weekly-report.md) ·
-[查看周报预览原图](assets/demo/public-demo-weekly-report-2026-10-10.png) ·
-[完整安装说明](references/installation.md)
+## 功能
+
+同一份经你确认的研究范围，可以用于三种任务：
+
+| 你要做什么 | 对应功能 | 得到什么 |
+|---|---|---|
+| 围绕研究方向查找已有论文 | 历史检索 · `pfm search` | 按年份、作品类型或分类筛选的论文清单；有引用量时据此排序，并标明缺失数据 |
+| 现在查看最近几天的相关新作 | 即时拉取 · `pfm pull-now` | 最近 1—31 个当地日内的报告，区分发表、新近可得和来源记录变化 |
+| 持续跟进研究领域 | 每周监测 · `pfm weekly-run` / `pfm catch-up` | 建立历史基线后按周生成报告，合并重复来源，并顺序补跑错过的窗口 |
+
+- **从自然语言确定范围**：先把研究兴趣映射为真实 PhilPapers 分类，再由你接受、拒绝或暂缓每个候选。
+- **逐篇保留核验依据**：合并同一作品的多个来源，展示日期与类型证据；有冲突的记录进入逐篇复核。
+- **提供中英文报告**：列出匹配作品、来源覆盖和待复核记录，便于继续查证与阅读。
+- **可选扩展中文来源**：启用后，单列有界的知网空间、万方题录和已复核刊方期次线索。
+
+历史检索覆盖本次分类 feed 实际返回的记录；每周监测与即时拉取另按相应时间窗口判断新近性。
+引用量仅用于检索排序，论文收录由已确认的分类与证据规则决定。具体范围见
+[检索用法](references/paper-search.md)和[监测政策](references/monitoring-policy.md)。
+
+## 安装与首次使用
+
+需要 **Codex、Git、[uv](https://docs.astral.sh/uv/) 和 Python 3.12 或 3.13**，以及可访问所选
+学术来源的网络。Windows 已完成真实定时运行验证；macOS／Linux 已适配路径，定时运行仍待实机验证。
+
+### 1. 安装 Skill
+
+在 Codex 中发送：
+
+```text
+$skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor
+仓库根目录安装这个 Skill；path 使用 .，安装名称使用 philosophy-frontier-monitor。
+```
+
+### 2. 描述研究方向，完成首次配置
+
+安装完成后，在下一轮对话中发送；若尚未发现 Skill，重启 Codex 后再调用：
+
+```text
+请使用 $philosophy-frontier-monitor。我关注道德责任、自由意志与行动理论，
+请先提出经过核验的 PhilPapers 分类，由我逐项确认，再完成本地环境和私人配置。
+我希望每周一当地时间早上八点收到报告，请引导我建立历史基线并完成第一次周报。
+凭据只保存在本机，不要让我把 API key、密码或 Cookie 粘贴到聊天中。
+```
+
+将示例中的研究方向和时间换成自己的需要即可。你不需要预先知道分类名称。
+Skill 会引导你建立 Python 环境、确认分类、将 taxonomy 所需凭据保存在本机，并先完成
+历史基线、dry run 和正式周运行，再确认每周计划任务。默认时间为用户当地星期一 08:00。
+公开个人主页可作为可选的兴趣补充；仅提供文字研究方向也可以完成配置。
+
+<details>
+<summary>终端安装后的环境检查</summary>
+
+在安装器返回的 Skill 目录中运行。仅在尚无私人配置时，从公开示例创建 watchlist；
+已有配置时直接复用，保留其中的研究范围与本地设置。
+
+```powershell
+uv sync --python 3.12
+if (-not (Test-Path .\config\watchlist.yaml)) {
+    Copy-Item .\config\watchlist.example.yaml .\config\watchlist.yaml
+}
+.\.venv\Scripts\pfm.exe doctor
+```
+
+macOS／Linux 对应的程序路径是 `.venv/bin/pfm`。完整步骤见
+[安装与首次部署](references/installation.md)和
+[英文安装说明](references/installation.en.md)。
+
+</details>
+
+## 用法示例
+
+完成分类确认和本地配置后，可以直接向 Codex 提出以下请求。
+
+### 查找已有论文
+
+```text
+请使用 $philosophy-frontier-monitor，检索我已确认分类中 2020—2026 年的论文，
+有引用量数据时按引用量排序，列出题名、作者、年份、命中分类和来源链接。
+引用量缺失的论文保留，并说明这次实际读取的来源范围。
+```
+
+历史检索直接复用已确认分类，无需先建立周报基线。有年份范围时按发表年份筛选；
+不限制年份时可保留缺少日期的已核验论文。完整规则与命令见[检索用法](references/paper-search.md)。
+
+### 即时查看最近一周
+
+```text
+请使用 $philosophy-frontier-monitor，即时拉取我已确认研究范围最近 7 个当地日的相关论文，
+区分确认新出、新近可得和来源记录变化，并列出需要人工复核的记录。
+```
+
+即时拉取单独生成报告，保留每周通知进度。窗口可以改为 1—31 个当地日。
+
+### 调整每周报告时间
+
+```text
+请使用 $philosophy-frontier-monitor，把每周报告改为当地时间星期五下午六点，
+保留我已确认的研究范围，并在创建或更新计划任务前让我确认最终时间。
+```
+
+调度使用用户当地时区。研究范围、报告时间和是否启用中文来源都可以单独调整。
+
+## 真实报告
 
 ### 公开示例：用三个真实标签实际拉取
 
@@ -60,31 +162,76 @@ CLI 生成 Markdown 报告；在具备文档或演示文稿生成能力的 Codex
 **Word（.docx）** 或 **PowerPoint（.pptx）**。转排前如需展开来源记录变化组，可加
 `--show-recently-changed`。
 
-### 为什么它不同
+## 文档与来源说明
 
-- **研究范围由你决定**：自然语言兴趣先映射为真实分类，再由你逐项确认；
-- **逐篇列出相关作品**：报告按分类交集收录，不以声望、引用量或模型评分决定取舍；
-- **分清文献事件**：区分发表、新近可得、来源重录和元数据更新，并列出来源覆盖状态；
-- **私人配置留在本机**：研究方向、凭据、SQLite 状态、缓存与周报默认不进入公开仓库。
+| 你想了解的内容 | 文档 |
+|---|---|
+| 安装、凭据、本地运行目录、首次基线与缓存管理 | [安装与首次部署](references/installation.md) |
+| 历史检索、年份与类型筛选、引用量及缺失值 | [兴趣论文检索](references/paper-search.md) |
+| 新论文判定、监测窗口与报告收录 | [监测政策](references/monitoring-policy.md) · [时间与版本语义](references/date-and-version-semantics.md) |
+| 来源分工与中文期刊覆盖 | [来源目录](references/source-catalog.md) · [中文来源扩展](references/chinese-source-expansion.md) |
+| 逐篇核查与裁定回填 | [作品类型复核](references/work-type-policy.md) · [书目同一性复核](references/identity-review-policy.md) |
+| 英文命令指南 | [English user guide](references/usage.en.md) |
 
-### 开始安装
+PhilPapers 分类 feed 提供分类成员关系，PhilArchive OAI 提供来源记录变化，Crossref／OpenAlex
+辅助核对书目、作品类型和日期。OAI 的记录时间与作品发表日期分别呈现。
+启用中文来源后，刊方目录、知网与万方线索按来源和日期精度单列；当前可自动扫描九种期刊的
+刊方目录，其他登记期刊仍需人工核查。报告说明本次实际读取范围及仍需复核的记录。
 
-需要 Codex、Git、[`uv`](https://docs.astral.sh/uv/) 和 Python 3.12 或 3.13。在 Codex 中调用：
+## 当前版本
 
-```text
-$skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor
-仓库根目录安装这个 Skill；path 使用 .，安装名称使用 philosophy-frontier-monitor。
-```
+最近发布的应用版本是 [`v0.4.0`](https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor/releases/tag/v0.4.0)。
+当前代码还包含尚未纳入该版本标签的逐篇作品类型、书目与同一性复核改进，内部证据管线版本为 `0.6.2`。
 
-安装后，在新一轮对话中说：
+| 能力 | 当前状态 |
+|---|---|
+| 兴趣映射、分类确认、历史基线与每周监测 | 稳定 |
+| 即时拉取、历史论文检索与中英文报告 | 稳定 |
+| OAI 跨运行缓存、分页恢复与增量刷新 | 稳定 |
+| 有界中文题录与已复核期次线索 | `v0.4.0` 起可选启用 |
 
-```text
-请使用 $philosophy-frontier-monitor，帮我把研究方向映射到经过核验的 PhilPapers 分类，
-由我确认后完成本地配置、历史基线和第一次周报。不要让我把凭据粘贴到聊天中。
-```
+中文线索按其来源和月份证据单独展示。当前可单独扫描九种期刊的刊方目录，其他登记期刊仍需
+人工核查；具体来源和录入规则见[中文来源说明](references/chinese-source-expansion.md)。
 
-最近发布的应用版本标签为 **v0.4.0**；当前代码的内部证据管线版本为 **0.6.2**。
-实机定时运行已在 Windows 验证；macOS／Linux 已适配路径，定时运行仍待实机验证。
+OAI 增量候选思路受 [`sea9401/philosophy-mcp`](https://github.com/sea9401/philosophy-mcp)
+的 `list_recent` 启发。本项目在此基础上实现完整分页、窗口过滤、分类交集、日期区分和
+跨运行恢复。上游版本、许可证与实现比较见[设计来源](references/design-lineage.md)。
+版本沿革见 [CHANGELOG.md](CHANGELOG.md)，贡献要求见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## 安全与来源边界
+
+私人研究方向、已确认分类、凭据、SQLite 状态、缓存和报告默认保存在本机；`config/watchlist.yaml`、
+`var/`、`reports/` 与 `.env` 受 Git 忽略规则保护。API key 从私人文件或进程环境读取。
+OAI 缓存保存恢复所需的最小记录证据和分页令牌；状态命令只显示计数与覆盖信息。
+
+报告依据实际读取的分类和来源组织作品。来源覆盖、日期精度和仍需复核的记录随报告呈现。
+项目默认读取书目与元数据，全文获取由研究者另行决定。详见[安全与隐私政策](references/security-and-privacy.md)、
+[来源目录](references/source-catalog.md)、[时间与版本语义](references/date-and-version-semantics.md)
+及[第三方声明](THIRD_PARTY_NOTICES.md)。
+
+## 问题反馈
+
+- 维护者：**Asahina Mafuyu**
+- 联系邮箱：[junxuanxie@stu.xjtu.edu.cn](mailto:junxuanxie@stu.xjtu.edu.cn)
+
+安装问题、可复现错误和改进建议可提交到 [GitHub Issues](https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor/issues)。
+请附版本、系统、命令、窗口天数和去除私人信息后的错误摘要；即时拉取问题还可附
+`pfm oai-cache status` 的计数与覆盖状态。凭据、私人配置、数据库和完整报告留在本机。
+涉及凭据或私人数据泄露的漏洞，请按 [SECURITY.md](SECURITY.md) 使用 GitHub Private Vulnerability Reporting。
+
+## 技术更新
+
+### 2026-10-25：按使用场景重整中英文介绍页
+
+介绍页将三种功能、安装步骤、可复制的提问示例和真实周报集中呈现，增加文档导航，
+将历次技术更新移至页尾并保留历史正文。中英文同步保留公开示例的四篇确认新出、
+43 篇匹配作品、10 条人工复核及覆盖说明。终端配置示例会先检查私人 watchlist 是否存在。
+
+本次为分支文档更新。验证涵盖本地链接、页内导航、Markdown 折叠结构、双语内容与原示例及
+历史更新的保留检查；没有重新拉取论文来源，也未创建版本标签或 GitHub Release。
+
+<details>
+<summary>技术更新：保存书目同一性比较对象并支持逐对复核（2026-10-18）</summary>
 
 ## 技术更新：保存书目同一性比较对象并支持逐对复核（2026-10-18）
 
@@ -96,6 +243,8 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 继续独立执行。三种模式的离线回归已覆盖队列、复跑及旧作拦截。
 这是代码分支更新，没有创建新的版本标签或 GitHub Release。
 格式与命令见[作品同一性逐对复核](references/identity-review-policy.md)。
+
+</details>
 
 <details>
 <summary>技术更新：刊方年份补证可恢复缺少年份提示的论文（2026-10-18）</summary>
@@ -593,116 +742,3 @@ OAI、但同时缺少 feed 时间、书目年份、DOI 和明确手稿／预印�
 </details>
 
 </details>
-
-## 一、旨在解决的问题
-
-哲学研究者需要反复检查 PhilPapers、期刊页面和书目数据库，才能知道自己的研究方向出现了哪些
-新作品。Philosophy Frontier Monitor 将研究方向转换为经用户确认的 PhilPapers 分类，持续检查
-相关来源，并用周报呈现作品、日期与分类证据。研究者据此选择要进一步阅读的文献。
-
-## 二、功能
-
-- **确定范围**：从中文或英文研究兴趣提出 PhilPapers 分类，逐项确认后启用；
-- **建立基线**：首次运行登记已有记录，之后按用户时区执行周报，并顺序补跑错过的窗口；
-- **识别变化**：区分新发表、手稿／预印本新近可得、来源重录与元数据更新；
-- **整理报告**：合并同一作品的多个来源，列出书目信息、日期证据、命中分类与来源状态；
-- **即时拉取与检索**：主动检查最近 1—31 个当地日，或在已确认分类中检索已有论文；
-- **中文期刊线索**：显式启用后，单列有界中文题录和已复核期次线索。
-
-周报的论文主栏同时要求新近性证据与已确认兴趣分类交集；作品类型和日期冲突会进入逐篇复核。
-PhilPapers 分类 feed 提供分类成员关系，PhilArchive OAI 提供来源记录变化，Crossref／OpenAlex
-辅助核对书目、作品类型和日期。OAI 的 `datestamp` 是记录时间，报告会与作品发表日期分开呈现。
-完整判断规则见[监测政策](references/monitoring-policy.md)与[作品类型政策](references/work-type-policy.md)。
-
-`pull-now` 使用相同的证据规则处理指定窗口，报告与每周通知状态分别保存。私人 OAI 缓存保存已
-收割窗口和分页恢复点，供相同窗口复用及中断后续跑。首次遇到上游批量更新时，缓存可能较大；
-运行中会显示进度。缓存状态与清理命令见[安装与首次部署](references/installation.md)。
-
-## 三、如何安装与首次使用
-
-### 推荐：让 Codex 完成安装
-
-需要 Codex、Git、[`uv`](https://docs.astral.sh/uv/) 和 Python 3.12 或 3.13。当前正式实机验收在
-Windows 上完成；其他系统的路径已作兼容设计，但尚未获得同等的真实定时运行验证。
-
-在 Codex 中调用内置安装器：
-
-```text
-$skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor
-仓库根目录安装这个 Skill；path 使用 .，安装名称使用 philosophy-frontier-monitor。
-```
-
-安装完成后的下一轮对话中，请 Codex 执行：
-
-```text
-请进入已安装的 philosophy-frontier-monitor 目录，运行 uv sync --python 3.12，
-复制公开示例为私人 watchlist，并按照 Skill 引导我完成首次配置。
-不要让我把任何 API key、密码或 Cookie 粘贴到聊天中。
-```
-
-Codex 官方文档说明，`$skill-installer` 可以从其他 GitHub 仓库安装 Skill；新安装的 Skill 通常在
-下一轮对话可用，如果没有出现则重启 Codex。参见 [OpenAI 官方 Skill 文档](https://learn.chatgpt.com/zh-Hant/docs/build-skills)。
-
-### 首次配置流程
-
-1. 用普通语言告诉 Skill 你的研究方向；你不需要预先知道 PhilPapers 分类名称。
-2. 审查 Skill 提出的真实分类、范围和推理理由，明确接受、拒绝或暂缓每个候选。
-3. 按引导取得 PhilPapers taxonomy 所需的 API ID 和 API key，并只保存到本机 Git 忽略目录；
-   不要把凭据发到聊天、Issue、截图或命令行参数中。
-4. 建立历史基线。基线只把当前 feed 条目标为既有历史，不生成历史论文洪水。
-5. 先完成一次 dry run 和正式周运行，再让 Codex建立每周计划任务。默认是用户当地星期一 08:00，
-   可以改为其他时区、星期和时间。
-
-熟悉终端的用户可以在安装目录中运行：
-
-```powershell
-uv sync --python 3.12
-Copy-Item .\config\watchlist.example.yaml .\config\watchlist.yaml
-.\.venv\Scripts\pfm.exe doctor
-```
-
-macOS／Linux 对应的程序路径是 `.venv/bin/pfm`。完整的安装、运行目录、凭据和首次基线说明见
-[安装与首次部署](references/installation.md)；英文版见
-[Installation and first deployment](references/installation.en.md) 与
-[English user guide](references/usage.en.md)。
-
-## 四、当前版本
-
-最近发布的应用版本是 [`v0.4.0`](https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor/releases/tag/v0.4.0)。
-当前代码还包含尚未纳入该版本标签的作品类型逐篇复核改进，内部证据管线版本为 `0.6.2`。
-
-| 能力 | 当前状态 |
-|---|---|
-| 兴趣映射、分类确认、历史基线与每周监测 | 稳定 |
-| 即时拉取、历史论文检索与中英文报告 | 稳定 |
-| OAI 跨运行缓存、分页恢复与增量刷新 | 稳定 |
-| 有界中文题录与已复核期次线索 | `v0.4.0` 起可选启用 |
-
-中文线索按其来源和月份证据单独展示。当前可单独扫描九种期刊的刊方目录，其他登记期刊仍需
-人工核查；具体来源和录入规则见[中文来源说明](references/chinese-source-expansion.md)。
-
-OAI 增量候选思路受 [`sea9401/philosophy-mcp`](https://github.com/sea9401/philosophy-mcp)
-的 `list_recent` 启发。本项目在此基础上实现完整分页、窗口过滤、分类交集、日期区分和
-跨运行恢复。上游版本、许可证与实现比较见[设计来源](references/design-lineage.md)。
-版本沿革见 [CHANGELOG.md](CHANGELOG.md)，贡献要求见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-## 五、安全与来源边界
-
-私人研究方向、已确认分类、凭据、SQLite 状态、缓存和报告默认保存在本机；`config/watchlist.yaml`、
-`var/`、`reports/` 与 `.env` 受 Git 忽略规则保护。API key 从私人文件或进程环境读取。
-OAI 缓存保存恢复所需的最小记录证据和分页令牌；状态命令只显示计数与覆盖信息。
-
-报告依据实际读取的分类和来源组织作品。来源覆盖、日期精度和仍需复核的记录随报告呈现。
-项目默认读取书目与元数据，全文获取由研究者另行决定。详见[安全与隐私政策](references/security-and-privacy.md)、
-[来源目录](references/source-catalog.md)、[时间与版本语义](references/date-and-version-semantics.md)
-及[第三方声明](THIRD_PARTY_NOTICES.md)。
-
-## 六、问题反馈
-
-- 维护者：**Asahina Mafuyu**
-- 联系邮箱：[junxuanxie@stu.xjtu.edu.cn](mailto:junxuanxie@stu.xjtu.edu.cn)
-
-安装问题、可复现错误和改进建议可提交到 [GitHub Issues](https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor/issues)。
-请附版本、系统、命令、窗口天数和去除私人信息后的错误摘要；即时拉取问题还可附
-`pfm oai-cache status` 的计数与覆盖状态。凭据、私人配置、数据库和完整报告留在本机。
-涉及凭据或私人数据泄露的漏洞，请按 [SECURITY.md](SECURITY.md) 使用 GitHub Private Vulnerability Reporting。

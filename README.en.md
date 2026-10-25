@@ -2,22 +2,134 @@
 
 English | [简体中文](README.md)
 
-**Track new philosophy papers in the research areas you confirm.**
+**Find existing philosophy papers and follow new work in your research areas.**
 
-Describe your interests in Chinese or English. The Skill proposes verified PhilPapers categories
-for you to review one by one, then produces weekly reports within the scope you confirm. Reports
-list titles, authors, date evidence, matching categories, source links, and records awaiting review.
+Philosophy Frontier Monitor is a Codex Skill backed by a local Python application.
+Describe your interests in Chinese or English, review the verified PhilPapers categories it proposes,
+then search existing papers, check recent work on demand, or receive weekly reports in your local time.
 
-Use `pfm search --config config/watchlist.yaml` to find **existing papers** in your confirmed
-categories. You can filter by year, work type, or category and sort by citation counts when available.
-Search reads the category feeds returned in that run and operates separately from weekly monitoring.
-See the [search guide](references/paper-search.md) for its scope and handling of missing data.
+Each result retains its title, authors, date evidence, matching categories, and source links
+so you can follow the discovery through to further reading.
+
+[Features](#features) · [Installation](#installation-and-first-use) · [Example prompts](#example-prompts) ·
+[Real report](#real-report) · [Documentation](#documentation-and-sources) · [Technical update](#technical-update)
 
 ![Four steps from a research interest to a weekly philosophy-paper report](assets/demo/philosophy-frontier-monitor-demo.png)
 
-[Read the complete public sample report](examples/public-demo-weekly-report.md) ·
-[Open the report-preview image](assets/demo/public-demo-weekly-report-2026-10-10.png) ·
-[Read the full installation guide](references/installation.en.md)
+## Features
+
+One confirmed research scope supports three workflows:
+
+| What you want to do | Workflow | What you get |
+|---|---|---|
+| Find existing papers in your research areas | Historical search · `pfm search` | Papers filtered by year, work type, or category; ordered by citation counts when available, with missing data labelled |
+| Check recent work now | On-demand pull · `pfm pull-now` | A report for the latest 1–31 local days, distinguishing publication, recent availability, and source-record changes |
+| Follow a field over time | Weekly monitoring · `pfm weekly-run` / `pfm catch-up` | Weekly reports after an initial historical baseline, with duplicate sources merged and missed windows processed in order |
+
+- **Start with your own words:** map research interests to real PhilPapers categories, then accept, reject, or defer each proposal.
+- **Keep the evidence for each work:** merge multiple sources, show date and work-type evidence, and route conflicting records to individual review.
+- **Read bilingual reports:** follow matching works, source coverage, and records awaiting review in Chinese and English.
+- **Optionally include Chinese sources:** show bounded CNKI Space and Wanfang metadata and reviewed publisher issue leads in separate sections.
+
+Historical search covers the records actually returned by the category feeds in that run.
+Weekly monitoring and on-demand pulls also apply their respective time windows.
+Citation counts only order search results; confirmed categories and evidence rules determine inclusion.
+See the [search guide](references/paper-search.md) and [monitoring policy](references/monitoring-policy.md).
+
+## Installation and first use
+
+You need **Codex, Git, [uv](https://docs.astral.sh/uv/), and Python 3.12 or 3.13**,
+with network access to your chosen scholarly sources. Scheduled operation has been validated on Windows.
+macOS and Linux path support is in place; scheduled operation still awaits real-machine validation.
+
+### 1. Install the Skill
+
+Send this to Codex:
+
+```text
+$skill-installer Install the Skill from the repository root at
+https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor;
+use path . and the install name philosophy-frontier-monitor.
+```
+
+### 2. Describe your interests and complete setup
+
+Use the Skill in the next conversation turn after installation. If it is not yet discovered,
+restart Codex, then ask:
+
+```text
+Use $philosophy-frontier-monitor. I study moral responsibility, free will, and action theory.
+Propose verified PhilPapers categories for me to confirm individually, then set up the local
+environment and private configuration. I would like a report every Monday at 08:00 local time.
+Guide me through the historical baseline and my first weekly report. Keep credentials local;
+do not ask me to paste API keys, passwords, or cookies into the conversation.
+```
+
+Replace the example interests and time with your own. You do not need to know the category names.
+The Skill guides you through Python setup, category confirmation, local storage of taxonomy credentials,
+the historical baseline, a dry run, and a production weekly run before you confirm the recurring schedule.
+The default is Monday at 08:00 in your local timezone. A public profile is an optional source of
+additional interest information; a text description is enough to complete setup.
+
+<details>
+<summary>Check the environment from a terminal after installation</summary>
+
+Run these commands in the Skill directory returned by the installer. Create a watchlist from the public
+example only if no private configuration exists; reuse an existing file with its research scope and local settings.
+
+```powershell
+uv sync --python 3.12
+if (-not (Test-Path .\config\watchlist.yaml)) {
+    Copy-Item .\config\watchlist.example.yaml .\config\watchlist.yaml
+}
+.\.venv\Scripts\pfm.exe doctor
+```
+
+The executable is `.venv/bin/pfm` on macOS and Linux. See
+[Installation and first deployment](references/installation.en.md) and the
+[Chinese installation guide](references/installation.md) for the full procedure.
+
+</details>
+
+## Example prompts
+
+After confirming categories and completing local setup, you can ask Codex directly.
+
+### Find existing papers
+
+```text
+Use $philosophy-frontier-monitor to find papers from 2020–2026 in my confirmed categories.
+Order by citation counts where available and show titles, authors, years, matching categories,
+and source links. Keep papers with missing citation counts and describe the source scope actually read.
+```
+
+Historical search reuses confirmed categories without requiring a weekly baseline.
+Year filters use publication-year evidence; an unrestricted search can retain verified papers
+with missing dates. See the [search guide](references/paper-search.md) for the rules and commands.
+
+### Check the latest week
+
+```text
+Use $philosophy-frontier-monitor to pull papers from the latest 7 local days in my confirmed
+research areas. Distinguish confirmed-new works, recent availability, and source-record changes,
+and list records that need human review.
+```
+
+An on-demand pull generates a separate report and preserves weekly notification progress.
+Choose a window from 1 to 31 local days.
+
+### Change the weekly schedule
+
+```text
+Use $philosophy-frontier-monitor to move my weekly report to Friday at 18:00 local time.
+Keep my confirmed research scope and let me confirm the final time before creating or updating
+the scheduled task.
+```
+
+Scheduling uses your local timezone. Research scope, delivery time, and optional Chinese sources
+can each be adjusted independently.
+
+## Real report
 
 ### Public example: an actual pull from three real categories
 
@@ -72,38 +184,89 @@ The CLI produces Markdown reports. A Codex environment with document or presenta
 also typeset a report as **Word (.docx)** or **PowerPoint (.pptx)**. Add
 `--show-recently-changed` before conversion to include the expanded source-change group.
 
-### What makes it different
+## Documentation and sources
 
-- **You control the scope:** natural-language interests become real, reviewable categories before
-  anything is monitored.
-- **A record of each matching work:** category matches determine inclusion; reputation,
-  citation counts, and model scores do not decide what to omit.
-- **Distinct kinds of change:** publication, recent availability, source re-entry, and metadata
-  updates appear with the source coverage status.
-- **Private configuration stays local:** research interests, credentials, SQLite state, caches,
-  and reports are excluded from the public repository by default.
+| What you want to understand | Documentation |
+|---|---|
+| Installation, credentials, runtime directory, first baseline, and cache management | [Installation and first deployment](references/installation.en.md) |
+| Historical search, year and type filters, citation counts, and missing data | [Interest-based paper search](references/paper-search.md) |
+| New-paper evidence, monitoring windows, and report inclusion | [Monitoring policy](references/monitoring-policy.md) · [Date and version semantics](references/date-and-version-semantics.md) |
+| Source roles and Chinese-journal coverage | [Source catalog](references/source-catalog.md) · [Chinese sources](references/chinese-source-expansion.md) |
+| Individual checks and evidence-bound review decisions | [Work-type review](references/work-type-policy.md) · [Bibliographic identity review](references/identity-review-policy.md) |
+| Commands in English | [English user guide](references/usage.en.md) |
 
-### Start installation
+PhilPapers category feeds establish category membership; PhilArchive OAI supplies source-record changes;
+Crossref and OpenAlex support bibliographic, work-type, and date checks. Reports distinguish an OAI record
+timestamp from a work's publication date. When enabled, publisher, CNKI, and Wanfang leads appear separately
+with their sources and date precision. Publisher directories for nine journals can be scanned automatically;
+the other registered journals need manual review. Each report describes the scope actually read and
+records still awaiting review.
 
-You need Codex, Git, [`uv`](https://docs.astral.sh/uv/), and Python 3.12 or 3.13. In Codex, invoke:
+## Current version
 
-```text
-$skill-installer Install the Skill from the repository root at
-https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor;
-use path . and the install name philosophy-frontier-monitor.
-```
+The latest tagged application release is [`v0.4.0`](https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor/releases/tag/v0.4.0).
+The current code also includes individual work-type, bibliography, and identity review improvements beyond that release; its internal
+evidence-pipeline version is `0.6.2`.
 
-Then, in a new conversation, ask:
+| Capability | Current status |
+|---|---|
+| Interest mapping, category confirmation, baseline, and weekly monitoring | Stable |
+| On-demand pulls, existing-paper search, and bilingual reports | Stable |
+| Cross-run OAI caching, pagination recovery, and incremental refresh | Stable |
+| Bounded Chinese metadata and reviewed issue leads | Optional since `v0.4.0` |
 
-```text
-Use $philosophy-frontier-monitor to map my research interests to verified PhilPapers categories.
-Let me confirm the categories, then guide me through local setup, the historical baseline, and my
-first weekly report. Do not ask me to paste credentials into the conversation.
-```
+Chinese leads appear separately with their source and month evidence. Publisher directories for
+nine journals can be scanned separately; the other registered journals still require manual
+review. See [Chinese sources](references/chinese-source-expansion.md) for scope and entry rules.
 
-The latest tagged application release is **v0.4.0**; the current code uses internal evidence-pipeline
-version **0.6.2**. Scheduled operation has been validated on Windows; macOS and Linux path support
-is in place, with scheduled operation still awaiting real-machine validation.
+The OAI candidate approach was inspired by `list_recent` in
+[`sea9401/philosophy-mcp`](https://github.com/sea9401/philosophy-mcp). This project adds complete
+pagination, window filtering, category intersection, separate date semantics, and cross-run
+recovery. See [design lineage](references/design-lineage.md) for pinned upstream revisions,
+licensing, and the implementation comparison. Changes appear in [CHANGELOG.md](CHANGELOG.md),
+and contribution requirements in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Security and source boundaries
+
+Private research interests, confirmed categories, credentials, SQLite state, caches, and reports
+stay local by default. Git ignores `config/watchlist.yaml`, `var/`, `reports/`, and `.env`. API keys
+are read from private files or the process environment. The OAI cache stores minimal record evidence
+and a pagination token for recovery; status output shows counts and coverage.
+
+Reports identify the categories and sources actually read, along with date precision and records
+awaiting review. The project reads bibliography and metadata by default; researchers decide
+separately whether to obtain full texts. See the [security policy](references/security-and-privacy.md),
+[source catalog](references/source-catalog.md), [date and version semantics](references/date-and-version-semantics.md),
+and [third-party notices](THIRD_PARTY_NOTICES.md).
+
+## Feedback
+
+- Maintainer: **Asahina Mafuyu**
+- Contact: [junxuanxie@stu.xjtu.edu.cn](mailto:junxuanxie@stu.xjtu.edu.cn)
+
+Open a [GitHub Issue](https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor/issues)
+for installation questions, reproducible bugs, or suggestions. Include the version, operating
+system, command, window length, and a redacted error summary. For on-demand pulls, count and
+coverage fields from `pfm oai-cache status` also help. Keep credentials, private configuration,
+databases, and complete reports local. Report vulnerabilities involving credentials or private
+data through GitHub Private Vulnerability Reporting as described in [SECURITY.md](SECURITY.md).
+
+## Technical update
+
+### 25 October 2026: reorganize the bilingual introduction around user workflows
+
+The introduction now brings together the three workflows, installation steps, copyable prompts,
+and a real report, adds documentation navigation, and moves earlier technical updates to the end
+while preserving their text. Both languages retain the public sample's four confirmed-new works,
+43 matching works, 10 human-review records, and coverage notes. The terminal setup example checks
+for an existing private watchlist before copying the public example.
+
+This is a branch documentation update. Validation covers local links, section navigation,
+Markdown disclosure structure, bilingual content, and preservation of the original sample and
+historical updates. No paper sources were fetched again, and no version tag or GitHub Release was created.
+
+<details>
+<summary>Technical update: retain identity comparisons and review each pair (18 October 2026)</summary>
 
 ## Technical update: retain identity comparisons and review each pair (18 October 2026)
 
@@ -118,6 +281,8 @@ rules still run independently. Offline regression covers queues, follow-up runs,
 and exclusion of older works in all three modes. This is a code branch update,
 without a new version tag or GitHub Release. See the
 [pair-review policy](references/identity-review-policy.md).
+
+</details>
 
 <details>
 <summary>Technical update: publisher-reviewed years restore papers missing feed year hints (18 October 2026)</summary>
@@ -724,126 +889,3 @@ coverage reporting; it does not promise a fixed runtime.
 </details>
 
 </details>
-
-## 1. What problem does this solve?
-
-Philosophy researchers revisit PhilPapers, journal pages, and bibliographic databases to find new
-work in their fields. Philosophy Frontier Monitor turns a research interest into user-confirmed
-PhilPapers categories, checks the relevant sources over time, and presents works with their date
-and category evidence in a weekly report. Researchers can then choose what to read more closely.
-
-## 2. Features
-
-- **Set the scope:** propose PhilPapers categories from interests expressed in Chinese or English,
-  then activate them after individual confirmation.
-- **Establish a baseline:** register existing records before weekly monitoring in the user's time
-  zone, with chronological catch-up for missed windows.
-- **Identify changes:** distinguish new publication, recent manuscript or preprint availability,
-  source re-entry, and metadata updates.
-- **Build reports:** merge sources for the same work and show bibliography, date evidence,
-  matching categories, and source status.
-- **Pull or search on demand:** inspect the latest 1–31 local days or search existing papers in
-  confirmed categories.
-- **Include Chinese-journal leads:** optionally show bounded Chinese metadata and reviewed issue leads.
-
-The main paper section of a weekly report requires both newness evidence and an intersection with
-confirmed interest categories. Work-type and date conflicts enter individual review. PhilPapers
-category feeds establish category membership, PhilArchive OAI supplies source-record changes, and
-Crossref/OpenAlex support bibliographic, work-type, and date checks. Reports distinguish an OAI
-record `datestamp` from a work's publication date. See the [monitoring policy](references/monitoring-policy.md)
-and [work-type policy](references/work-type-policy.md) for the full rules.
-
-`pull-now` applies the same evidence rules to a requested window and keeps its report separate
-from weekly notification state. A private OAI cache stores harvested windows and pagination
-checkpoints for reuse and recovery. Upstream bulk updates can make an initial cache large; the
-run shows its progress. See the [installation guide](references/installation.en.md) for cache
-status and cleanup commands.
-
-## 3. Installation and first use
-
-Requirements are Codex, Git, [`uv`](https://docs.astral.sh/uv/), Python 3.12 or 3.13, and network
-access to the configured scholarly sources. Production unattended validation has been performed on
-Windows. macOS and Linux path semantics are supported, but `v0.3.0` does not claim equivalent
-unattended scheduling validation on those platforms.
-
-Ask Codex's built-in installer to install the repository root as the Skill:
-
-```text
-$skill-installer Install the Skill from
-https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor.
-Use repository path . and installation name philosophy-frontier-monitor.
-```
-
-In the installed directory:
-
-```powershell
-uv sync --python 3.12
-Copy-Item .\config\watchlist.example.yaml .\config\watchlist.yaml
-.\.venv\Scripts\pfm.exe doctor
-```
-
-The executable is `.venv/bin/pfm` on macOS and Linux. Then:
-
-1. Describe the research direction in ordinary language.
-2. Review the proposed verified categories and accept, reject, or defer each one.
-3. Obtain the PhilPapers API ID and API key needed for the full taxonomy, keeping both only in a
-   private Git-ignored local location or process environment.
-4. Establish the historical baseline.
-5. Complete a dry run and a production weekly run before creating a recurring schedule.
-
-The default schedule is Monday at 08:00 in the user's local timezone and can be changed. Never paste
-API keys, passwords, cookies, or recovery codes into a conversation, issue, screenshot, or command
-line argument.
-
-See [Installation and first deployment](references/installation.en.md) and the
-[English user guide](references/usage.en.md). The Chinese installation guide is
-[安装与首次部署](references/installation.md).
-
-## 4. Current version
-
-The latest tagged application release is [`v0.4.0`](https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor/releases/tag/v0.4.0).
-The current code also includes work-type review improvements beyond that release; its internal
-evidence-pipeline version is `0.6.2`.
-
-| Capability | Current status |
-|---|---|
-| Interest mapping, category confirmation, baseline, and weekly monitoring | Stable |
-| On-demand pulls, existing-paper search, and bilingual reports | Stable |
-| Cross-run OAI caching, pagination recovery, and incremental refresh | Stable |
-| Bounded Chinese metadata and reviewed issue leads | Optional since `v0.4.0` |
-
-Chinese leads appear separately with their source and month evidence. Publisher directories for
-nine journals can be scanned separately; the other registered journals still require manual
-review. See [Chinese sources](references/chinese-source-expansion.md) for scope and entry rules.
-
-The OAI candidate approach was inspired by `list_recent` in
-[`sea9401/philosophy-mcp`](https://github.com/sea9401/philosophy-mcp). This project adds complete
-pagination, window filtering, category intersection, separate date semantics, and cross-run
-recovery. See [design lineage](references/design-lineage.md) for pinned upstream revisions,
-licensing, and the implementation comparison. Changes appear in [CHANGELOG.md](CHANGELOG.md),
-and contribution requirements in [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## 5. Security and source boundaries
-
-Private research interests, confirmed categories, credentials, SQLite state, caches, and reports
-stay local by default. Git ignores `config/watchlist.yaml`, `var/`, `reports/`, and `.env`. API keys
-are read from private files or the process environment. The OAI cache stores minimal record evidence
-and a pagination token for recovery; status output shows counts and coverage.
-
-Reports identify the categories and sources actually read, along with date precision and records
-awaiting review. The project reads bibliography and metadata by default; researchers decide
-separately whether to obtain full texts. See the [security policy](references/security-and-privacy.md),
-[source catalog](references/source-catalog.md), [date and version semantics](references/date-and-version-semantics.md),
-and [third-party notices](THIRD_PARTY_NOTICES.md).
-
-## 6. Feedback
-
-- Maintainer: **Asahina Mafuyu**
-- Contact: [junxuanxie@stu.xjtu.edu.cn](mailto:junxuanxie@stu.xjtu.edu.cn)
-
-Open a [GitHub Issue](https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor/issues)
-for installation questions, reproducible bugs, or suggestions. Include the version, operating
-system, command, window length, and a redacted error summary. For on-demand pulls, count and
-coverage fields from `pfm oai-cache status` also help. Keep credentials, private configuration,
-databases, and complete reports local. Report vulnerabilities involving credentials or private
-data through GitHub Private Vulnerability Reporting as described in [SECURITY.md](SECURITY.md).
