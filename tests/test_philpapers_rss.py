@@ -47,7 +47,8 @@ DIRECT_URL = (
 )
 
 
-def test_uses_official_generated_rss_without_category_page_request():
+@pytest.mark.parametrize("sort", ["cat", "pubYear"])
+def test_uses_official_generated_rss_without_category_page_request(sort):
     xml = (FIXTURE_DIR / "philpapers_feed_sample.xml").read_text(encoding="utf-8")
     requested_urls = []
 
@@ -57,14 +58,15 @@ def test_uses_official_generated_rss_without_category_page_request():
             200, text=xml, headers={"content-type": "application/rss+xml"}, request=request
         )
 
+    official_url = DIRECT_URL.replace("sort=cat", f"sort={sort}")
     direct = direct_feed_request(
-        "https://philpapers.org/browse/plato-theaetetus/", "74924", DIRECT_URL
+        "https://philpapers.org/browse/plato-theaetetus/", "74924", official_url
     )
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         entries = parse_feed(fetch_feed(direct, client=client))
 
     assert direct.parameters == {}
-    assert requested_urls == [DIRECT_URL]
+    assert requested_urls == [official_url]
     assert len(entries) == 1
 
 
@@ -100,6 +102,7 @@ def test_direct_rss_stops_on_html_challenge_without_following_or_retrying():
         DIRECT_URL.replace("cn=plato-theaetetus", "cn=action-theory"),
         DIRECT_URL + "&onlineOnly=on",
         DIRECT_URL.replace("new=1", "new=0"),
+        DIRECT_URL.replace("sort=cat", "sort=impact"),
         DIRECT_URL.replace("philpapers.org", "example.org"),
         DIRECT_URL.replace("/browse/plato-theaetetus/", "/browse/action-theory/"),
         DIRECT_URL.replace("philpapers.org", "philpapers.org:bad"),

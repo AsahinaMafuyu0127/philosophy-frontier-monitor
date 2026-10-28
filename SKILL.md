@@ -271,11 +271,20 @@ for existing schedules and configuration consistency.
    presents an `RSS feed` control, the user may generate the official link there
    and save it as `official_rss_url` beside that category's `url` in the private,
    Git-ignored watchlist. Validate that the link's host, category ID, slug,
-   unfiltered scope and RSS parameters match the confirmed category. This link
-   is an optional direct feed entrypoint, not a replacement for the taxonomy or
+   unfiltered scope and RSS parameters match the confirmed category. The official
+   page may generate `sort=cat` or `sort=pubYear`; ordering affects which records
+   appear first in a bounded feed and does not establish a publication date.
+   Historical catch-up uses the private link only for the matching category ID
+   and page URL, without storing it in the past profile. This link is an optional
+   direct feed entrypoint, not a replacement for the taxonomy or
    a way to solve or bypass a challenge. Never paste its opaque `dg` value into
    public files or logs. If a required category remains challenged and no
    verified link is available, stop the complete `pull-now` or weekly run.
+   Before scheduled catch-up, run `pfm doctor --live --source philpapers
+   --feeds-config config/watchlist.yaml` to check each configured feed without
+   changing state or exposing the private link. A permanent 403 or contract
+   failure requires source review before retrying; an upstream link can change
+   again despite a successful earlier check.
 2. When a new taxonomy snapshot is obtained, retain the old file and run
    `pfm taxonomy-audit` before changing the private watchlist. Read
    [taxonomy-lifecycle.md](references/taxonomy-lifecycle.md). Never infer a

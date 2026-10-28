@@ -309,6 +309,9 @@ def _doctor(args: argparse.Namespace) -> int:
     network_telemetry: dict[str, Any] | None = None
     if args.expected_openalex_requests < 0:
         raise ValueError("--expected-openalex-requests 不能是负数。")
+    if args.feeds_config and not args.live:
+        raise ValueError("--feeds-config 需要与 --live 一起使用。")
+    feed_config = load_watchlist(args.feeds_config) if args.feeds_config else None
 
     version_ok = (3, 12) <= sys.version_info[:2] < (3, 14)
     checks.append(
@@ -337,7 +340,7 @@ def _doctor(args: argparse.Namespace) -> int:
     else:
         checks.append({"check": "openai-yaml", "status": "pass", "detail": "valid YAML"})
 
-    taxonomy_path = Path(args.taxonomy)
+    taxonomy_path = feed_config.taxonomy_path if feed_config is not None else Path(args.taxonomy)
     try:
         snapshot = load_taxonomy(taxonomy_path)
     except (OSError, ValueError, KeyError) as error:
@@ -370,6 +373,7 @@ def _doctor(args: argparse.Namespace) -> int:
                 for item in diagnose_sources(
                     selected_sources,
                     category_url=args.category_url,
+                    configured_feeds=(feed_config.feeds if feed_config is not None else None),
                 )
             )
         network_telemetry = summarize_request_telemetry(events)
@@ -1420,6 +1424,10 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     doctor.add_argument("--category-url", default="https://philpapers.org/browse/plato-theaetetus")
+    doctor.add_argument(
+        "--feeds-config",
+        help="with --live, read each configured PhilPapers feed without reporting private URLs",
+    )
     doctor.set_defaults(handler=_doctor)
 
     profile = subparsers.add_parser("profile", help="map research text to verified categories")

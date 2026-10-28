@@ -253,6 +253,36 @@ data through GitHub Private Vulnerability Reporting as described in [SECURITY.md
 
 ## Technical update
 
+### 29 October 2026: accept current PhilPapers RSS ordering and repair catch-up access
+
+PhilPapers category pages can now generate an official subscription link with `sort=pubYear`.
+Private `official_rss_url` validation accepts both reviewed orderings, `sort=cat` and
+`sort=pubYear`, while still checking the HTTPS source, category ID, page path, `new=1`, and
+absence of added filters. Weekly monitoring, on-demand pulls, and historical search share
+this source-reading rule. When command-line RSS generation receives HTTP 403, the official
+link can be taken from the category page's `RSS feed` control in a normal browser, saved in
+the Git-ignored private configuration, and read directly.
+Historical-window catch-up now passes the matching current private official link by category
+ID and page URL. The link is not stored in historical interest profiles or applied to a
+different category page. Ordering changes which records
+appear first in a bounded feed; it is not publication-date evidence, and a 500-entry response
+does not prove that more records are unavailable. See the [installation guide](references/installation.en.md)
+and [source audit](references/source-catalog.md#2026-10-29-官方-rss-排序参数复核).
+
+The read-only `pfm doctor --live --source philpapers --feeds-config config/watchlist.yaml`
+checks every configured subscription before a scheduled run. It reports feed ordinals, status,
+and entry counts without exposing private URLs, returns a nonzero exit code for a failed feed,
+and does not advance the weekly checkpoint. It detects a changed or inaccessible link early;
+it cannot prevent future upstream access changes.
+
+This is a code branch update. Pre-push validation passed all 495 tests, Ruff, skill validation,
+the diff whitespace check, and the read-only release audit in a separate worktree containing
+only the intended public files. Earlier live-source observations are recorded in the linked
+source audit; this delivery used offline checks without collecting papers or advancing weekly
+state. Private configuration, caches, and other worktrees are outside this commit. Local
+browser-dependency changes unused by project source also remain local. No new version tag or
+GitHub Release was created.
+
 ### 25 October 2026: reconcile complete OpenAlex bibliography batches
 
 Following a review of public paper-search skills' pagination and coverage handling, DOI and

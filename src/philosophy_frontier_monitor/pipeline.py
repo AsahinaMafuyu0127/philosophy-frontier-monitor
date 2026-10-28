@@ -614,6 +614,12 @@ def _config_for_stored_profile(
             "catch-up crosses a historical schedule boundary; automatic window reconstruction "
             "requires the same timezone, weekday, and local delivery time"
         )
+    # The official RSS URL is a private access path, not part of the immutable
+    # interest profile. Reuse it only for the exact category page saved in the
+    # historical profile; never apply a current link to a different page.
+    current_feed_access = {
+        (feed.category_id, feed.url): feed.official_rss_url for feed in current.feeds
+    }
     return replace(
         current,
         profile_id=stored.profile_id,
@@ -637,6 +643,7 @@ def _config_for_stored_profile(
                 category_id=item.category_id,
                 category_name=item.category_name,
                 url=item.url,
+                official_rss_url=current_feed_access.get((item.category_id, item.url)),
             )
             for item in stored.feeds
         ),

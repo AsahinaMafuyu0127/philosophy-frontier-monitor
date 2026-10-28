@@ -678,10 +678,22 @@ def test_catch_up_stops_before_network_when_profile_changed_after_a_missed_week(
 def test_catch_up_reconstructs_the_profile_effective_for_each_missed_window(monkeypatch):
     allow_test_fixture_for_committing_run(monkeypatch)
     holder = {"entries": (BASE_ENTRY,)}
+    official_rss_url = (
+        "https://philpapers.org/browse/plato-theaetetus/"
+        "?cId=74924&catId=74924&cn=plato-theaetetus&dg=example123"
+        "&format=rss&import_options=1&new=1&proOnly=on&search_inside=1&sort=pubYear"
+    )
+    observed_access_urls = []
+
+    def catch_up_loader(feed, checked_at):
+        observed_access_urls.append(feed.official_rss_url)
+        return snapshot(holder["entries"], checked_at)
+
     changed_config = replace(
         CONFIG,
         profile_version=4,
         profile_effective_from=datetime(2026, 9, 20, 12, tzinfo=UTC),
+        feeds=(replace(CONFIG.feeds[0], official_rss_url=official_rss_url),),
     )
     with StateStore(":memory:") as state:
         establish_baseline(
@@ -691,6 +703,18 @@ def test_catch_up_reconstructs_the_profile_effective_for_each_missed_window(monk
             feed_loader=loader_for(holder),
             allow_development_fixture=True,
         )
+        stored_profile = state.get_interest_profile(CONFIG.profile_id, CONFIG.profile_version)
+        assert stored_profile is not None
+        different_page = replace(
+            changed_config,
+            feeds=(
+                replace(changed_config.feeds[0], url="https://philpapers.org/browse/another-category"),
+            ),
+        )
+        reconstructed = pipeline._config_for_stored_profile(
+            different_page, stored_profile, taxonomy_path=CONFIG.taxonomy_path
+        )
+        assert reconstructed.feeds[0].official_rss_url is None
         run_weekly(
             CONFIG,
             state,
@@ -705,7 +729,7 @@ def test_catch_up_reconstructs_the_profile_effective_for_each_missed_window(monk
             changed_config,
             state,
             now=datetime(2026, 9, 21, 2, tzinfo=UTC),
-            feed_loader=loader_for(holder),
+            feed_loader=catch_up_loader,
             report_writer=lambda directory, filename, content: Path("F:/virtual") / filename,
         )
         versions = [
@@ -722,6 +746,7 @@ def test_catch_up_reconstructs_the_profile_effective_for_each_missed_window(monk
         ]
 
     assert len(result.completed_runs) == 2
+    assert observed_access_urls == [official_rss_url, official_rss_url]
     assert result.profile_snapshot_registered is True
     assert versions == [3, 3, 4]
     assert stored_versions == [3, 4]

@@ -186,7 +186,7 @@ def direct_feed_request(
         or query["proOnly"] != ["on"]
         or query["import_options"] != ["1"]
         or query["search_inside"] != ["1"]
-        or query["sort"] != ["cat"]
+        or query["sort"][0] not in {"cat", "pubYear"}
         or not (1 <= len(query["dg"][0]) <= 128)
         or not all(character.isalnum() or character in "_-" for character in query["dg"][0])
     ):
