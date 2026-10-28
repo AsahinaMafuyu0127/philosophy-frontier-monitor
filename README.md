@@ -86,6 +86,15 @@ $skill-installer 请从 https://github.com/AsahinaMafuyu0127/philosophy-frontier
 最近发布的应用版本标签为 **v0.4.0**；当前代码的内部证据管线版本为 **0.6.2**。
 实机定时运行已在 Windows 验证；macOS／Linux 已适配路径，定时运行仍待实机验证。
 
+## 技术更新：推送 WorkBuddy 本地试点（2026-10-29）
+
+将此前保留在本地的 WorkBuddy Skill 入口、公开文件白名单构建器及导入说明推送到
+`codex/workbuddy-local-pilot` 分支。包内收录项目公开 Skill、16 份政策、公开期刊目录及
+SHA-256 清单；私人配置、报告、状态和凭据不进入 ZIP。推送前离线核对了 20 个包内文件、
+文件摘要、构建可重复性、Ruff、文档链接及只读发布检查。客户端导入和实际运行仍待验收。
+试点分支保留其对应的项目快照，尚未合入 `main`；未创建新版本标签或 GitHub Release。
+构建和导入步骤见[试点说明](references/workbuddy-local-pilot.md)。
+
 ## 技术更新：WorkBuddy 试点包同步项目 Skill（2026-10-17）
 
 WorkBuddy 试点包现在会收录选定项目的公开 `SKILL.md`、它引用的 16 份政策文件和公开

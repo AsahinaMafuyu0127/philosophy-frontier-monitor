@@ -105,6 +105,17 @@ The latest tagged application release is **v0.4.0**; the current code uses inter
 version **0.6.2**. Scheduled operation has been validated on Windows; macOS and Linux path support
 is in place, with scheduled operation still awaiting real-machine validation.
 
+## Technical update: push the local WorkBuddy pilot (29 October 2026)
+
+The previously local WorkBuddy Skill entrypoint, allowlisted public-file builder, and import
+guide are now available on `codex/workbuddy-local-pilot`. The ZIP contains the public project
+Skill, 16 policy files, the public journal catalog, and a SHA-256 manifest. Private configuration,
+reports, state, and credentials stay outside the package. Pre-push offline checks covered all
+20 package members, their digests, reproducible builds, Ruff, documentation links, and the
+read-only release audit. Client import and live operation remain unverified. The pilot retains
+its corresponding project snapshot and has not been merged into `main`. No new version tag
+or GitHub Release was created. See the [pilot guide](references/workbuddy-local-pilot.md).
+
 ## Technical update: WorkBuddy pilot package tracks the project Skill (17 October 2026)
 
 The WorkBuddy pilot ZIP now includes the selected project's public `SKILL.md`, its 16 referenced
