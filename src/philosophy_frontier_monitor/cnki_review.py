@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -34,6 +34,8 @@ class CnkiReviewedEvidence:
     issue: str
     china_affiliated_authors: tuple[str, ...]
     reviewed_at: datetime
+    issue_label_month: str | None = None
+    publication_date: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,15 +97,17 @@ def _names(value: object, field: str) -> tuple[str, ...]:
     return tuple(_text(item, field) for item in value)
 
 
-def _same(left: str, right: str) -> bool:
-    def compact(value: str) -> str:
-        return "".join(
-            character
-            for character in unicodedata.normalize("NFKC", value).casefold()
-            if character.isalnum()
-        )
+def _compact(value: str) -> str:
+    return "".join(
+        character
+        for character in unicodedata.normalize("NFKC", value).casefold()
+        if character.isalnum()
+    )
 
-    return bool(compact(left)) and compact(left) == compact(right)
+
+def _same(left: str, right: str) -> bool:
+    normalized = _compact(left)
+    return bool(normalized) and normalized == _compact(right)
 
 
 def _issue(value: str) -> str:
@@ -168,6 +172,21 @@ def load_reviewed_evidence(path: Path) -> dict[str, CnkiReviewedEvidence]:
             raise CnkiReviewError("reviewed_at_needs_timezone")
         if cnki_url in reviewed:
             raise CnkiReviewError("duplicate_cnki_url")
+        issue_label_month = item.get("issue_label_month")
+        publication_date = item.get("publication_date")
+        try:
+            if issue_label_month is not None:
+                labelled = date.fromisoformat(str(issue_label_month) + "-01")
+                if labelled.year != raw_year or labelled.strftime("%Y-%m") != issue_label_month:
+                    raise ValueError
+            if publication_date is not None:
+                published = date.fromisoformat(str(publication_date))
+                if published.year != raw_year or published.isoformat() != publication_date:
+                    raise ValueError
+        except (TypeError, ValueError) as error:
+            raise CnkiReviewError("invalid_publication_date_evidence") from error
+        if (issue_label_month or publication_date) and source_type == "catalog_record":
+            raise CnkiReviewError("publication_date_needs_publisher_page")
         reviewed[cnki_url] = CnkiReviewedEvidence(
             cnki_url=cnki_url,
             evidence_url=evidence_url,
@@ -179,6 +198,8 @@ def load_reviewed_evidence(path: Path) -> dict[str, CnkiReviewedEvidence]:
             issue=_text(item.get("issue"), "issue"),
             china_affiliated_authors=affiliated,
             reviewed_at=reviewed_at,
+            issue_label_month=issue_label_month,
+            publication_date=publication_date,
         )
     return reviewed
 
@@ -235,9 +256,15 @@ def assess_cnki_overlaps(
 ) -> tuple[CnkiOverlap, ...]:
     """Flag exact-title overlap in the inspected PhilPapers subset, without merging."""
 
+    peers_by_title = {}
+    for peer in peers:
+        title = _compact(peer.title)
+        if title:
+            peers_by_title.setdefault(title, []).append(peer)
+
     overlaps = []
     for record in records:
-        matches = [peer for peer in peers if _same(record.title, peer.title)]
+        matches = peers_by_title.get(_compact(record.title), ())
         if not matches:
             continue
         exact = [

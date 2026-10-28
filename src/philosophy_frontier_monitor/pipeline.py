@@ -24,6 +24,8 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from .bibliographic_cache import BibliographicCache, BibliographicCacheStats
+from .bibliographic_index import OpenAlexIdentityIndex
+from .cnki_dates import enrich_cnki_scan_with_dates as _cnki_scan_with_dates
 from .cnki_review import (
     BibliographicPeer,
     CnkiAssessment,
@@ -37,9 +39,15 @@ from .config import ConfirmedCategoryConfig, FeedConfig, WatchlistConfig
 from .freshness import assess_freshness
 from .http_retry import BoundedRequestError
 from .identity import (
+    IdentityComparison,
     IdentityMatchLevel,
     IdentityReviewRequired,
     compare_bibliographic_identity,
+)
+from .identity_reviews import (
+    ReviewedIdentity,
+    identity_evidence_fingerprint,
+    resolve_identity_review,
 )
 from .matching import match_work
 from .models import (
@@ -59,6 +67,7 @@ from .models import (
     SelectedCategory,
     TaxonomySnapshot,
     WorkRecord,
+    WorkTypeEvidence,
     WorkTypeStatus,
 )
 from .normalize import normalize_doi, normalize_title
@@ -79,9 +88,9 @@ from .sources.openalex import (
     DEFAULT_USER_AGENT as OPENALEX_USER_AGENT,
 )
 from .sources.openalex import (
+    MAX_BIBLIOGRAPHIC_PAGES,
     MAX_DOI_BATCH_SIZE,
     MAX_TITLE_BATCH_SIZE,
-    MAX_TITLE_SPLIT_DEPTH,
     OpenAlexError,
     OpenAlexWork,
 )
@@ -104,6 +113,7 @@ from .sources.philpapers_rss import (
 )
 from .sources.philpapers_rss import (
     FeedEntry,
+    direct_feed_request,
     discover_feed_request,
     fetch_feed,
     parse_feed,
@@ -128,6 +138,11 @@ from .state import (
     UnresolvedUpdate,
 )
 from .taxonomy import expand_selected_categories, load_taxonomy, require_production_taxonomy
+from .work_type_reviews import (
+    ReviewedWorkType,
+    apply_work_type_review,
+    work_type_evidence_fingerprint,
+)
 from .work_types import (
     WorkTypeResolution,
     WorkTypeSignal,
@@ -137,7 +152,7 @@ from .work_types import (
 
 SOURCE_NAME = "philpapers-rss"
 NOTIFICATION_TYPE = "weekly_new_papers"
-PIPELINE_VERSION = "0.6.0"
+PIPELINE_VERSION = "0.6.2"
 MATCHING_RULE_VERSION = "set_intersection_v1"
 RECORD_PATH = re.compile(r"/rec/(?!\.{1,2}/?$)[A-Za-z0-9._~-]+/?")
 FEED_YEAR_HINT = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
@@ -224,6 +239,7 @@ class MergedCandidate:
     oai_year_hints: tuple[int, ...] = ()
     oai_record_ids: tuple[str, ...] = ()
     oai_work_type_hints: tuple[str, ...] = ()
+    type_review: ReviewedWorkType | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,6 +248,9 @@ class ResolutionResult:
     work: WorkRecord | None
     reason_code: str | None = None
     detail: str | None = None
+    work_type_evidence: tuple[WorkTypeEvidence, ...] = ()
+    review_publication_date: DateValue | None = None
+    identity_comparisons: tuple[IdentityComparison, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,6 +270,7 @@ class WeeklyRunResult:
     report_path: Path | None
     report_markdown: str
     stats: dict[str, int]
+    human_review_items: tuple[HumanReviewItem, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,6 +280,8 @@ class OnDemandRunResult:
     window_end: datetime
     report_markdown: str
     stats: dict[str, int]
+    human_review_items: tuple[HumanReviewItem, ...] = ()
+    feed_snapshots: tuple[FeedSnapshot, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -592,6 +614,12 @@ def _config_for_stored_profile(
             "catch-up crosses a historical schedule boundary; automatic window reconstruction "
             "requires the same timezone, weekday, and local delivery time"
         )
+    # The official RSS URL is a private access path, not part of the immutable
+    # interest profile. Reuse it only for the exact category page saved in the
+    # historical profile; never apply a current link to a different page.
+    current_feed_access = {
+        (feed.category_id, feed.url): feed.official_rss_url for feed in current.feeds
+    }
     return replace(
         current,
         profile_id=stored.profile_id,
@@ -615,6 +643,7 @@ def _config_for_stored_profile(
                 category_id=item.category_id,
                 category_name=item.category_name,
                 url=item.url,
+                official_rss_url=current_feed_access.get((item.category_id, item.url)),
             )
             for item in stored.feeds
         ),
@@ -657,7 +686,11 @@ def load_philpapers_feed(
     *,
     client: httpx.Client | None = None,
 ) -> FeedSnapshot:
-    request = discover_feed_request(feed.url, client=client)
+    request = (
+        direct_feed_request(feed.url, feed.category_id, feed.official_rss_url)
+        if feed.official_rss_url is not None
+        else discover_feed_request(feed.url, client=client)
+    )
     if request.category_id != feed.category_id:
         raise PipelineError(
             f"PhilPapers page {feed.url} resolved to cId={request.category_id}, "
@@ -1083,18 +1116,80 @@ def _work_type_resolution(
                 source_record_id=openalex.openalex_id,
             )
         )
-    return resolve_work_type(tuple(signals), default_type=default_type)
+    resolved = resolve_work_type(tuple(signals), default_type=default_type)
+    return apply_work_type_review(
+        resolved,
+        candidate.type_review,
+        record_url=candidate.stable_url,
+        title=split_display_bibliography(candidate.display_title).title,
+    )
+
+
+def _attach_type_reviews(
+    candidates: tuple[MergedCandidate, ...],
+    reviews: dict[str, ReviewedWorkType] | None,
+) -> tuple[MergedCandidate, ...]:
+    if not reviews:
+        return candidates
+    return tuple(
+        replace(candidate, type_review=reviews.get(candidate.stable_url))
+        for candidate in candidates
+    )
+
+
+def _review_record_url(work: WorkRecord) -> str | None:
+    return next(
+        (
+            source_id
+            for source, source_id in work.source_ids
+            if source == SOURCE_NAME and source_id.startswith("https://philpapers.org/rec/")
+        ),
+        None,
+    )
+
+
+def _apply_type_review_to_work(
+    work: WorkRecord,
+    reviews: dict[str, ReviewedWorkType] | None,
+) -> WorkRecord:
+    if not reviews:
+        return work
+    record_url = _review_record_url(work)
+    review = reviews.get(record_url) if record_url else None
+    if review is None:
+        return work
+    resolved = apply_work_type_review(
+        WorkTypeResolution(work.work_type, work.work_type_status, work.work_type_evidence),
+        review,
+        record_url=record_url,
+        title=work.title,
+    )
+    return replace(
+        work,
+        work_type=resolved.work_type,
+        work_type_status=resolved.status,
+        work_type_evidence=resolved.evidence,
+    )
 
 
 def _work_type_resolution_failure(
     candidate: MergedCandidate,
     resolution: WorkTypeResolution,
+    *,
+    publication_date: DateValue | None = None,
 ) -> ResolutionResult | None:
     failure = WORK_TYPE_FAILURE_DETAILS.get(resolution.status)
     if failure is None:
         return None
     reason_code, detail = failure
-    return ResolutionResult(candidate, None, reason_code=reason_code, detail=detail)
+    return ResolutionResult(
+        candidate,
+        None,
+        reason_code=reason_code,
+        detail=detail,
+        work_type_evidence=resolution.evidence,
+        review_publication_date=publication_date,
+    )
 
 
 def _native_arrival_eligible(
@@ -1184,7 +1279,9 @@ def _resolve_philpapers_arrival(
         )
 
     type_resolution = _work_type_resolution(candidate)
-    type_failure = _work_type_resolution_failure(candidate, type_resolution)
+    type_failure = _work_type_resolution_failure(
+        candidate, type_resolution, publication_date=publication_date
+    )
     if type_failure is not None:
         return type_failure
     return ResolutionResult(
@@ -1304,7 +1401,15 @@ def _enrich_native_arrival(
         openalex=openalex,
         default_type=native.work.work_type,
     )
-    type_failure = _work_type_resolution_failure(candidate, type_resolution)
+    type_failure = _work_type_resolution_failure(
+        candidate,
+        type_resolution,
+        publication_date=(
+            publication_date
+            or (crossref.publication_date if crossref is not None else None)
+            or (openalex.publication_date if openalex is not None else None)
+        ),
+    )
     if type_failure is not None:
         return type_failure
     source_ids = set(native.work.source_ids)
@@ -1360,6 +1465,7 @@ def resolve_bibliography(
     source_failures: dict[str, str] | None = None,
     unavailable_sources: dict[str, str] | None = None,
     circuit_skip_counts: dict[str, int] | None = None,
+    identity_reviews: dict[tuple[str, str, str], ReviewedIdentity] | None = None,
 ) -> ResolutionResult:
     """Resolve exact bibliography and obtain independent publication evidence."""
 
@@ -1376,6 +1482,7 @@ def resolve_bibliography(
     openalex: OpenAlexWork | None = None
     lookup_failures: list[str] = []
     identity_review_sources: list[str] = []
+    identity_comparisons: list[IdentityComparison] = []
     cached_crossref = (
         bibliography_cache.lookup_crossref(
             display.title,
@@ -1399,8 +1506,19 @@ def resolve_bibliography(
                 mailto=config.crossref_mailto,
                 client=crossref_client,
             )
-        except IdentityReviewRequired:
-            identity_review_sources.append("Crossref")
+        except IdentityReviewRequired as error:
+            reviewed, pending = resolve_identity_review(
+                error,
+                record_url=candidate.stable_url,
+                title=display.title,
+                author=display.author_text,
+                reviews=identity_reviews,
+                source_doi_hints=candidate.doi_hints,
+            )
+            crossref = reviewed if isinstance(reviewed, CrossrefWork) else None
+            if pending or not error.comparisons:
+                identity_review_sources.append("Crossref")
+                identity_comparisons.extend(pending)
         except CrossrefError as error:
             detail = str(error)
             lookup_failures.append(detail)
@@ -1451,8 +1569,19 @@ def resolve_bibliography(
                     mailto=config.openalex_mailto,
                     client=openalex_client,
                 )
-            except IdentityReviewRequired:
-                identity_review_sources.append("OpenAlex")
+            except IdentityReviewRequired as error:
+                reviewed, pending = resolve_identity_review(
+                    error,
+                    record_url=candidate.stable_url,
+                    title=display.title,
+                    author=display.author_text,
+                    reviews=identity_reviews,
+                    source_doi_hints=candidate.doi_hints,
+                )
+                openalex = reviewed if isinstance(reviewed, OpenAlexWork) else None
+                if pending or not error.comparisons:
+                    identity_review_sources.append("OpenAlex")
+                    identity_comparisons.extend(pending)
             except OpenAlexError as error:
                 detail = str(error)
                 lookup_failures.append(detail)
@@ -1483,6 +1612,7 @@ def resolve_bibliography(
                 "retitled version. Semantic identity review is required before notification "
                 f"({', '.join(identity_review_sources)})."
             ),
+            identity_comparisons=tuple(identity_comparisons),
         )
 
     if crossref is None and openalex is None:
@@ -1523,7 +1653,14 @@ def resolve_bibliography(
         crossref=crossref,
         openalex=openalex,
     )
-    type_failure = _work_type_resolution_failure(candidate, type_resolution)
+    type_failure = _work_type_resolution_failure(
+        candidate,
+        type_resolution,
+        publication_date=(
+            (crossref.publication_date if crossref is not None else None)
+            or (openalex.publication_date if openalex is not None else None)
+        ),
+    )
     if type_failure is not None:
         return type_failure
 
@@ -1670,7 +1807,9 @@ def _resolve_batched_openalex(
     if not _candidate_matches_openalex(candidate, openalex):
         return None
     type_resolution = _work_type_resolution(candidate, openalex=openalex)
-    type_failure = _work_type_resolution_failure(candidate, type_resolution)
+    type_failure = _work_type_resolution_failure(
+        candidate, type_resolution, publication_date=openalex.publication_date
+    )
     if type_failure is not None:
         return type_failure
     if openalex.publication_date is None:
@@ -2015,16 +2154,20 @@ def _cnki_coverage(
     recent_issues: tuple[CnkiIssue, ...] | None = None,
     missing_month: int = 0,
     outside_window: int = 0,
+    weekly: bool = False,
+    previously_seen: int = 0,
 ) -> SourceCoverage:
     recent_detail = (
-        f"即时窗口显示 {len(recent_issues)} 项；缺少明确月份 {missing_month} 项；"
-        f"月份在窗口外 {outside_window} 项。"
+        f"{'周报' if weekly else '即时'}窗口显示 {len(recent_issues)} 项；"
+        f"缺少明确月份或日期冲突 {missing_month} 项；"
+        f"月份在窗口外 {outside_window} 项；先前已列 {previously_seen} 项。"
         if recent_issues is not None
         else ""
     )
     recent_detail_en = (
-        f"On-demand window shows {len(recent_issues)} issues; {missing_month} lack an "
-        f"explicit month and {outside_window} fall outside the window. "
+        f"{'Weekly' if weekly else 'On-demand'} window shows {len(recent_issues)} issues; "
+        f"{missing_month} lack an explicit month or have conflicting dates and "
+        f"{outside_window} fall outside the window; {previously_seen} were already listed. "
         if recent_issues is not None
         else ""
     )
@@ -2046,7 +2189,7 @@ def _cnki_coverage(
     )
 
 
-def _cnki_issues_in_on_demand_window(
+def _cnki_issues_in_window(
     issues: tuple[CnkiIssue, ...],
     *,
     window_start: datetime,
@@ -2066,7 +2209,7 @@ def _cnki_issues_in_on_demand_window(
     local_end = window_end.astimezone(timezone)
     for issue in issues:
         month = issue.label_month
-        if month is None:
+        if month is None or issue.date_conflict:
             missing_month += 1
             continue
         month_start = datetime(issue.year, month, 1, tzinfo=timezone)
@@ -2087,45 +2230,40 @@ def _official_issues_for_window(
     window_end: datetime,
     *,
     first_observed_only: bool = False,
+    publication_month_only: bool = False,
 ):
     db_path = config.storage.state_database.parent / "official-journals.sqlite3"
     local_start = window_start.astimezone(config.timezone).date()
     local_last = (window_end.astimezone(config.timezone) - timedelta(microseconds=1)).date()
     all_reviewed = list_issues(db_path, reviewed_only=True)
-    candidates = issues_in_window(all_reviewed, local_start, local_last)
+    if publication_month_only:
+        candidates = tuple(
+            issue
+            for issue in all_reviewed
+            if (value := issue.label_month or issue.issue_published_on) is not None
+            and (local_start.year, local_start.month)
+            <= (int(value[:4]), int(value[5:7]))
+            <= (local_last.year, local_last.month)
+        )
+    else:
+        candidates = issues_in_window(all_reviewed, local_start, local_last)
     if not first_observed_only:
         return distinct_issue_leads(candidates)
-    first_review_by_issue = {
-        (issue.journal_id, issue.year, issue.issue): min(
-            datetime.fromisoformat(other.reviewed_at or other.observed_at)
-            for other in all_reviewed
-            if (other.journal_id, other.year, other.issue)
-            == (issue.journal_id, issue.year, issue.issue)
+    first_review_by_issue = {}
+    for issue in all_reviewed:
+        key = issue.journal_id, issue.year, issue.issue
+        reviewed_at = datetime.fromisoformat(issue.reviewed_at or issue.observed_at)
+        previous = first_review_by_issue.get(key)
+        if previous is None or reviewed_at < previous:
+            first_review_by_issue[key] = reviewed_at
+    return distinct_issue_leads(
+        tuple(
+            issue
+            for issue in candidates
+            if window_start
+            <= first_review_by_issue[(issue.journal_id, issue.year, issue.issue)]
+            < window_end
         )
-        for issue in candidates
-    }
-    return distinct_issue_leads(tuple(
-        issue
-        for issue in candidates
-        if window_start
-        <= first_review_by_issue[(issue.journal_id, issue.year, issue.issue)]
-        < window_end
-    ))
-
-
-def _official_months_for_cnki(
-    issues: tuple[CnkiIssue, ...], official_issues
-) -> tuple[CnkiIssue, ...]:
-    months = {
-        (item.title, item.year, item.issue): int(item.label_month[-2:])
-        for item in official_issues
-        if item.label_month is not None
-    }
-    return tuple(
-        replace(issue, label_month=months.get((issue.venue, issue.year, issue.issue)))
-        if issue.label_month is None and (issue.venue, issue.year, issue.issue) in months
-        else issue
-        for issue in issues
     )
 
 
@@ -2186,7 +2324,12 @@ def _load_wanfang_discovery(
 
 
 def _wanfang_discovery_coverage(
-    scan: WanfangDiscoveryScan, *, displayed: int, missing_month: int, outside_window: int
+    scan: WanfangDiscoveryScan,
+    *,
+    displayed: int,
+    missing_month: int,
+    outside_window: int,
+    previously_seen: int = 0,
 ) -> SourceCoverage:
     return SourceCoverage(
         source="wanfang-discovery",
@@ -2196,6 +2339,7 @@ def _wanfang_discovery_coverage(
             f"有限中文期刊题录检索：完成 {scan.result_pages}/{scan.requested_pages} 页；"
             f"候选 {len(scan.records)} 条；窗口可列 {displayed} 条；"
             f"缺少可信月份 {missing_month} 条；窗外 {outside_window} 条；"
+            f"先前已列 {previously_seen} 条；"
             f"截断 {scan.incomplete_queries} 项；失败 {len(scan.failures)} 项。"
             "万方标示出版时间不等于首次发表日，未验证全库覆盖。"
         ),
@@ -2203,6 +2347,7 @@ def _wanfang_discovery_coverage(
             f"Bounded Chinese-journal search: {scan.result_pages}/{scan.requested_pages} pages; "
             f"{len(scan.records)} leads, {displayed} displayed, {missing_month} without a "
             f"reliable month, {outside_window} outside the window, "
+            f"{previously_seen} already listed, "
             f"{scan.incomplete_queries} truncated scopes, {len(scan.failures)} failed scopes. "
             "Wanfang's publication label is not a first-publication date; "
             "full coverage is unverified."
@@ -2314,6 +2459,7 @@ def _resolve_candidates_with_connection_reuse(
     source_failures: dict[str, str] | None = None,
     unavailable_sources: dict[str, str] | None = None,
     circuit_skip_counts: dict[str, int] | None = None,
+    identity_reviews: dict[tuple[str, str, str], ReviewedIdentity] | None = None,
     progress: Callable[[int, int], None] | None = None,
 ) -> tuple[ResolutionResult, ...]:
     """Resolve candidates while pooling default bibliographic connections."""
@@ -2341,6 +2487,7 @@ def _resolve_candidates_with_connection_reuse(
                     source_failures=source_failures,
                     unavailable_sources=unavailable_sources,
                     circuit_skip_counts=circuit_skip_counts,
+                    identity_reviews=identity_reviews,
                 )
             else:
                 result = resolver(
@@ -2395,6 +2542,9 @@ def run_on_demand(
     allow_development_fixture: bool = False,
     progress: ProgressReporter | None = None,
     show_recently_changed: bool = False,
+    type_reviews: dict[str, ReviewedWorkType] | None = None,
+    identity_reviews: dict[tuple[str, str, str], ReviewedIdentity] | None = None,
+    reviewed_feed_snapshots: tuple[FeedSnapshot, ...] | None = None,
     cnki_loader: Callable[..., CnkiScan] = scan_cnki_space,
     wanfang_loader: Callable[..., WanfangScan] = scan_wanfang_cnki,
     wanfang_discovery_loader: Callable[..., WanfangDiscoveryScan] = scan_wanfang_discovery,
@@ -2437,16 +2587,35 @@ def run_on_demand(
     )
     if progress is not None:
         progress("feeds", 0, len(config.feeds))
-    feed_snapshots = _load_all_feeds(
-        config,
-        checked_at=requested_at,
-        loader=feed_loader,
-        progress=(
-            (lambda completed, total: progress("feeds", completed, total))
-            if progress is not None
-            else None
-        ),
-    )
+    if reviewed_feed_snapshots is None:
+        feed_snapshots = _load_all_feeds(
+            config,
+            checked_at=requested_at,
+            loader=feed_loader,
+            progress=(
+                (lambda completed, total: progress("feeds", completed, total))
+                if progress is not None
+                else None
+            ),
+        )
+    else:
+        configured = {feed.feed_key: feed for feed in config.feeds}
+        if len(reviewed_feed_snapshots) != len(configured) or {
+            item.feed_key for item in reviewed_feed_snapshots
+        } != set(configured):
+            raise PipelineError("review feed snapshot does not match configured feeds")
+        for item in reviewed_feed_snapshots:
+            feed = configured[item.feed_key]
+            if (
+                item.category_id != feed.category_id
+                or item.category_url != feed.url
+                or item.checked_at.tzinfo is None
+                or item.checked_at.astimezone(UTC) != window_end.astimezone(UTC)
+            ):
+                raise PipelineError("review feed snapshot has inconsistent category or window")
+        feed_snapshots = reviewed_feed_snapshots
+        if progress is not None:
+            progress("feeds", len(feed_snapshots), len(feed_snapshots))
     current_candidates = merge_feed_snapshots(feed_snapshots)
     oai_snapshot: OAIWindowSnapshot | None = None
     oai_failure: str | None = None
@@ -2465,6 +2634,7 @@ def run_on_demand(
             current_candidates = enrich_candidates_with_oai(current_candidates, oai_snapshot)
         if progress is not None:
             progress("oai", 1, 1)
+    current_candidates = _attach_type_reviews(current_candidates, type_reviews)
     window_years = set(
         range(
             window_start.astimezone(config.timezone).year,
@@ -2601,8 +2771,10 @@ def run_on_demand(
     if progress is not None:
         progress("doi_batch", len(doi_values), len(doi_values))
     doi_batch_request_upper_bound = (
-        len(doi_values_to_query) + MAX_DOI_BATCH_SIZE - 1
-    ) // MAX_DOI_BATCH_SIZE
+        (len(doi_values_to_query) + MAX_DOI_BATCH_SIZE - 1)
+        // MAX_DOI_BATCH_SIZE
+        * MAX_BIBLIOGRAPHIC_PAGES
+    )
     resolution_results: list[ResolutionResult] = list(explicit_unsupported_results)
     title_candidates: list[MergedCandidate] = []
     doi_batch_resolved_count = 0
@@ -2679,12 +2851,11 @@ def run_on_demand(
     elif title_queries_to_query:
         circuit_skip_counts["openalex"] = circuit_skip_counts.get("openalex", 0) + 1
     if bibliography_cache is not None:
+        fresh_works_by_title: dict[str, list[OpenAlexWork]] = {}
+        for work in fresh_title_works:
+            fresh_works_by_title.setdefault(normalize_title(work.title), []).append(work)
         for title in title_queries_to_query:
-            exact_works = tuple(
-                work
-                for work in fresh_title_works
-                if normalize_title(work.title) == normalize_title(title)
-            )
+            exact_works = tuple(fresh_works_by_title.get(normalize_title(title), ()))
             bibliography_cache.store_openalex_title_candidates(
                 title,
                 exact_works,
@@ -2705,35 +2876,32 @@ def run_on_demand(
     initial_title_batches = (
         len(title_queries_to_query) + MAX_TITLE_BATCH_SIZE - 1
     ) // MAX_TITLE_BATCH_SIZE
-    title_batch_request_upper_bound = initial_title_batches * (2 ** (MAX_TITLE_SPLIT_DEPTH + 1) - 1)
+    title_batch_request_upper_bound = initial_title_batches * MAX_BIBLIOGRAPHIC_PAGES
     fallback_candidates: list[MergedCandidate] = []
     fallback_reason_by_source_id: dict[str, str] = {}
     title_batch_resolved_count = 0
     title_batch_terminal_unresolved_count = 0
+    title_work_index = OpenAlexIdentityIndex(title_works)
+    normalized_work_titles = {normalize_title(work.title) for work in title_works}
     for candidate in title_candidates:
         display = split_display_bibliography(candidate.display_title)
-        normalized_candidate_title = normalize_title(display.title)
-        same_normalized_title_works = tuple(
-            work
-            for work in title_works
-            if normalize_title(work.title) == normalized_candidate_title
-        )
-        batched_matches = [
-            resolved
-            for openalex in title_works
-            if _candidate_matches_openalex(candidate, openalex)
-            and (
-                resolved := _resolve_batched_openalex(
-                    candidate,
-                    openalex,
-                    snapshot,
-                    window_start,
-                    window_end,
-                    requested_at,
-                )
+        same_normalized_title_works = normalize_title(display.title) in normalized_work_titles
+        batched_matches = []
+        for openalex in title_work_index.possible(
+            display.title, display.author_text, candidate.doi_hints
+        ):
+            resolved = _resolve_batched_openalex(
+                candidate,
+                openalex,
+                snapshot,
+                window_start,
+                window_end,
+                requested_at,
             )
-            is not None
-        ]
+            if resolved is not None:
+                batched_matches.append(resolved)
+                if len(batched_matches) == 2:
+                    break
         if len(batched_matches) == 1:
             terminal = batched_matches[0]
             resolution_results.append(terminal)
@@ -2805,6 +2973,7 @@ def run_on_demand(
         source_failures=bibliographic_source_failures,
         unavailable_sources=unavailable_bibliographic_sources,
         circuit_skip_counts=circuit_skip_counts,
+        identity_reviews=identity_reviews,
         progress=(
             (lambda completed, total: progress("fallback", completed, total))
             if progress is not None
@@ -2849,6 +3018,24 @@ def run_on_demand(
                         author_text=display.author_text or None,
                         stable_url=result.candidate.stable_url,
                         reason_code=result.reason_code,
+                        work_type_evidence=result.work_type_evidence,
+                        evidence_fingerprint=(
+                            work_type_evidence_fingerprint(result.work_type_evidence)
+                            if result.work_type_evidence
+                            else None
+                        ),
+                        publication_date=result.review_publication_date,
+                        identity_comparisons=result.identity_comparisons,
+                        identity_fingerprints=tuple(
+                            identity_evidence_fingerprint(
+                                result.candidate.stable_url,
+                                display.title,
+                                display.author_text,
+                                comparison,
+                                source_doi_hints=result.candidate.doi_hints,
+                            )
+                            for comparison in result.identity_comparisons
+                        ),
                     )
                 )
             continue
@@ -2858,6 +3045,8 @@ def run_on_demand(
         )
 
     for work_id, work in tuple(works.items()):
+        work = _apply_type_review_to_work(work, type_reviews)
+        works[work_id] = work
         failure = WORK_TYPE_FAILURE_DETAILS.get(work.work_type_status)
         if failure is None:
             continue
@@ -2868,8 +3057,15 @@ def run_on_demand(
             HumanReviewItem(
                 title=work.title,
                 author_text="; ".join(work.authors) or None,
-                stable_url=work.stable_url,
+                stable_url=_review_record_url(work) or work.stable_url,
                 reason_code=reason_code,
+                work_type_evidence=work.work_type_evidence,
+                evidence_fingerprint=(
+                    work_type_evidence_fingerprint(work.work_type_evidence)
+                    if work.work_type_evidence
+                    else None
+                ),
+                publication_date=work.publication_date,
             )
         )
         del works[work_id]
@@ -2977,11 +3173,8 @@ def run_on_demand(
         loader=cnki_loader,
     )
     if cnki_scan is not None:
-        cnki_scan = replace(
-            cnki_scan,
-            issues=_official_months_for_cnki(cnki_scan.issues, official_issues),
-        )
-        recent_issues, missing_month, outside_window = _cnki_issues_in_on_demand_window(
+        cnki_scan = _cnki_scan_with_dates(config, cnki_scan)
+        recent_issues, missing_month, outside_window = _cnki_issues_in_window(
             cnki_scan.issues,
             window_start=window_start,
             window_end=window_end,
@@ -3230,6 +3423,8 @@ def run_on_demand(
         window_end=window_end,
         report_markdown=report_markdown,
         stats=stats,
+        human_review_items=tuple(human_review_items),
+        feed_snapshots=feed_snapshots,
     )
 
 
@@ -3248,6 +3443,8 @@ def run_weekly(
     before_commit: Callable[[], None] | None = None,
     defer_uncertain_until_later_window: bool = False,
     show_recently_changed: bool = False,
+    type_reviews: dict[str, ReviewedWorkType] | None = None,
+    identity_reviews: dict[tuple[str, str, str], ReviewedIdentity] | None = None,
     cnki_loader: Callable[..., CnkiScan] = scan_cnki_space,
     wanfang_loader: Callable[..., WanfangScan] = scan_wanfang_cnki,
     wanfang_discovery_loader: Callable[..., WanfangDiscoveryScan] = scan_wanfang_discovery,
@@ -3305,6 +3502,7 @@ def run_weekly(
             oai_failure = str(error)
         else:
             current_candidates = enrich_candidates_with_oai(current_candidates, oai_snapshot)
+    current_candidates = _attach_type_reviews(current_candidates, type_reviews)
     current_by_key = {(item.source, item.source_id): item for item in current_candidates}
     current_ids = {item.source_id for item in current_candidates}
     known_ids = state.known_source_ids(SOURCE_NAME, current_ids)
@@ -3327,7 +3525,12 @@ def run_weekly(
     unavailable_bibliographic_sources: dict[str, str] = {}
     circuit_skip_counts: dict[str, int] = {}
     resolution_results = _resolve_candidates_with_connection_reuse(
-        tuple(sorted(to_process.values(), key=lambda item: item.source_id)),
+        tuple(
+            sorted(
+                _attach_type_reviews(tuple(to_process.values()), type_reviews),
+                key=lambda item: item.source_id,
+            )
+        ),
         snapshot,
         config,
         window_start,
@@ -3337,6 +3540,7 @@ def run_weekly(
         source_failures=bibliographic_source_failures,
         unavailable_sources=unavailable_bibliographic_sources,
         circuit_skip_counts=circuit_skip_counts,
+        identity_reviews=identity_reviews,
     )
 
     deferred_keys: set[tuple[str, str]] = set()
@@ -3378,6 +3582,24 @@ def run_weekly(
                         author_text=display.author_text or None,
                         stable_url=result.candidate.stable_url,
                         reason_code=result.reason_code,
+                        work_type_evidence=result.work_type_evidence,
+                        evidence_fingerprint=(
+                            work_type_evidence_fingerprint(result.work_type_evidence)
+                            if result.work_type_evidence
+                            else None
+                        ),
+                        publication_date=result.review_publication_date,
+                        identity_comparisons=result.identity_comparisons,
+                        identity_fingerprints=tuple(
+                            identity_evidence_fingerprint(
+                                result.candidate.stable_url,
+                                display.title,
+                                display.author_text,
+                                comparison,
+                                source_doi_hints=result.candidate.doi_hints,
+                            )
+                            for comparison in result.identity_comparisons
+                        ),
                     )
                 )
             outcomes.append(
@@ -3395,14 +3617,17 @@ def run_weekly(
             result.work if current_work is None else _merge_work(current_work, result.work)
         )
 
+    sources_by_work: dict[str, list[tuple[str, str]]] = {}
+    for key, work_id in source_to_work.items():
+        sources_by_work.setdefault(work_id, []).append(key)
     for work_id, work in tuple(works.items()):
+        work = _apply_type_review_to_work(work, type_reviews)
+        works[work_id] = work
         failure = WORK_TYPE_FAILURE_DETAILS.get(work.work_type_status)
         if failure is None:
             continue
         reason_code, detail = failure
-        for key, source_work_id in tuple(source_to_work.items()):
-            if source_work_id != work_id:
-                continue
+        for key in sources_by_work.get(work_id, ()):
             source, source_id = key
             unresolved_updates.append(
                 UnresolvedUpdate(
@@ -3418,8 +3643,15 @@ def run_weekly(
                 HumanReviewItem(
                     title=work.title,
                     author_text="; ".join(work.authors) or None,
-                    stable_url=work.stable_url,
+                    stable_url=_review_record_url(work) or work.stable_url,
                     reason_code=reason_code,
+                    work_type_evidence=work.work_type_evidence,
+                    evidence_fingerprint=(
+                        work_type_evidence_fingerprint(work.work_type_evidence)
+                        if work.work_type_evidence
+                        else None
+                    ),
+                    publication_date=work.publication_date,
                 )
             )
             outcomes.append(
@@ -3535,7 +3767,11 @@ def run_weekly(
     )
     try:
         official_issues = _official_issues_for_window(
-            config, window_start, window_end, first_observed_only=True
+            config,
+            window_start,
+            window_end,
+            first_observed_only=True,
+            publication_month_only=True,
         )
     except (OSError, ValueError, sqlite3.DatabaseError):
         official_issues = ()
@@ -3574,19 +3810,45 @@ def run_weekly(
         loader=cnki_loader,
     )
     cnki_baseline = cnki_scan is not None and state.get_checkpoint("cnki-space-issues") is None
+    cnki_window = ()
+    missing_month = outside_window = 0
+    if cnki_scan is not None:
+        cnki_scan = _cnki_scan_with_dates(config, cnki_scan)
+        cnki_window, missing_month, outside_window = _cnki_issues_in_window(
+            cnki_scan.issues,
+            window_start=window_start,
+            window_end=window_end,
+            timezone=config.timezone,
+        )
     if cnki_scan is None:
         cnki_report_issues = None
     elif cnki_baseline:
-        cnki_report_issues = cnki_scan.issues
+        cnki_report_issues = cnki_window
     else:
-        known_issue_keys = state.known_cnki_issue_keys({issue.key for issue in cnki_scan.issues})
+        known_issue_keys = state.known_cnki_issue_keys(
+            {issue.key for issue in cnki_window}, month_supported_only=True
+        )
         cnki_report_issues = tuple(
-            issue for issue in cnki_scan.issues if issue.key not in known_issue_keys
+            issue for issue in cnki_window if issue.key not in known_issue_keys
         )
     if cnki_scan is not None:
-        coverage += (_cnki_coverage(cnki_scan),)
-        cnki_assessments, review_coverage = _cnki_review_assessments(config, cnki_scan)
-        cnki_overlaps = _cnki_work_overlaps(cnki_scan, works)
+        report_scan = replace(
+            cnki_scan,
+            issues=cnki_report_issues or (),
+            records=tuple(record for issue in cnki_report_issues or () for record in issue.records),
+        )
+        coverage += (
+            _cnki_coverage(
+                cnki_scan,
+                recent_issues=cnki_report_issues or (),
+                missing_month=missing_month,
+                outside_window=outside_window,
+                weekly=True,
+                previously_seen=len(cnki_window) - len(cnki_report_issues or ()),
+            ),
+        )
+        cnki_assessments, review_coverage = _cnki_review_assessments(config, report_scan)
+        cnki_overlaps = _cnki_work_overlaps(report_scan, works)
         wanfang_records = tuple(
             record for issue in cnki_report_issues or () for record in issue.records
         )
@@ -3636,6 +3898,7 @@ def run_weekly(
                 displayed=len(wanfang_report_records),
                 missing_month=wanfang_missing_month,
                 outside_window=wanfang_outside_window,
+                previously_seen=len(wanfang_window) - len(wanfang_report_records),
             ),
         )
     else:
@@ -3665,6 +3928,9 @@ def run_weekly(
     stats = {
         "cnki_issue_candidates": len(cnki_scan.issues) if cnki_scan is not None else 0,
         "cnki_new_issue_observations": 0 if cnki_baseline else len(cnki_report_issues or ()),
+        "cnki_window_issue_candidates": len(cnki_window),
+        "cnki_issue_month_unknown": missing_month,
+        "cnki_issue_outside_window": outside_window,
         "cnki_source_failed": int(cnki_scan is not None and cnki_scan.status == "failed"),
         "feed_entries": sum(len(item.entries) for item in feed_snapshots),
         "unique_current_records": len(current_candidates),
@@ -3740,7 +4006,18 @@ def run_weekly(
             unresolved=tuple(unresolved_updates),
             notifications=tuple(notifications),
             interest_profile_snapshot=profile_snapshot,
-            cnki_issues=cnki_scan.issues if cnki_scan is not None else (),
+            # Future/earlier dated issues are counted in scan coverage, but must not
+            # consume a later eligible window during sequential catch-up. Keep
+            # undated observations so later corroboration retains their first sighting.
+            cnki_issues=(
+                tuple(
+                    issue
+                    for issue in cnki_scan.issues
+                    if issue in cnki_window or issue.label_month is None or issue.date_conflict
+                )
+                if cnki_scan is not None
+                else ()
+            ),
             cnki_scan_completed=(cnki_scan is not None and not cnki_scan.failures),
             wanfang_discovery_ids=tuple(record.record_id for record in wanfang_window),
             wanfang_discovery_completed=(
@@ -3758,6 +4035,7 @@ def run_weekly(
         report_path=report_path,
         report_markdown=report_markdown,
         stats=stats,
+        human_review_items=tuple(human_review_items),
     )
 
 

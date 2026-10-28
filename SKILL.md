@@ -19,12 +19,26 @@ scholarly quality and importance; available citation counts only order search re
   Only supported paper forms may enter results. Missing citation data must not
   remove a verified paper or be represented as zero.
   With year bounds, exclude records without a feed year hint before bibliographic
-  lookups. Without year bounds, include all verified matching papers even when
+  lookups unless an exact, publisher-checked `--bibliographic-reviews` entry
+  supplies the publication year. A `--type-reviews` entry alone never bypasses
+  this date gate. The private search review queue lists these records as
+  `year_review_pending`, with their source URL, title, and author; inspect
+  accessible promising works and save an exact bibliography decision before
+  rerunning. Without year bounds, include all verified matching papers even when
   feed dates, year hints, or publication dates are missing; do not impose the
   default yearly-result page size or invent a recent-year window. In user
   reports, mention unresolved paper types or bibliographic identities without
-  counts. Offer existing source links for optional user review; do not initiate
-  another search or investigation to resolve those records.
+  counts. Follow the individual document-review process in
+  [work-type-policy.md](references/work-type-policy.md) for conflicting, unknown,
+  and apparently clear but suspect source types: generate a private queue,
+  inspect each accessible work, save exact evidence-bound decisions, and rerun
+  the same filters with `--type-reviews`. Confirmed results also appear in the
+  private queue so an original publisher's editorial label can correct an
+  OpenAlex article label. A type decision alone never establishes a DOI, year,
+  or author: use the separate publisher-checked `--bibliographic-reviews` path
+  in [paper-search.md](references/paper-search.md) for those facts. When a
+  lookup fails, identify the result as partial rather than complete.
+  Do not raise search budgets or broaden the user's category/year scope to resolve them.
 - **Monitor new papers:** follow the onboarding and monitoring workflow below.
   `pull-now` remains a recent-paper request, separate from historical search.
 
@@ -101,6 +115,22 @@ watchlist's `sources.wanfang.enabled` also defaults to false and is independent
 of the journal-watch option. A private opt-in must not be copied into public
 defaults or assumed for another user.
 Only `reviewed` observations enter search, pull-now, or weekly issue leads.
+When an official WeChat TOC appears before the registered website, open the exact
+post in a browser and verify the account, issue label, any explicit month on the
+cover, announcement date, and the complete title/author list. A command-line
+HTTP redirect to a WeChat challenge is a source access failure, not an empty TOC;
+do not automate challenge completion or infer a month from the issue number.
+Record the issue with `journal-watch observe --evidence-kind official-wechat`
+and the separately verified `--label-month` / `--announcement-on` fields.
+For a complete browser-reviewed TOC, keep a minimal JSON file outside Git with
+`journal`, `year`, `issue`, `source_url`, matching date fields,
+`complete_toc: true`, `article_count`, and `articles` containing only `title`
+and `author`; then use `journal-watch import-toc --input <file>
+--confirm-evidence`. The importer requires an already reviewed issue with the
+same URL and date evidence. It saves local publisher leads and a complete-TOC
+audit denominator, but does not classify paper type, interest, institutional
+affiliation, or first publication day. This is a browser-assisted path for a
+known official post, not an unattended feed of an account's future posts.
 Weekly reports mention an issue only in the window of its first review; a
 month label alone must not repeat the same issue in every week of that month.
 Treat an official WeChat posting date as an announcement date, not a journal
@@ -110,18 +140,41 @@ When the
 private watchlist enables `sources.cnki_space`, `search`, `pull-now`, and
 `weekly-run` perform bounded CNKI Space metadata discovery using the public
 search method documented by the third-party cnki-search MCP. Its candidates and
-issue observations remain separate from verified PhilPapers matches. An issue
-labelled only with a year and issue number may be mentioned as first observed
-this week; do not invent a month or day or call the papers first published this
-week. Disclose blocked or truncated searches, and do not present this limited
-source as the complete CNKI KNS collection.
-For `pull-now`, show Chinese journal leads only when a reviewed official issue
-record or the database source explicitly labels a month that overlaps the
-selected rolling window. Withhold
+issue observations remain separate from verified PhilPapers matches. For both
+`weekly-run` and `pull-now`, show Chinese journal leads only when a reviewed
+publisher issue/article page or the database source supports a publication month
+overlapping the respective window. This also applies to the first weekly baseline.
+Disclose blocked or truncated searches, and do not present this limited source
+as the complete CNKI KNS collection. Withhold
 year-only or issue-number-only leads from that section, disclose their count,
 and do not infer that zero displayed leads means no recent Chinese papers.
 The month label is not an article's verified first-publication day; leave
 broader historical discovery to an explicit `search` request.
+Weekly reports put Chinese publisher, CNKI, and Wanfang sections before the
+PhilPapers paper sections in both language versions. All three modes share the
+same publisher-date evidence. Before weekly, immediate, or historical discovery
+with CNKI enabled, use `.venv/Scripts/python.exe scripts/prepare_weekly_cnki.py
+--config config/watchlist.yaml` for a bounded, read-only candidate list. Weekly is
+the default; add `--mode pull-now --days N` for the same immediate window, or
+`--mode search --year-from YYYY --year-to YYYY` for the historical year scope
+(omit year flags when unrestricted). Keep those options aligned with the final
+command. When CNKI
+lacks dates, follow the article to its publisher's official article or issue page
+and verify the same title, authors, journal, year, and issue. Save explicit
+`issue_label_month` (YYYY-MM) or `publication_date` (YYYY-MM-DD) with its URL and
+timezone-aware review time in the private reviewed-evidence file. These optional
+fields require a journal article/issue source, not a catalog record. An announcement,
+page-update date, issue number, or frequency is insufficient. Missing or conflicting
+months remain in coverage counts, without article titles in weekly or immediate
+lists. Historical `search` retains candidates within the requested year scope,
+explicitly marking unknown or conflicting months rather than calling them recent.
+Both structured search results and Markdown show publisher dates and source URLs;
+a month-only source stays month-only. Then run the requested `pull-now` or `search`,
+or the regular weekly `catch-up` once. Do not rerun a committed successful window to correct
+its presentation; preserve an original private report and amend the saved report
+without changing committed checkpoints or notification history. The work-type
+conflict review below uses an uncommitted first pass and an exact-window follow-up.
+A formerly monthless CNKI observation remains eligible after later date corroboration.
 An optional Git-ignored `sources.cnki_space.reviewed_evidence` file holds
 manually checked journal or catalog bibliographies. The source page must support
 the stated title, authors, journal, year, issue, and any publication-time China
@@ -237,6 +290,24 @@ for existing schedules and configuration consistency.
    the same official JSON response in a private browser session and validate it
    with `pfm taxonomy-import`; do not impersonate a browser or reuse cookies to
    bypass the challenge.
+   If a selected category page is challenged but its ordinary browser page
+   presents an `RSS feed` control, the user may generate the official link there
+   and save it as `official_rss_url` beside that category's `url` in the private,
+   Git-ignored watchlist. Validate that the link's host, category ID, slug,
+   unfiltered scope and RSS parameters match the confirmed category. The official
+   page may generate `sort=cat` or `sort=pubYear`; ordering affects which records
+   appear first in a bounded feed and does not establish a publication date.
+   Historical catch-up uses the private link only for the matching category ID
+   and page URL, without storing it in the past profile. This link is an optional
+   direct feed entrypoint, not a replacement for the taxonomy or
+   a way to solve or bypass a challenge. Never paste its opaque `dg` value into
+   public files or logs. If a required category remains challenged and no
+   verified link is available, stop the complete `pull-now` or weekly run.
+   Before scheduled catch-up, run `pfm doctor --live --source philpapers
+   --feeds-config config/watchlist.yaml` to check each configured feed without
+   changing state or exposing the private link. A permanent 403 or contract
+   failure requires source review before retrying; an upstream link can change
+   again despite a successful earlier check.
 2. When a new taxonomy snapshot is obtained, retain the old file and run
    `pfm taxonomy-audit` before changing the private watchlist. Read
    [taxonomy-lifecycle.md](references/taxonomy-lifecycle.md). Never infer a
@@ -342,25 +413,77 @@ for existing schedules and configuration consistency.
    source-specific type evidence, distinguish OpenAlex `book-review` from its
    `review` article type, and withhold supported-versus-unsupported conflicts
    or unknown controlled values instead of defaulting them to `article`.
+   Treat this as a provisional classification, not the end of the investigation.
+   When the report has work-type conflicts, Codex must work through the complete
+   review queue itself, prioritizing candidates with publication or arrival
+   evidence inside the requested seven-day window. Run `pull-now` with
+   `--review-queue-file` in the private state directory, or `weekly-run --dry-run`
+   with that option before committing a weekly report. Open each conflicting
+   PhilPapers/PhilArchive record and, where available, the actual manuscript,
+   paper, or publisher page. Verify identity and inspect enough of the work
+   (title page, body, structure, references and source designation) to decide
+   whether it is a supported paper form, manuscript/preprint, or an excluded
+   book, chapter, abstract, review, dataset, etc. Do not infer type solely from
+   a file extension, an abstract using the word "paper", or a database label.
+   Do not ask the user to routinely classify these items. If neither the work
+   nor sufficiently specific primary bibliographic evidence is accessible,
+   leave that item unresolved and state the precise evidence gap.
+   Save each justified decision in a Git-ignored private JSON file in the
+   schema of [references/work-type-policy.md](references/work-type-policy.md),
+   using the queue's exact PhilPapers URL, title and evidence fingerprint.
+   Re-run `pull-now` with `--as-of` equal to the initial queue's `window_end`,
+   `--review-queue-input` pointing to the initial queue, and `--type-reviews`
+   pointing to the decisions. The private queue preserves the exact first-pass
+   category-feed inventory, so the second pass does not re-fetch and backdate
+   a changed RSS feed. A historical `--as-of` supplied on the first pass cannot
+   reconstruct a feed that was not saved at that earlier time; label such a
+   result as a retrospective projection, not observed historical arrival.
+   For weekly work, use the same
+   explicit window in a final `weekly-run --dry-run` to confirm the result,
+   then make the authorized committed run once. Compare the second queue with
+   the first for changed evidence; source changes invalidate old decisions
+   unless the private review explicitly lists that second, already-inspected
+   evidence fingerprint as described in the work-type policy.
+   Reassess dates independently: a document review settles work form only and
+   must never turn an archive upload date into a publication date or relax the
+   seven-day gate. Report how many conflicts were resolved, still lack source
+   evidence, and qualified for the paper list.
    Batch DOI and normalized-title candidates through OpenAlex, then use bounded
    Crossref/OpenAlex individual lookup for unresolved fallbacks. Compare
    bibliographic identity by a hierarchy of shared identifiers, compatible
    author renderings, diacritic-insensitive spelling, title content tokens, and
    high-confidence orthographic similarity. Do not reduce identity to literal
    title or surname equality. A cross-language title pair without a shared
-   identifier remains `review_required`; Codex may reason about its meaning and
-   ask the user to confirm an alias, but deterministic code must not silently
-   merge it. When the fallback count exceeds the configured maximum, treat that
+   identifier remains `review_required`; the agent may inspect the two works
+   and document an evidence-based pair decision, but deterministic code must not silently
+   merge it.
+   When a specific Crossref or OpenAlex record triggers semantic identity
+   review, write `--review-queue-file` inside the private state directory and
+   inspect its `identity_review_pairs`: source, external record ID, title,
+   authors, DOI, date, comparison reason, and evidence fingerprint. Open the
+   PhilPapers record, external record and available publisher evidence before
+   deciding whether this exact pair is `equivalent` or `distinct`; leave it
+   unresolved when evidence is insufficient. Save the decision with its
+   evidence URLs and note in a private `schema_version: 1` JSON file, following
+   [the pair-review policy](references/identity-review-policy.md), then rerun
+   `weekly-run`, `pull-now`, or `search` with `--identity-reviews`. For an exact
+   pull-now follow-up, also reuse the first window's `--as-of` and
+   `--review-queue-input`. An accepted identity decision only affects the
+   comparison; run the ordinary date, work-type, category and freshness gates.
+   Never infer the final status from a review queue item or a model's semantic
+   guess. If the pair's fingerprint changes, inspect the new evidence again.
+   When the fallback count exceeds the configured maximum, treat that
    maximum as a budget for candidates that really require remote individual
    lookups: resolve every fresh-cache hit without spending a slot, then
    prioritize never-attempted candidates before rotating older completed
    attempts. Keep only a hash of the PhilPapers record ID and the last completed
    attempt time for 31 days; transport failures and circuit-skipped candidates
-   must not be marked completed. Within each initial OpenAlex title batch,
-   inspect the first page before re-querying and retry only titles not represented
-   there. Permit only one split level, so one initial title batch produces at
-   most three logical requests. Report the remainder as deferred instead of
-   pretending it was checked. Anonymous OpenAlex access is suitable for casual use; if repeated
+   must not be marked completed. Reconcile each OpenAlex DOI and title batch
+   against its declared result count, fetching later pages only when needed and
+   stopping after three pages. Treat an incomplete or inconsistent batch as a
+   source failure, not a complete identity comparison or a negative lookup.
+   Report the affected coverage rather than pretending it was checked.
+   Anonymous OpenAlex access is suitable for casual use; if repeated
    requests exhaust its daily budget, accept `OPENALEX_API_KEY` from the local
    process environment without printing or persisting it.
    Never read or write weekly notification history, retry state, run history,
@@ -396,7 +519,7 @@ for existing schedules and configuration consistency.
    provider pricing remain external. Before network access, warn that the first
    pull may take longer while it checks all non-quarantined candidates covered
    by the default 300-fallback budget. With the default 1000-candidate and
-   300-fallback limits, the current DOI/title/fallback plan permits at most 470
+   300-fallback limits, the current DOI/title/fallback plan permits at most 510
    OpenAlex and 300 Crossref logical requests before bounded retry attempts.
    By default, use the separate private bibliographic cache for per-DOI
    OpenAlex batch results, positive per-title OpenAlex batch candidates, and

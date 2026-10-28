@@ -6,13 +6,16 @@ import os
 import socket
 import ssl
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlparse
 from xml.etree import ElementTree
 
 import httpx
 
+from .config import FeedConfig
 from .http_retry import BoundedRequestError, request_with_retry
+from .pipeline import load_philpapers_feed
 from .sources.crossref import API_URL as CROSSREF_API_URL
 from .sources.crossref import DEFAULT_USER_AGENT as CROSSREF_USER_AGENT
 from .sources.openalex import API_URL as OPENALEX_API_URL
@@ -20,7 +23,12 @@ from .sources.openalex import DEFAULT_USER_AGENT as OPENALEX_USER_AGENT
 from .sources.philarchive_oai import DEFAULT_ENDPOINT as PHILARCHIVE_ENDPOINT
 from .sources.philarchive_oai import DEFAULT_USER_AGENT as PHILARCHIVE_USER_AGENT
 from .sources.philarchive_oai import OAI_NS
-from .sources.philpapers_rss import discover_feed_request, fetch_feed, parse_feed
+from .sources.philpapers_rss import (
+    PhilPapersFeedError,
+    discover_feed_request,
+    fetch_feed,
+    parse_feed,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +132,39 @@ def _probe_philpapers(category_url: str) -> str:
     return f"HTTP 与 feed 合约通过；cId={request.category_id}；条目数={len(entries)}。"
 
 
+def _diagnose_configured_philpapers_feed(feed: FeedConfig, index: int) -> DiagnosticCheck:
+    """Exercise the production feed path without exposing its private URL or category."""
+
+    try:
+        snapshot = load_philpapers_feed(feed, datetime.now(UTC))
+    except PhilPapersFeedError as error:
+        cause = error.__cause__
+        if isinstance(cause, BoundedRequestError):
+            status = (
+                f"HTTP {cause.status_code}"
+                if cause.status_code is not None
+                else cause.failure_kind
+            )
+            detail = f"已配置分类 {index} 订阅读取失败：{status}；尝试 {cause.attempts} 次。"
+        else:
+            detail = f"已配置分类 {index} 响应核验失败：{type(error).__name__}。"
+        result = "fail"
+    except Exception as error:  # pragma: no cover - defensive diagnostic boundary
+        detail = f"已配置分类 {index} 探测失败：{type(error).__name__}。"
+        result = "fail"
+    else:
+        mode = "私人官方链接" if feed.official_rss_url is not None else "分类页动态发现"
+        detail = f"已配置分类 {index}；{mode}；RSS 合约通过；条目数={len(snapshot.entries)}。"
+        result = "pass"
+    return DiagnosticCheck(
+        f"philpapers-feed-{index}-http-contract",
+        "philpapers",
+        "http_contract",
+        result,
+        detail,
+    )
+
+
 def _probe_openalex() -> str:
     params = {
         "filter": "openalex:W2741809807",
@@ -186,6 +227,7 @@ def diagnose_sources(
     sources: tuple[str, ...],
     *,
     category_url: str,
+    configured_feeds: tuple[FeedConfig, ...] | None = None,
 ) -> list[DiagnosticCheck]:
     """Run DNS, TLS, HTTP and contract checks without mutating monitor state."""
 
@@ -194,6 +236,12 @@ def diagnose_sources(
         host = SOURCE_HOSTS[source]
         checks.append(_check_dns(source, host))
         checks.append(_check_tls(source, host))
+        if source == "philpapers" and configured_feeds is not None:
+            checks.extend(
+                _diagnose_configured_philpapers_feed(feed, index)
+                for index, feed in enumerate(configured_feeds, 1)
+            )
+            continue
         try:
             detail = PROBES[source](category_url)
         except BoundedRequestError as error:

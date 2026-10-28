@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import httpx
 import pytest
 
 from philosophy_frontier_monitor import pipeline
@@ -28,6 +29,7 @@ from philosophy_frontier_monitor.models import (
     DateValue,
     FreshnessStatus,
     WorkRecord,
+    WorkTypeEvidence,
 )
 from philosophy_frontier_monitor.pipeline import (
     FeedSnapshot,
@@ -55,6 +57,10 @@ from philosophy_frontier_monitor.sources.wanfang import (
     WanfangDiscoveryScan,
     WanfangRecord,
     WanfangScan,
+)
+from philosophy_frontier_monitor.work_type_reviews import (
+    ReviewedWorkType,
+    work_type_evidence_fingerprint,
 )
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
@@ -540,6 +546,39 @@ def test_default_feed_loading_reuses_one_philpapers_connection_pool(monkeypatch)
     assert len(snapshots) == 2
     assert len(created_clients) == 1
     assert observed_clients == [created_clients[0]] * 4
+
+
+def test_direct_official_rss_skips_challenged_category_page(monkeypatch):
+    feed = FeedConfig(
+        category_id="74924",
+        category_name="Plato: Theaetetus",
+        url="https://philpapers.org/browse/plato-theaetetus/",
+        official_rss_url=(
+            "https://philpapers.org/browse/plato-theaetetus/"
+            "?cId=74924&catId=74924&cn=plato-theaetetus&dg=example123"
+            "&format=rss&import_options=1&new=1&proOnly=on&search_inside=1&sort=cat"
+        ),
+    )
+    xml = (FIXTURE_DIR / "philpapers_feed_sample.xml").read_text(encoding="utf-8")
+    requested_urls = []
+
+    def handler(request):
+        requested_urls.append(str(request.url))
+        return httpx.Response(
+            200, text=xml, headers={"content-type": "application/rss+xml"}, request=request
+        )
+
+    monkeypatch.setattr(
+        pipeline,
+        "discover_feed_request",
+        lambda *_args, **_kwargs: pytest.fail("category page must not be requested"),
+    )
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        snapshot = pipeline.load_philpapers_feed(feed, REQUEST_TIME, client=client)
+
+    assert requested_urls == [feed.official_rss_url]
+    assert snapshot.category_id == "74924"
+    assert len(snapshot.entries) == 1
 
 
 def test_default_fallback_reuses_crossref_and_openalex_connection_pools(monkeypatch):
@@ -1321,6 +1360,46 @@ def test_on_demand_resolves_candidates_with_batched_title_and_author_match():
     assert result.stats["matched"] == 1
 
 
+def test_on_demand_keeps_three_indexed_title_matches_ambiguous():
+    fallback_calls = []
+
+    def title_batch(_titles, _config, _attempted_at):
+        return tuple(
+            OpenAlexWork(
+                openalex_id=f"https://openalex.org/W-AMBIG-{index}",
+                doi=None,
+                title="Paper AMBIG",
+                authors=("Ada Scholar",),
+                publication_date=None,
+                work_type="article",
+                stable_url=f"https://openalex.org/W-AMBIG-{index}",
+                raw={},
+            )
+            for index in range(3)
+        )
+
+    def unresolved(candidate, *_args):
+        fallback_calls.append(candidate.source_id)
+        return ResolutionResult(
+            candidate, None, "semantic_identity_review_required", "synthetic ambiguity"
+        )
+
+    result = run_on_demand(
+        CONFIG,
+        now=REQUEST_TIME,
+        feed_loader=loader_with(entry("AMBIG", published_text=None, description="2026")),
+        resolver=unresolved,
+        batch_title_resolver=title_batch,
+        allow_development_fixture=True,
+    )
+
+    assert fallback_calls == ["https://philpapers.org/rec/AMBIG"]
+    assert result.stats["title_batch_resolved_candidates"] == 0
+    assert result.stats["fallback_candidates"] == 1
+    assert result.stats["matched"] == 0
+    assert result.stats["unresolved"] == 1
+
+
 def test_on_demand_keeps_single_title_batch_type_conflict_out_of_fallback():
     def title_batch(_titles, _config, attempted_at):
         return (
@@ -1366,6 +1445,101 @@ def test_on_demand_keeps_single_title_batch_type_conflict_out_of_fallback():
     assert result.stats["automatic_retry_required"] == 0
     assert result.stats["fallback_candidates"] == 0
     assert result.stats["unresolved"] == 1
+
+
+def test_document_review_resolves_same_window_type_conflict_without_changing_date_gate():
+    def title_batch(_titles, _config, attempted_at):
+        return (
+            OpenAlexWork(
+                openalex_id="https://openalex.org/W-TYPE-CONFLICT",
+                doi=None,
+                title="Paper TYPE-CONFLICT",
+                authors=("Ada Scholar",),
+                publication_date=DateValue(
+                    date(2026, 9, 8), DatePrecision.DAY, "openalex", retrieved_at=attempted_at
+                ),
+                work_type="book",
+                stable_url="https://openalex.org/W-TYPE-CONFLICT",
+                raw={},
+            ),
+        )
+
+    kwargs = {
+        "now": REQUEST_TIME,
+        "feed_loader": loader_with(
+            entry("TYPE-CONFLICT", published_text=None, description="Working paper. 2026 draft.")
+        ),
+        "batch_title_resolver": title_batch,
+        "resolver": lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("conflict must not enter individual fallback")
+        ),
+        "allow_development_fixture": True,
+    }
+    first = run_on_demand(CONFIG, **kwargs)
+    candidate = first.human_review_items[0]
+    assert candidate.publication_date is not None
+    assert candidate.evidence_fingerprint is not None
+    review = ReviewedWorkType(
+        record_url=candidate.stable_url or "",
+        title=candidate.title,
+        work_type="manuscript",
+        evidence_fingerprint=candidate.evidence_fingerprint,
+        evidence_urls=("https://example.org/full-paper.pdf",),
+        reviewed_at=REQUEST_TIME,
+        note="Inspected the complete manuscript and its title page.",
+    )
+    reviewed = run_on_demand(
+        CONFIG,
+        **{
+            **kwargs,
+            "feed_loader": lambda *_args: (_ for _ in ()).throw(
+                AssertionError("an exact review must reuse the first feed inventory")
+            ),
+        },
+        type_reviews={review.record_url: review},
+        reviewed_feed_snapshots=first.feed_snapshots,
+    )
+    assert reviewed.stats["structured_work_type_conflicts"] == 0
+    assert reviewed.stats["human_review_required"] == 0
+    assert reviewed.stats["matched_confirmed_new"] == 1
+    assert "document-review" in reviewed.report_markdown
+    stale = replace(review, evidence_fingerprint="0" * 64)
+    unchanged = run_on_demand(CONFIG, **kwargs, type_reviews={stale.record_url: stale})
+    assert unchanged.stats["structured_work_type_conflicts"] == 1
+
+
+def test_publisher_editorial_review_removes_structured_article_from_pull_now():
+    record = entry("EDITORIAL", published_text=None, description="2026.")
+    openalex_id = "https://openalex.org/W-EDITORIAL"
+
+    def title_batch(_titles, _config, attempted_at):
+        return (OpenAlexWork(
+            openalex_id=openalex_id, doi=None, title="Paper EDITORIAL",
+            authors=("Ada Scholar",),
+            publication_date=DateValue(
+                date(2026, 9, 8), DatePrecision.DAY, "openalex", retrieved_at=attempted_at,
+            ),
+            work_type="article", stable_url=openalex_id, raw={},
+        ),)
+
+    kwargs = dict(
+        now=REQUEST_TIME, feed_loader=loader_with(record),
+        batch_title_resolver=title_batch,
+        resolver=lambda *_args, **_kwargs: None,
+        allow_development_fixture=True,
+    )
+    first = run_on_demand(CONFIG, **kwargs)
+    assert first.stats["matched_confirmed_new"] == 1
+    review = ReviewedWorkType(
+        record.source_id, "Paper EDITORIAL", "editorial",
+        work_type_evidence_fingerprint((
+            WorkTypeEvidence("openalex", "article", "article", openalex_id),
+        )),
+        ("https://example.org/publisher/editorial",), REQUEST_TIME,
+        "Original journal labels this work Editorial.",
+    )
+    corrected = run_on_demand(CONFIG, **kwargs, type_reviews={record.source_id: review})
+    assert corrected.stats["matched_confirmed_new"] == 0
 
 
 def test_repeated_pull_uses_positive_per_title_batch_cache():

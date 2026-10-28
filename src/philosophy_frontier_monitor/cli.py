@@ -9,13 +9,14 @@ import sqlite3
 import sys
 from contextlib import ExitStack
 from dataclasses import asdict
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from .bibliographic_cache import BibliographicCache
+from .bibliographic_reviews import load_bibliographic_reviews
 from .config import WatchlistConfig, load_watchlist
 from .diagnostics import diagnose_sources
 from .http_retry import (
@@ -23,6 +24,7 @@ from .http_retry import (
     collect_request_telemetry,
     summarize_request_telemetry,
 )
+from .identity_reviews import load_identity_reviews
 from .interest import build_interest_profile
 from .journal_collection import (
     SUPPORTED as SUPPORTED_PUBLISHER_TOCS,
@@ -30,6 +32,7 @@ from .journal_collection import (
 from .journal_collection import (
     check_publisher_articles,
     collect_publisher,
+    import_reviewed_toc,
     issue_coverage_summary,
     measurement_summary,
     observation_summary,
@@ -52,6 +55,7 @@ from .official_journals import (
 from .pipeline import (
     CatchUpError,
     OnDemandRunResult,
+    WeeklyRunResult,
     establish_baseline,
     run_on_demand,
     run_weekly,
@@ -59,8 +63,9 @@ from .pipeline import (
     write_report_atomic,
 )
 from .release_check import audit_release
+from .review_feed_snapshots import load_review_feed_snapshots, serialize_feed_snapshots
 from .scope_estimate import estimate_interest_scope
-from .search import SearchOptions, run_paper_search
+from .search import PaperSearchResult, SearchOptions, run_paper_search
 from .search_report import render_paper_search
 from .sources.philpapers_rss import discover_feed_request, fetch_feed, parse_feed
 from .sources.philpapers_taxonomy import (
@@ -77,6 +82,7 @@ from .wechat_discovery import (
     list_candidates,
     mark_candidate,
 )
+from .work_type_reviews import load_work_type_reviews, work_type_evidence_fingerprint
 from .work_types import SUPPORTED_CANONICAL_WORK_TYPES
 
 
@@ -311,6 +317,9 @@ def _doctor(args: argparse.Namespace) -> int:
     network_telemetry: dict[str, Any] | None = None
     if args.expected_openalex_requests < 0:
         raise ValueError("--expected-openalex-requests 不能是负数。")
+    if args.feeds_config and not args.live:
+        raise ValueError("--feeds-config 需要与 --live 一起使用。")
+    feed_config = load_watchlist(args.feeds_config) if args.feeds_config else None
 
     version_ok = (3, 12) <= sys.version_info[:2] < (3, 14)
     checks.append(
@@ -339,7 +348,7 @@ def _doctor(args: argparse.Namespace) -> int:
     else:
         checks.append({"check": "openai-yaml", "status": "pass", "detail": "valid YAML"})
 
-    taxonomy_path = Path(args.taxonomy)
+    taxonomy_path = feed_config.taxonomy_path if feed_config is not None else Path(args.taxonomy)
     try:
         snapshot = load_taxonomy(taxonomy_path)
     except (OSError, ValueError, KeyError) as error:
@@ -372,6 +381,7 @@ def _doctor(args: argparse.Namespace) -> int:
                 for item in diagnose_sources(
                     selected_sources,
                     category_url=args.category_url,
+                    configured_feeds=(feed_config.feeds if feed_config is not None else None),
                 )
             )
         network_telemetry = summarize_request_telemetry(events)
@@ -654,8 +664,59 @@ def _baseline(args: argparse.Namespace) -> int:
     return 0
 
 
+def _review_queue_path(value: str, config: WatchlistConfig) -> Path:
+    path = Path(value).resolve()
+    private_root = config.storage.state_database.parent.resolve()
+    if not path.is_relative_to(private_root) or path.suffix.casefold() != ".json":
+        raise ValueError("review file must be JSON inside the private state directory")
+    return path
+
+
+def _write_review_queue(path: Path, result: OnDemandRunResult | WeeklyRunResult) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": 1,
+        "window_start": result.window_start.isoformat(),
+        "window_end": result.window_end.isoformat(),
+        "items": [
+            {
+                **asdict(item),
+                "identity_review_pairs": [
+                    {**asdict(comparison), "evidence_fingerprint": fingerprint}
+                    for comparison, fingerprint in zip(
+                        item.identity_comparisons, item.identity_fingerprints, strict=True
+                    )
+                ],
+            }
+            for item in result.human_review_items
+        ],
+    }
+    if isinstance(result, OnDemandRunResult):
+        payload["feed_snapshots"] = serialize_feed_snapshots(result.feed_snapshots)
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+    )
+    temporary.replace(path)
+
+
 def _weekly_run(args: argparse.Namespace) -> int:
     config = load_watchlist(args.config)
+    if args.review_queue_file and not args.dry_run:
+        raise ValueError("weekly review queue requires --dry-run before a committed run")
+    review_queue_path = (
+        _review_queue_path(args.review_queue_file, config) if args.review_queue_file else None
+    )
+    type_reviews = (
+        load_work_type_reviews(_review_queue_path(args.type_reviews, config))
+        if args.type_reviews
+        else None
+    )
+    identity_reviews = (
+        load_identity_reviews(_review_queue_path(args.identity_reviews, config))
+        if args.identity_reviews
+        else None
+    )
     if not config.storage.state_database.is_file():
         raise ValueError(f"状态库不存在：{config.storage.state_database}；请先运行 pfm baseline。")
     window_start = _parse_instant(args.window_start, "--window-start")
@@ -677,8 +738,12 @@ def _weekly_run(args: argparse.Namespace) -> int:
             window_end=window_end,
             dry_run=args.dry_run,
             show_recently_changed=args.show_recently_changed,
+            type_reviews=type_reviews,
+            identity_reviews=identity_reviews,
             **({"oai_loader": oai_cache.load_window} if oai_cache is not None else {}),
         )
+    if review_queue_path:
+        _write_review_queue(review_queue_path, result)
     payload: dict[str, Any] = {
         "ok": True,
         "operation": "weekly-run",
@@ -688,6 +753,7 @@ def _weekly_run(args: argparse.Namespace) -> int:
         "window_end": result.window_end,
         "report_path": str(result.report_path) if result.report_path else None,
         "stats": result.stats,
+        "review_queue_path": str(review_queue_path) if review_queue_path else None,
         "network_telemetry": summarize_request_telemetry(
             events,
             circuit_skipped=result.stats.get("bibliographic_source_circuit_skips", 0),
@@ -739,6 +805,48 @@ def _deliver_on_demand_report(
 
 def _pull_now(args: argparse.Namespace) -> int:
     config = load_watchlist(args.config)
+    as_of = _parse_instant(args.as_of, "--as-of")
+    review_queue_path = (
+        _review_queue_path(args.review_queue_file, config) if args.review_queue_file else None
+    )
+    type_reviews = (
+        load_work_type_reviews(_review_queue_path(args.type_reviews, config))
+        if args.type_reviews
+        else None
+    )
+    identity_reviews = (
+        load_identity_reviews(_review_queue_path(args.identity_reviews, config))
+        if args.identity_reviews
+        else None
+    )
+    if (
+        (args.type_reviews or args.identity_reviews)
+        and as_of is not None
+        and not args.review_queue_input
+    ):
+        raise ValueError("exact-window review requires --review-queue-input")
+    if args.review_queue_input and as_of is None:
+        raise ValueError("--review-queue-input requires --as-of")
+    reviewed_feed_snapshots = (
+        load_review_feed_snapshots(
+            _review_queue_path(args.review_queue_input, config),
+            config,
+            window_end=as_of,
+        )
+        if args.review_queue_input and as_of is not None
+        else None
+    )
+    if (
+        as_of is not None
+        and reviewed_feed_snapshots is None
+        and abs((datetime.now(UTC) - as_of).total_seconds()) > 60
+    ):
+        print(
+            "[pull-now] 历史 --as-of 未提供首次 feed 快照：来源到达时间只是回溯窗口投影，"
+            "不能当作该时刻实际观察。 Historical --as-of without a saved feed inventory "
+            "cannot establish source arrival at that time.",
+            file=sys.stderr,
+        )
     cache_path = config.storage.state_database.parent / "bibliography-cache.sqlite3"
     oai_cache_path = _oai_cache_path(config)
     _emit_pull_now_storage_advice(cache_path, oai_cache_path)
@@ -761,6 +869,7 @@ def _pull_now(args: argparse.Namespace) -> int:
         )
         result = run_on_demand(
             config,
+            now=as_of,
             lookback_days=args.days,
             max_candidates=args.max_candidates,
             max_fallback_candidates=args.max_fallback_candidates,
@@ -768,8 +877,13 @@ def _pull_now(args: argparse.Namespace) -> int:
             allow_development_fixture=args.allow_development_fixture,
             progress=_emit_pull_now_progress,
             show_recently_changed=args.show_recently_changed,
+            type_reviews=type_reviews,
+            identity_reviews=identity_reviews,
+            reviewed_feed_snapshots=reviewed_feed_snapshots,
             **({"oai_loader": oai_cache.load_window} if oai_cache is not None else {}),
         )
+    if review_queue_path:
+        _write_review_queue(review_queue_path, result)
     delivery_payload = _deliver_on_demand_report(result, config, args.report_delivery)
     _emit(
         {
@@ -780,6 +894,7 @@ def _pull_now(args: argparse.Namespace) -> int:
             "window_start": result.window_start,
             "window_end": result.window_end,
             "stats": result.stats,
+            "review_queue_path": str(review_queue_path) if review_queue_path else None,
             "network_telemetry": summarize_request_telemetry(
                 events,
                 circuit_skipped=result.stats.get("bibliographic_source_circuit_skips", 0),
@@ -810,11 +925,14 @@ def _search_official_issues(
     db_path: Path, year_from: int | None, year_to: int | None
 ) -> tuple[tuple, str]:
     try:
-        issues = distinct_issue_leads(tuple(
-            issue for issue in list_issues(db_path, reviewed_only=True)
-            if (year_from is None or issue.year >= year_from)
-            and (year_to is None or issue.year <= year_to)
-        ))
+        issues = distinct_issue_leads(
+            tuple(
+                issue
+                for issue in list_issues(db_path, reviewed_only=True)
+                if (year_from is None or issue.year >= year_from)
+                and (year_to is None or issue.year <= year_to)
+            )
+        )
     except (OSError, ValueError, sqlite3.DatabaseError):
         return (), "failed"
     return issues, "local_only"
@@ -822,6 +940,24 @@ def _search_official_issues(
 
 def _search(args: argparse.Namespace) -> int:
     config = load_watchlist(args.config)
+    review_queue_path = (
+        _review_queue_path(args.review_queue_file, config) if args.review_queue_file else None
+    )
+    type_reviews = (
+        load_work_type_reviews(_review_queue_path(args.type_reviews, config))
+        if args.type_reviews
+        else None
+    )
+    bibliographic_reviews = (
+        load_bibliographic_reviews(_review_queue_path(args.bibliographic_reviews, config))
+        if args.bibliographic_reviews
+        else None
+    )
+    identity_reviews = (
+        load_identity_reviews(_review_queue_path(args.identity_reviews, config))
+        if args.identity_reviews
+        else None
+    )
     options = SearchOptions(
         category_ids=tuple(args.category or ()),
         match=args.match,
@@ -834,13 +970,24 @@ def _search(args: argparse.Namespace) -> int:
         max_fallbacks=args.max_fallbacks,
     )
     with collect_request_telemetry() as events:
-        result = run_paper_search(config, options=options, progress=_emit_search_progress)
+        result = run_paper_search(
+            config,
+            options=options,
+            progress=_emit_search_progress,
+            type_reviews=type_reviews,
+            bibliographic_reviews=bibliographic_reviews,
+            identity_reviews=identity_reviews,
+        )
+    if review_queue_path:
+        _write_search_review_queue(review_queue_path, result)
     official_issues, official_issue_status = _search_official_issues(
         config.storage.state_database.parent / "official-journals.sqlite3",
-        args.year_from, args.year_to,
+        args.year_from,
+        args.year_to,
     )
     report = render_paper_search(
-        result, official_issues=official_issues,
+        result,
+        official_issues=official_issues,
         official_issue_status=official_issue_status,
     )
     _emit(
@@ -851,12 +998,70 @@ def _search(args: argparse.Namespace) -> int:
             "report_markdown": report,
             "official_issue_leads": len(official_issues),
             "official_issue_status": official_issue_status,
+            "review_queue_path": str(review_queue_path) if review_queue_path else None,
             "network_telemetry": summarize_request_telemetry(events),
             "state_advanced": False,
             "weekly_notifications_written": False,
         }
     )
     return 0
+
+
+def _write_search_review_queue(path: Path, result: PaperSearchResult) -> None:
+    """Store unresolved evidence and visible confirmed results for source review."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": 1,
+        "mode": "search",
+        "queried_at": result.queried_at.isoformat(),
+        "items": [
+            {
+                "record_url": record.review_record_url,
+                "title": record.review_title,
+                "source_author": record.review_author,
+                "source_urls": record.source_urls,
+                "reason": "year_review_pending",
+                "work_type_evidence": [],
+                "evidence_fingerprint": None,
+            }
+            for record in result.year_review_candidates
+        ]
+        + [
+            {
+                "record_url": record.review_record_url,
+                "title": record.review_title,
+                "source_urls": record.source_urls,
+                "reason": record.reason,
+                "work_type_evidence": [asdict(evidence) for evidence in record.work_type_evidence],
+                "evidence_fingerprint": record.evidence_fingerprint,
+                "identity_review_pairs": [
+                    {**asdict(comparison), "evidence_fingerprint": fingerprint}
+                    for comparison, fingerprint in zip(
+                        record.identity_comparisons, record.identity_fingerprints, strict=True
+                    )
+                ],
+            }
+            for record in result.unconfirmed_records
+            if record.reason in {"type_unverified", "identity_unverified"}
+            and record.review_record_url
+        ]
+        + [
+            {
+                "record_url": url,
+                "title": title,
+                "source_urls": item.source_urls,
+                "reason": "confirmed_type",
+                "work_type_evidence": [asdict(evidence) for evidence in item.type_evidence],
+                "evidence_fingerprint": work_type_evidence_fingerprint(item.type_evidence),
+            }
+            for item in result.items
+            for url, title in item.source_titles
+        ],
+    }
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(path)
 
 
 def _journal_watch(args: argparse.Namespace) -> int:
@@ -948,9 +1153,7 @@ def _journal_watch(args: argparse.Namespace) -> int:
             journal["toc_collection"] = (
                 "automatic" if journal["id"] in SUPPORTED_PUBLISHER_TOCS else "manual"
             )
-        _emit(
-            {"ok": True, "operation": "journal-watch", "journals": journals}
-        )
+        _emit({"ok": True, "operation": "journal-watch", "journals": journals})
         return 0
     if args.action == "list":
         _emit(
@@ -963,9 +1166,13 @@ def _journal_watch(args: argparse.Namespace) -> int:
         return 0
     if args.action == "pending":
         _emit(
-            {"ok": True, "operation": "journal-watch",
-             "pending": [asdict(issue) for issue in list_issues(db_path)
-                         if issue.status == "pending"]}
+            {
+                "ok": True,
+                "operation": "journal-watch",
+                "pending": [
+                    asdict(issue) for issue in list_issues(db_path) if issue.status == "pending"
+                ],
+            }
         )
         return 0
     if args.action == "review":
@@ -980,12 +1187,27 @@ def _journal_watch(args: argparse.Namespace) -> int:
                 and not args.confirm_account_identity):
             raise ValueError("candidate account requires --confirm-account-identity")
         reviewed = review_observed_issue(
-            db_path, args.journal, args.year, args.issue, args.evidence_url,
+            db_path,
+            args.journal,
+            args.year,
+            args.issue,
+            args.evidence_url,
             label_month=args.label_month,
             issue_published_on=args.issue_published_on,
-            announcement_on=args.announcement_on, catalog_path=catalog_path,
+            announcement_on=args.announcement_on,
+            catalog_path=catalog_path,
         )
         _emit({"ok": True, "operation": "journal-watch", "issue": asdict(reviewed)})
+        return 0
+    if args.action == "import-toc":
+        if not args.input or not args.confirm_evidence:
+            raise ValueError("import-toc requires --input and --confirm-evidence")
+        result = import_reviewed_toc(
+            Path(args.input),
+            db_path,
+            catalog_path=catalog_path,
+        )
+        _emit({"ok": True, "operation": "journal-watch", "toc": result})
         return 0
     if args.action == "scan":
         if not args.journal:
@@ -1002,9 +1224,13 @@ def _journal_watch(args: argparse.Namespace) -> int:
         if args.with_wanfang and key_file is None and Path(args.config).is_file():
             key_file = load_watchlist(Path(args.config)).wanfang.key_file
         result = check_publisher_articles(
-            args.journal, db_path, catalog_path=catalog_path,
-            max_checks=args.max_checks, min_interval_hours=args.min_interval_hours,
-            with_wanfang=args.with_wanfang, key_file=key_file,
+            args.journal,
+            db_path,
+            catalog_path=catalog_path,
+            max_checks=args.max_checks,
+            min_interval_hours=args.min_interval_hours,
+            with_wanfang=args.with_wanfang,
+            key_file=key_file,
         )
         _emit({"ok": True, "operation": "journal-watch", "check": result})
         return 0
@@ -1013,37 +1239,69 @@ def _journal_watch(args: argparse.Namespace) -> int:
         if args.with_wanfang and key_file is None and Path(args.config).is_file():
             key_file = load_watchlist(Path(args.config)).wanfang.key_file
         result = run_publisher_cycle(
-            db_path, catalog_path=catalog_path,
-            total_checks=args.max_total_checks, checks_per_site=args.max_checks_per_site,
-            min_interval_hours=args.min_interval_hours, with_wanfang=args.with_wanfang,
+            db_path,
+            catalog_path=catalog_path,
+            total_checks=args.max_total_checks,
+            checks_per_site=args.max_checks_per_site,
+            min_interval_hours=args.min_interval_hours,
+            with_wanfang=args.with_wanfang,
             key_file=key_file,
         )
         _emit({"ok": True, "operation": "journal-watch", "cycle": result})
         return 0
     if args.action == "summary":
-        _emit({"ok": True, "operation": "journal-watch",
-               "measurements": measurement_summary(db_path, args.journal),
-               "observations": observation_summary(db_path, args.journal)})
+        _emit(
+            {
+                "ok": True,
+                "operation": "journal-watch",
+                "measurements": measurement_summary(db_path, args.journal),
+                "observations": observation_summary(db_path, args.journal),
+            }
+        )
         return 0
     if args.action == "audit":
         if args.articles and not all((args.journal, args.year, args.issue)):
             raise ValueError("article-level audit requires journal, year and issue")
-        _emit({"ok": True, "operation": "journal-watch",
-               "issue_coverage": issue_coverage_summary(
-                   db_path, journal_id=args.journal, year=args.year, issue=args.issue,
-                   include_articles=args.articles,
-               )})
+        _emit(
+            {
+                "ok": True,
+                "operation": "journal-watch",
+                "issue_coverage": issue_coverage_summary(
+                    db_path,
+                    journal_id=args.journal,
+                    year=args.year,
+                    issue=args.issue,
+                    include_articles=args.articles,
+                ),
+            }
+        )
         return 0
     if args.action == "classify":
-        if not all((args.journal, args.year, args.issue, args.title,
-                    args.article_url, args.work_type, args.interest)):
+        if not all(
+            (
+                args.journal,
+                args.year,
+                args.issue,
+                args.title,
+                args.article_url,
+                args.work_type,
+                args.interest,
+            )
+        ):
             raise ValueError("classify requires exact article, work type and interest decision")
         if not args.confirm_evidence:
             raise ValueError("classify requires --confirm-evidence after source review")
         result = review_publisher_article(
-            db_path, args.journal, args.year, args.issue, args.title,
-            args.article_url, work_type=args.work_type, interest=args.interest,
-            basis_url=args.basis_url, catalog_path=catalog_path,
+            db_path,
+            args.journal,
+            args.year,
+            args.issue,
+            args.title,
+            args.article_url,
+            work_type=args.work_type,
+            interest=args.interest,
+            basis_url=args.basis_url,
+            catalog_path=catalog_path,
         )
         _emit({"ok": True, "operation": "journal-watch", "article_review": result})
         return 0
@@ -1196,16 +1454,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="inspect the curated publisher catalog and record reviewed issue evidence",
     )
     journal_watch.add_argument(
-        "action", choices=(
-            "catalog", "wechat-discovery-plan", "wechat-discover",
-            "wechat-candidates", "wechat-add-candidate", "wechat-block",
-            "wechat-dismiss", "wechat-review",
-            "list", "pending", "review",
-            "observe", "scan", "check", "run", "summary", "audit", "classify",
-        )
+        "action",
+        choices=(
+            "catalog",
+            "wechat-discovery-plan",
+            "wechat-discover",
+            "wechat-candidates",
+            "wechat-add-candidate",
+            "wechat-block",
+            "wechat-dismiss",
+            "wechat-review",
+            "list",
+            "pending",
+            "review",
+            "observe",
+            "import-toc",
+            "scan",
+            "check",
+            "run",
+            "summary",
+            "audit",
+            "classify",
+        ),
     )
     journal_watch.add_argument("--catalog", default=str(CATALOG_PATH))
     journal_watch.add_argument("--db", default=str(DEFAULT_DB_PATH))
+    journal_watch.add_argument("--input", help="reviewed complete TOC JSON")
     journal_watch.add_argument("--journal")
     journal_watch.add_argument("--year", type=int)
     journal_watch.add_argument("--issue")
@@ -1235,7 +1509,8 @@ def build_parser() -> argparse.ArgumentParser:
     journal_watch.add_argument("--max-total-checks", type=int, default=0)
     journal_watch.add_argument("--max-checks-per-site", type=int, default=2)
     journal_watch.add_argument(
-        "--with-wanfang", action="store_true",
+        "--with-wanfang",
+        action="store_true",
         help="also query Wanfang for each checked article; off by default",
     )
     journal_watch.add_argument("--key-file")
@@ -1264,6 +1539,10 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     doctor.add_argument("--category-url", default="https://philpapers.org/browse/plato-theaetetus")
+    doctor.add_argument(
+        "--feeds-config",
+        help="with --live, read each configured PhilPapers feed without reporting private URLs",
+    )
     doctor.set_defaults(handler=_doctor)
 
     profile = subparsers.add_parser("profile", help="map research text to verified categories")
@@ -1422,6 +1701,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="collect new feed records, check old-work evidence, and render a weekly report",
     )
     weekly.add_argument("--config", default=str(_default_watchlist()))
+    weekly.add_argument(
+        "--type-reviews",
+        help="private JSON decisions bound to inspected source-type evidence",
+    )
+    weekly.add_argument(
+        "--identity-reviews",
+        help="private pair-specific decisions bound to external bibliography evidence",
+    )
+    weekly.add_argument(
+        "--review-queue-file",
+        help="write all human-review candidates to an ignored private JSON file",
+    )
     weekly.add_argument("--dry-run", action="store_true")
     weekly.add_argument("--window-start")
     weekly.add_argument("--window-end")
@@ -1442,6 +1733,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="immediately verify and report matching papers from a rolling recent window",
     )
     pull_now.add_argument("--config", default=str(_default_watchlist()))
+    pull_now.add_argument(
+        "--as-of",
+        help="timezone-aware window end; exact review follow-up also needs --review-queue-input",
+    )
+    pull_now.add_argument(
+        "--type-reviews",
+        help="private JSON decisions bound to inspected source-type evidence",
+    )
+    pull_now.add_argument(
+        "--identity-reviews",
+        help="private pair-specific decisions bound to external bibliography evidence",
+    )
+    pull_now.add_argument(
+        "--review-queue-file",
+        help="write all human-review candidates to an ignored private JSON file",
+    )
+    pull_now.add_argument(
+        "--review-queue-input",
+        help="reuse the first pass's private feed inventory for an exact-window follow-up",
+    )
     pull_now.add_argument(
         "--days",
         type=int,
@@ -1521,6 +1832,21 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--offset", type=int, default=0)
     search.add_argument("--max-candidates", type=int, default=1000)
     search.add_argument("--max-fallbacks", type=int, default=100)
+    search.add_argument(
+        "--review-queue-file",
+        help="write unresolved and confirmed type evidence in the private state directory",
+    )
+    search.add_argument(
+        "--type-reviews", help="read private evidence-bound document-review decisions"
+    )
+    search.add_argument(
+        "--bibliographic-reviews",
+        help="read private publisher-checked DOI, author, and publication-year decisions",
+    )
+    search.add_argument(
+        "--identity-reviews",
+        help="read private pair-specific external bibliography decisions",
+    )
     search.set_defaults(handler=_search)
 
     catch_up = subparsers.add_parser(

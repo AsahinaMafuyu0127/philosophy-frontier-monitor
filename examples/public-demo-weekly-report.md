@@ -1,7 +1,9 @@
 # 哲学前沿论文即时拉取报告
 
-即时检索窗口：`2026-09-02T07:49:58.644162+00:00` 至 `2026-09-09T07:49:58.644162+00:00`（右端不含）
-兴趣配置：`pfm:interest:public-demo-20260909` 第 1 版
+> **2026-10-10 逐篇复核版。**保持 2026-10-02 13:08 至 2026-10-09 13:08（北京时间）的七日窗口，重新读取三个公开分类 feed，并对类型冲突逐篇核查后复跑。这是复核日的实际运行，不是对 10 月 9 日 feed 的历史重建。报告中的 39 条来源变化由回溯窗口规则计算，不能证明它们在 10 月 9 日前实际到达；4 篇确认新出的作品另有独立的窗口内发表日期证据。[10 月 9 日原始快照](public-demo-weekly-report-2026-10-09-original.md)保留供比较；正式周报状态没有推进。
+
+即时检索窗口：`2026-10-02T05:08:21.648638+00:00` 至 `2026-10-09T05:08:21.648638+00:00`（右端不含）
+兴趣配置：`pfm:interest:public-demo-20261008` 第 1 版
 taxonomy 快照：`philpapers:20260905T130303Z:e2538657e2ce`
 用户选定分类：Moral Responsibility, Free Will, Action Theory
 
@@ -9,45 +11,313 @@ taxonomy 快照：`philpapers:20260905T130303Z:e2538657e2ce`
 
 本报告由用户主动请求生成，独立于正式周报。它不读取周报通知历史，也不写入或推进基线、重试队列、运行历史和 feed 检查点；同一篇论文以后再次出现在周报中属于正常现象。
 
+本次启用了 PhilArchive OAI 增量筛选：完全没有 feed 时间和书目年份的记录只有在同一 `/rec/` 记录于窗口内发生变化时才继续核验。OAI 只覆盖开放记录，因此非开放且完全无日期的 PhilPapers 记录可能不在本次即时报告中；这不是永久的旧作判断。
+
 ## 本次结果概览
 
-### 确认新出：1 篇
+### 确认新出：4 篇
 
-该记录具有独立的窗口内首次公开或正式发表日期证据。
+具有独立的窗口内首次公开或正式发表日期证据。
 
-### PhilPapers 新近来源：91 篇
+### PhilPapers 新近来源：39 篇
 
-这些记录新近进入所选分类对应的 PhilPapers／PhilArchive 来源变化集合，而且当次旧作检查没有发现更早作品证据；这不等于已经取得正式发表日期。
+新近进入已选分类对应的 PhilPapers／PhilArchive 来源变化集合，且本次旧作检查没有发现更早作品证据；这不等于已经取得正式发表日期。
 
-以上两项由下方 92 条真实拉取记录的 `freshness_status`／`freshness_event` 逐项统计，不增补论文，也不是模型合成的数量。另有 **18 条记录需要人工复核**；复核记录与技术说明可在报告后部自行展开查看。
+以上两项由下方 43 条实际拉取记录逐项统计。另有 **10 条记录需要人工复核**，其中 **1 条是尚未裁定的作品类型冲突**；来源限制与完整复核队列可在报告后部展开。
 
-## 匹配论文（92）
+## 匹配论文（43）
 
-### Recently published｜确认新出（1 篇）
+### Recently published｜确认新出（4 篇）
 
 按可取得的发表日期证据从新到旧排列。
 
-#### 1. Forgiveness in the plural
+#### 1. The Philosophy of Significance How Importance Is Constituted, Experienced, and Transformed
 
-- 作者：Mario Attie‐Picker
+- 作者：Morteza Niami
 - 发表载体：未记录
-- 作品类型：forthcoming-article
-- 类型证据状态：compatible
-- 类型证据：philpapers-rss-description：forthcoming-article；philarchive-oai：unrecognized → article；openalex：article
+- 作品类型：article
+- 类型证据状态：reviewed
+- 类型证据：philarchive-oai：book；openalex：article；document-review：article（核查来源：https://zenodo.org/records/23142895/files/The\_Philosophy\_of\_Significance.pdf?download=1）
 - 新出事件：recently_published
-- 发表日期证据：2026-09-03（精度：day；来源：openalex）
+- 发表日期证据：2026-10-04（精度：day；来源：openalex）
 - 新近可得证据：未记录
 - 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
 - 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
-- DOI／稳定链接：https://doi.org/10.1080/0020174x.2026.2728127
+- DOI／稳定链接：https://doi.org/10.5281/zenodo.23142894
+
+#### 2. Before Fatelessness: From Fatality and Abolition to Operational Reconfiguration
+
+- 作者：Fujie Naoto
+- 发表载体：未记录
+- 作品类型：manuscript
+- 类型证据状态：reviewed
+- 类型证据：philarchive-oai：article；openalex：dataset；document-review：manuscript（核查来源：https://zenodo.org/records/23123293/files/fateless\_fixed.docx?download=1）
+- 新出事件：recently_published
+- 发表日期证据：2026-10-03（精度：day；来源：openalex）
+- 新近可得证据：未记录
+- 命中的兴趣分类：Action Theory; Free Will
+- 已核验的论文分类：Action Theory; Free Will
+- DOI／稳定链接：https://doi.org/10.5281/zenodo.23123292
+
+#### 3. Free Will and the Significance of Basic Undeservedness
+
+- 作者：Gunnar Björnsson
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：confirmed
+- 类型证据：philarchive-oai：article；openalex：article
+- 新出事件：recently_published
+- 发表日期证据：2026-10-03（精度：day；来源：openalex）
+- 新近可得证据：未记录
+- 命中的兴趣分类：Free Will; Moral Responsibility
+- 已核验的论文分类：Free Will; Moral Responsibility
+- DOI／稳定链接：https://doi.org/10.1007/s11406-026-01037-6
+
+#### 4. When the Past Cannot Be Narrated Experience, Trace, Memory, and the Emergence of Narrative
+
+- 作者：Morteza Niami
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：reviewed
+- 类型证据：philarchive-oai：book；openalex：article；document-review：article（核查来源：https://zenodo.org/api/records/23126386/files/When%20the%20Past%20Cannot%20Be%20Narrated.pdf/content）
+- 新出事件：recently_published
+- 发表日期证据：2026-10-03（精度：day；来源：openalex）
+- 新近可得证据：未记录
+- 命中的兴趣分类：Action Theory; Free Will
+- 已核验的论文分类：Action Theory; Free Will
+- DOI／稳定链接：https://doi.org/10.5281/zenodo.23126385
 
 ---
 
-### Recently arrived｜新近进入来源（2 篇）
+### Recently arrived｜新近进入来源（19 篇）
 
 按 PhilPapers／PhilArchive 的新近可得证据从新到旧排列；来源到达时间不等于正式发表日期。
 
-#### 2. Liberal Principles and the Right to a Private Life: Why Australia's Institutional Press Should Face a Privacy Tort
+#### 5. "Now That I’m Privileged…": World-Traveling, Shifting Positionality, and Responsibility for Intersectional Feminism
+
+- 作者：Kong, Youjin
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
+- 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
+- DOI／稳定链接：https://philpapers.org/rec/KONQTI
+
+#### 6. 'The Voluntary is Essentially Superficial.' Bernard Williams on Responsibility and Political Freedom
+
+- 作者：Heuer, Ulrike
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
+- 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
+- DOI／稳定链接：https://philpapers.org/rec/HEUTVI
+
+#### 7. 112C5Practical Knowledge
+
+- 作者：Peacocke, Antonia
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory
+- 已核验的论文分类：Action Theory
+- DOI／稳定链接：https://philpapers.org/rec/PEACKT
+
+#### 8. 140C6Mental Action
+
+- 作者：Peacocke, Antonia
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory
+- 已核验的论文分类：Action Theory
+- DOI／稳定链接：https://philpapers.org/rec/PEACAW-2
+
+#### 9. 183C7Intentional Judgment
+
+- 作者：Peacocke, Antonia
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory
+- 已核验的论文分类：Action Theory
+- DOI／稳定链接：https://philpapers.org/rec/PEACJB
+
+#### 10. 207C8Creative Conception
+
+- 作者：Peacocke, Antonia
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory
+- 已核验的论文分类：Action Theory
+- DOI／稳定链接：https://philpapers.org/rec/PEACCT
+
+#### 11. 21C1Intentional Action
+
+- 作者：Peacocke, Antonia
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory
+- 已核验的论文分类：Action Theory
+- DOI／稳定链接：https://philpapers.org/rec/PEACAU
+
+#### 12. 235C9Imagination
+
+- 作者：Peacocke, Antonia
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory
+- 已核验的论文分类：Action Theory
+- DOI／稳定链接：https://philpapers.org/rec/PEACLJ
+
+#### 13. 290C11Inference
+
+- 作者：Peacocke, Antonia
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory
+- 已核验的论文分类：Action Theory
+- DOI／稳定链接：https://philpapers.org/rec/PEACBX
+
+#### 14. 325C12Inquiry
+
+- 作者：Peacocke, Antonia
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory
+- 已核验的论文分类：Action Theory
+- DOI／稳定链接：https://philpapers.org/rec/PEACCV
+
+#### 15. 353Conclusion
+
+- 作者：Peacocke, Antonia
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory
+- 已核验的论文分类：Action Theory
+- DOI／稳定链接：https://philpapers.org/rec/PEACEG
+
+#### 16. 67C3Basic Action
+
+- 作者：Peacocke, Antonia
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory
+- 已核验的论文分类：Action Theory
+- DOI／稳定链接：https://philpapers.org/rec/PEACAC-6
+
+#### 17. Artificial Intelligence as a Condition for Kamma: Utu-niyāma, Cetanā, and Moral Responsibility in Theravāda Abhidhamma
+
+- 作者：Karunanayaka, Indrajith P.
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
+- 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
+- DOI／稳定链接：https://philpapers.org/rec/KARAIA-8
+
+#### 18. C121The Faculty of Reason
+
+- 作者：Tizzard, Jessica
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Free Will
+- 已核验的论文分类：Free Will
+- DOI／稳定链接：https://philpapers.org/rec/TIZCFO
+
+#### 19. Epistemological Dualism in Functionalism and the Explanation of Causal Roles
+
+- 作者：Roshani Payan, Milad
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory
+- 已核验的论文分类：Action Theory
+- DOI／稳定链接：https://philpapers.org/rec/ROSEDI-3
+
+#### 20. Illusions, Art, and Seeing with Color
+
+- 作者：Rosenqvist, Tiina Carita
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory
+- 已核验的论文分类：Action Theory
+- DOI／稳定链接：https://philpapers.org/rec/ROSIAA-14
+
+#### 21. Liberal Principles and the Right to a Private Life: Why Australia's Institutional Press Should Face a Privacy Tort
 
 - 作者：Blackford, Russell
 - 发表载体：未记录
@@ -56,12 +326,12 @@ taxonomy 快照：`philpapers:20260905T130303Z:e2538657e2ce`
 - 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
 - 新出事件：recently_arrived_in_philpapers_alert
 - 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
-- 新近可得证据：2026-09-09T07:49:58.644162+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
 - 命中的兴趣分类：Action Theory; Free Will
 - 已核验的论文分类：Action Theory; Free Will
 - DOI／稳定链接：https://philpapers.org/rec/BLALPA-4
 
-#### 3. Replies to Brown, Kauppinen, and Mitova
+#### 22. Replies to Brown, Kauppinen, and Mitova
 
 - 作者：Boult, Cameron
 - 发表载体：未记录
@@ -70,1340 +340,397 @@ taxonomy 快照：`philpapers:20260905T130303Z:e2538657e2ce`
 - 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
 - 新出事件：recently_arrived_in_philpapers_alert
 - 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
-- 新近可得证据：2026-09-09T07:49:58.644162+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
 - 命中的兴趣分类：Moral Responsibility
 - 已核验的论文分类：Moral Responsibility
 - DOI／稳定链接：https://philpapers.org/rec/BOUBSO-2
 
+#### 23. The Circular Theory Video 7
+
+- 作者：Yardley, Ilexa
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：defaulted
+- 类型证据：来源未提供可用的结构化类型；article 是提醒流候选默认值，不是来源断言
+- 新出事件：recently_arrived_in_philpapers_alert
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-09T05:08:21.648638+00:00（精度：second；来源：philpapers-rss-current-alert-observation）
+- 命中的兴趣分类：Action Theory
+- 已核验的论文分类：Action Theory
+- DOI／稳定链接：https://philpapers.org/rec/YARTCT-12
+
 ---
 
-### Recently changed｜来源记录近期变化（89 篇）
+### Recently changed｜来源记录近期变化（20 篇）
 
 这部分按 PhilArchive OAI 记录变化时间从新到旧排列。记录变化只表示来源元数据发生变化，不表示论文在该时刻发表。
 
 <details>
-<summary>显示／隐藏 recently changed（89 篇；默认隐藏）</summary>
+<summary>显示／隐藏 recently changed（20 篇；默认隐藏）</summary>
 
-#### 4. Many Worlds, One Branch: Why the Many-Worlds Interpretation Cannot Ground Libertarian Free Will
-
-- 作者：Buré, Simon
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:34:30+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philpapers.org/rec/BURMWO-2
-
-#### 5. Rethinking the Formal Object of the Will: Ockham's Theoretical Shift
-
-- 作者：Braekman, Valentin
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
-- 新近可得证据：2026-09-08T11:34:26+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philpapers.org/rec/BRARTF-2
-
-#### 6. Self-Pertinent Volition: Beyond Determinism and Free Will
-
-- 作者：Akhondi, Daniel
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:34:26+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philpapers.org/rec/AKHSVB
-
-#### 7. The causality of the future: Implications for determinism and free will
-
-- 作者：Matzen, Ted
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:34:02+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philarchive.org/rec/MATTCO-45
-
-#### 8. Making the vague precise: What Bohmian mechanics really says
-
-- 作者：Adam Brownstein
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:33:51+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory
-- 已核验的论文分类：Action Theory
-- DOI／稳定链接：https://philpapers.org/rec/BROMTV-2
-
-#### 9. Responsibility for Causing Change
-
-- 作者：Bianchi, Robin T. &amp; Simon-Pierre, Chevarie-Cossette
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:33:30+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
-- 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/BIARFC
-
-#### 10. Short Essays: Grief
-
-- 作者：Marga Jackson
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:33:13+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
-- 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/JACSEG
-
-#### 11. Reflections- A Story of My Unlearnings in Life: A Pragmatic Deconstruction of Meritocratic Illusion.
-
-- 作者：Anubhav Srivastava
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:33:07+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philpapers.org/rec/SRIRAS-2
-
-#### 12. Liberty Without Stability: John Stuart Mill, Economic Precarity, and the Limits of Formal Freedom
-
-- 作者：Lyric Helena Emerson
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:32:59+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philpapers.org/rec/EMELWS
-
-#### 13. The Moral Limits of Neutrality: When Silence Protects Power
-
-- 作者：Lyric Helena Emerson
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:32:59+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
-- 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/EMETML
-
-#### 14. The Right to Build: Entrepreneurship, Social Cooperation, and the Ethics of Economic Agency
-
-- 作者：Lyric Helena Emerson
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:32:59+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philpapers.org/rec/EMETRT
-
-#### 15. Resistible Grace without (Semi) Pelagianism
-
-- 作者：Capes, Justin A.
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:32:58+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philpapers.org/rec/CAPRGW-2
-
-#### 16. L’action du virtuel : une échappée historique entre réalité et possibilité
-
-- 作者：Charles Bodon
-- 发表载体：Implications philosophiques
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；crossref：journal-article → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：2026（精度：year；来源：crossref）
-- 新近可得证据：2026-09-08T11:32:42+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory
-- 已核验的论文分类：Action Theory
-- DOI／稳定链接：https://doi.org/10.4000/16ji3
-
-#### 17. The Improbable Witness: Contingency, Embodiment, and the Fittedness of Human Existence
-
-- 作者：Boether, Olivier
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:32:34+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philpapers.org/rec/BOETIW
-
-#### 18. Dall'essenza alla pena: perché l'assenza di libero arbitrio impone il passaggio dalla giustizia retributiva alla difesa sociale
-
-- 作者：Barsotti, Antonio
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:32:30+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philpapers.org/rec/BARDAP-14
-
-#### 19. Osservazioni sulla logica e la causalità
-
-- 作者：Barsotti, Antonio
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:32:26+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philpapers.org/rec/BAROSL-3
-
-#### 20. Sapolsky’s Error: Hard Determinism, the Denial of the Philosophical Self, and the Reconstruction of Agency Through Developmental Convergence
-
-- 作者：Boether, Olivier
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:32:11+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
-- 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/BOESEH
-
-#### 21. CVIARP: A Framework for Identifying the Points of Motion in Consciously Created Results
-
-- 作者：Orion Simerl
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:32:04+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory
-- 已核验的论文分类：Action Theory
-- DOI／稳定链接：https://philpapers.org/rec/SIMCAF-7
-
-#### 22. Determinism as the Ground of Freedom of Choice
-
-- 作者：Artemov, D.
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:31:57+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philpapers.org/rec/ARTDAT
-
-#### 23. 从人类繁荣到全球共同体：我们如何共同繁荣
-
-- 作者：Terrence Moore
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:31:45+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philpapers.org/rec/MOONXU
-
-#### 24. Civilization's Debt: A Continuation On the Inescapability of the Ameliorative Premise, the Compatibilist Concession, and the Closure of the Consistency Argument
-
-- 作者：Al-Tamr, Bassel
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
-- 新近可得证据：2026-09-08T11:31:35+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
-- 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/ALTCDA
-
-#### 25. Moving On: Desire, Grief, and the Death of Possibility
-
-- 作者：Bobb, Caitriona
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:31:29+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philpapers.org/rec/BOBMOD
-
-#### 26. Consistentism: Justice After the Death of Meaning
-
-- 作者：Xuan Yang
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:31:23+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
-- 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/YANCJA
-
-#### 27. Terminal Recursion as Moral Death: \_Agency Collapse and the Wantonhood of Systems\_
-
-- 作者：Arkema, D.
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:31:17+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
-- 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/ARKTRA-3
-
-#### 28. The Gate Between Constraint and Identification
-
-- 作者：Bostick, Devin
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:31:11+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philpapers.org/rec/BOSTGB
-
-#### 29. A Topos Model for Neural Networks
+#### 24. A Topos Model for Natural Neural Networks
 
 - 作者：Cacioppo, Robert
 - 发表载体：未记录
 - 作品类型：article
 - 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
+- 类型证据：philarchive-oai：article
 - 新出事件：recently_changed_in_philarchive_oai
 - 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:31:10+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
+- 新近可得证据：2026-10-08T23:44:44+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 命中的兴趣分类：Free Will
+- 已核验的论文分类：Free Will
 - DOI／稳定链接：https://philpapers.org/rec/CACFED
 
-#### 30. Civilization's Debt: On Basic Rights, Diminished Agency, and the Incoherence of Retributive Justice
+#### 25. Epistemic Antibodies: A Technical Implementation of Semantic Immunity for Conceptual Lineage Protection
+
+- 作者：Ostachuk, Agustin
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：confirmed
+- 类型证据：philarchive-oai：article
+- 新出事件：recently_changed_in_philarchive_oai
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-08T11:13:10+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 命中的兴趣分类：Action Theory; Free Will
+- 已核验的论文分类：Action Theory; Free Will
+- DOI／稳定链接：https://philpapers.org/rec/OSTEAA
+
+#### 26. La firma como criterio del orden admisible. Nota de prioridad sobre el tercer movimiento de La Obra
+
+- 作者：Jose Fernández Tamames
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：confirmed
+- 类型证据：philarchive-oai：article；openalex：article
+- 新出事件：recently_changed_in_philarchive_oai
+- 发表日期证据：未记录
+- 新近可得证据：2026-10-08T11:13:03+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
+- 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
+- DOI／稳定链接：https://philpapers.org/rec/FERLFC-11
+
+#### 27. Comparative analysis of moral development and responsibility from the perspective of developmental psychology, moral duty, and Islamic innate morality: Designing an applied …
+
+- 作者：Tabarsi, Muhammad &amp; Tabatabaei, Morteza
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：confirmed
+- 类型证据：philarchive-oai：article
+- 新出事件：recently_changed_in_philarchive_oai
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-08T11:12:12+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
+- 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
+- DOI／稳定链接：https://philpapers.org/rec/TABCAO
+
+#### 28. L’action du virtuel : une échappée historique entre réalité et possibilité
+
+- 作者：Charles Bodon
+- 发表载体：Implications philosophiques
+- 作品类型：article
+- 类型证据状态：confirmed
+- 类型证据：philarchive-oai：article；crossref：journal-article → article
+- 新出事件：recently_changed_in_philarchive_oai
+- 发表日期证据：2026（精度：year；来源：crossref）
+- 新近可得证据：2026-10-08T11:11:09+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 命中的兴趣分类：Action Theory
+- 已核验的论文分类：Action Theory
+- DOI／稳定链接：https://doi.org/10.4000/16ji3
+
+#### 29. Civilization's Debt: A Continuation On the Inescapability of the Ameliorative Premise, the Compatibilist Concession, and the Closure of the Consistency Argument
 
 - 作者：Al-Tamr, Bassel
 - 发表载体：未记录
 - 作品类型：article
 - 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
+- 类型证据：philarchive-oai：article
 - 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:31:09+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-08T11:10:01+00:00（精度：second；来源：philarchive-oai-datestamp）
 - 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
 - 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/ALTCDO-2
+- DOI／稳定链接：https://philpapers.org/rec/ALTCDA
 
-#### 31. Are Desires Aligned with the Self? : A Model of Desire Self-Alignment and Desire–Self-Image Incongruence
+#### 30. Evolutio Unfolding Theory: the Ontologization of Unfolding and its Systematic Stabilization
 
-- 作者：Suji Choi
+- 作者：Ostachuk, Agustin
 - 发表载体：未记录
 - 作品类型：article
 - 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
+- 类型证据：philarchive-oai：article
 - 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:31:04+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory
-- 已核验的论文分类：Action Theory
-- DOI／稳定链接：https://philpapers.org/rec/CHOADA-2
-
-#### 32. The Circuit-Breaker as Self-Governance Architecture: \_Pre-Committed Pause Triggers and the Discipline of Required Re-Engagement\_
-
-- 作者：Arkema, D.
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:31:02+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
-- 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/ARKTCA-2
-
-#### 33. The Description–Ontology Gap: A Methodological Reconstruction
-
-- 作者：Mateusz Skarbek
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:29:47+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory
-- 已核验的论文分类：Action Theory
-- DOI／稳定链接：https://philpapers.org/rec/SKATDG
-
-#### 34. A Reality that Even Your Shallow Intentions Are Seen Through
-
-- 作者：Keiichi Hori
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:29:39+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory
-- 已核验的论文分类：Action Theory
-- DOI／稳定链接：https://philpapers.org/rec/HORART-3
-
-#### 35. The Structural Architecture of Ideology: A Functional Analysis of the Core Emotion Framework in Political and Economic Systems
-
-- 作者：Bulgaria, Jamel
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:29:25+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-08T11:09:39+00:00（精度：second；来源：philarchive-oai-datestamp）
 - 命中的兴趣分类：Free Will
 - 已核验的论文分类：Free Will
-- DOI／稳定链接：https://philpapers.org/rec/BULTSA-10
+- DOI／稳定链接：https://philpapers.org/rec/OSTEUT-3
 
-#### 36. The Structural Architecture of Ideology: Applying the Core Emotion Framework to Political and Economic Systems
+#### 31. To Expect the Unexpected: On Cultivating the Accident of Freedom
 
-- 作者：Bulgaria, Jamel
+- 作者：Saad, George
 - 发表载体：未记录
 - 作品类型：article
 - 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
+- 类型证据：philarchive-oai：article
 - 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:29:25+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-08T11:09:21+00:00（精度：second；来源：philarchive-oai-datestamp）
 - 命中的兴趣分类：Free Will
 - 已核验的论文分类：Free Will
-- DOI／稳定链接：https://philpapers.org/rec/BULTSA-9
+- DOI／稳定链接：https://philpapers.org/rec/SAATET
 
-#### 37. Pre-Possessive Mineness and Structural Responsibility: Immediate Givenness, Suffering, and Re-Inheritance
+#### 32. \_Layered Causal Realism I.S\_ : Determinism, Continuity, and the Structure of Agency
 
-- 作者：Ian William van Eenennaam
+- 作者：Qian, Chenghao
 - 发表载体：未记录
 - 作品类型：article
 - 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
+- 类型证据：philarchive-oai：article
 - 新出事件：recently_changed_in_philarchive_oai
 - 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:29:24+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 新近可得证据：2026-10-08T11:09:09+00:00（精度：second；来源：philarchive-oai-datestamp）
 - 命中的兴趣分类：Free Will; Moral Responsibility
 - 已核验的论文分类：Free Will; Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/VANPMA-11
+- DOI／稳定链接：https://philpapers.org/rec/QIALCR-6
 
-#### 38. The Dissolution of the Dualism between Utilitarianism and Deontology Based on the System of Generalized Harm-Avoidance Monism
+#### 33. Can a System That Cannot Lose Have Dignity? An Axiomatic Argument Against Functional Criteria for AI Moral Status.
 
-- 作者：Yuming Yang
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:28:50+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will; Moral Responsibility
-- 已核验的论文分类：Free Will; Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/YANTDO-25
-
-#### 39. Free Will and the Significance of Basic Undeservedness
-
-- 作者：Björnsson, Gunnar
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:28:26+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will; Moral Responsibility
-- 已核验的论文分类：Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/BJRFWA
-
-#### 40. Complicity as accountability; accountability as one
-
-- 作者：Björnsson, Gunnar
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:28:25+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will; Moral Responsibility
-- 已核验的论文分类：Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/BJRCAA-2
-
-#### 41. The Closest Anything Can Get To Absolute Free Will
-
-- 作者：Obie Hans von
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:28:25+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will
-- 已核验的论文分类：Free Will
-- DOI／稳定链接：https://philpapers.org/rec/HANTCA-15
-
-#### 42. Genuine Institutional Agency and Its Simulacrum
-
-- 作者：Radha Sarma
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:27:47+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will; Moral Responsibility
-- 已核验的论文分类：Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/SARGIA
-
-#### 43. Free Won't vs Free Will
-
-- 作者：Arkema, D.
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:27:46+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will
-- 已核验的论文分类：Free Will
-- DOI／稳定链接：https://philpapers.org/rec/ARKFWV
-
-#### 44. (This is Incomplete Version) The Causality Game: A Framework for the Physical Universe, Human Perception, and Social Structure Based on the Principle of Causality
-
-- 作者：Keiichi Hori
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:27:43+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will
-- 已核验的论文分类：Free Will
-- DOI／稳定链接：https://philpapers.org/rec/HORTCG
-
-#### 45. Resolution Theory: Canon, Working Notes, and Suggested Start Points
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:27:43+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will
-- 已核验的论文分类：Free Will
-- DOI／稳定链接：https://philpapers.org/rec/EASRTC
-
-#### 46. THE POPPY AND THE FLAG : Drug Economy Management, Mass Incarceration, and the Architecture That Has Never Been at War with Its Own Supply Chain
-
-- 作者：Barteau, Stewart
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:27:38+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will; Moral Responsibility
-- 已核验的论文分类：Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/BARTPA-36
-
-#### 47. Moral Theories as Compression Strategies: What We’re Really Doing When We Argue Morally
-
-- 作者：Bobb, Caitriona
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:27:36+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will; Moral Responsibility
-- 已核验的论文分类：Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/BOBMTA
-
-#### 48. The Illusion of Agency: Why Free Will Does Not Exist
-
-- 作者：Being, Zane
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:27:34+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will
-- 已核验的论文分类：Free Will
-- DOI／稳定链接：https://philpapers.org/rec/BEITIO-13
-
-#### 49. Rethinking Counterfactual Responsibility Institutional Constraint and Normative Accessibility
-
-- 作者：Timothy Fuller
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:27:20+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will; Moral Responsibility
-- 已核验的论文分类：Free Will; Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/FULRCR
-
-#### 50. War in Superposition : The Observers Dissent
-
-- 作者：Stewart Barteau
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:27:10+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will; Moral Responsibility
-- 已核验的论文分类：Free Will; Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/BARWIS-6
-
-#### 51. Resolution Theory: The Hindsight and Displacement Fallacies
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:27:03+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will; Moral Responsibility
-- 已核验的论文分类：Free Will; Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/EASRTT
-
-#### 52. The Wizard Story: A Thought Experiment on Freedom, Control, and Responsibility
-
-- 作者：Dmitry Artemov
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:27:03+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philpapers.org/rec/ARTTWS
-
-#### 53. Theorem: Morality as a rationally deducible law
-
-- 作者：Simone Lattanzio
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:26:48+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
-- 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/LATTMA-3
-
-#### 54. Experience as the Foundation of Consciousness: The Iterative Subject, Free Will, and the Universal Vector of Unification
-
-- 作者：Kirill Ulyanov
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:26:46+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will
-- 已核验的论文分类：Free Will
-- DOI／稳定链接：https://philpapers.org/rec/ULYEAT
-
-#### 55. The Convergence: Independent Approaches to a Single Structural Wall Across Philosophy, Mathematics, Physics, Theology, and Culture
-
-- 作者：Stewart Barteau
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:26:46+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Free Will
-- 已核验的论文分类：Free Will
-- DOI／稳定链接：https://philarchive.org/rec/BARTCI-10
-
-#### 56. TELEOLOGICAL OPACITY AND DETERMINATE PREFERENCE FAILURE: A Structural Critique of Revealed Preference in Complex Social Systems
-
-- 作者：Tommaso Biagi
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:26:11+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/BIATOA-2
-
-#### 57. The Emergence of Moral Normativity: Fragility, Agency, Modulation, and Coupling
-
-- 作者：Andre Hampshire
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:26:04+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/HAMTEO-39
-
-#### 58. The Telic Way: Capitalism-Ending Responsibility Subsidies (A Resolutionist Account of the Economy)
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:25:56+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/EASTCE
-
-#### 59. The Displacement Fallacy: Resolution Theory as an Interface Layer for Agency, Responsibility, and Normativity
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:25:11+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/EASTDF
-
-#### 60. Distinction Without Escape: Resolution, Exposure, and the Location of Free Will
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:24:58+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/EASART-2
-
-#### 61. Right Action as Loss-Minimization Among Viable Options: A Structural Theory
-
-- 作者：Andre Hampshire
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:24:54+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/HAMRAA-7
-
-#### 62. When Power Becomes Procedure: Why Power Does Not Corrupt People, but Normalizes Corruption
-
-- 作者：Craig Stilley
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:24:54+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/STIWPB
-
-#### 63. Generativity Under Constraint: A Structural Framework for Creative, Coherent, and Safe Intelligent Systems
-
-- 作者：Abdulaziz Abdi
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:24:50+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/ABDGUC
-
-#### 64. Moral Agency Under Scale: Structural Conditions for Recognition, Inertia, and Failure
-
-- 作者：Abdulaziz Abdi
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:24:50+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/ABDMAU
-
-#### 65. Compatibilism and Responsibility Realism
-
-- 作者：Paul Russell
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:24:47+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/RUSCAR-5
-
-#### 66. Resolution Theory on Free Will in a Deterministic Universe: Steelman Objections
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:24:46+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/EASRTO
-
-#### 67. Coherence, Power, and Moral Rupture: Why Systems Fail and Exemplars Reappear
-
-- 作者：Abdulaziz Abdi
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:24:45+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/ABDCPA
-
-#### 68. Resolutionist Foundations of Artificial Agency
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:24:37+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/EASRFO
-
-#### 69. The Heart Of Conciousness: Determinism, Exposure, and the Conditions of Free Will in a Shared World
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:24:37+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/EASTHO
-
-#### 70. Resolution Ethics III: Telic Justice — Punishment, Repair, and the Preservation of Civic Order
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:24:34+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/EASREB
-
-#### 71. Resolution Ethics I
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:24:32+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/EASRED
-
-#### 72. Fixed Does Not Mean Bypassed: Evaluative Resolution and Authorship
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:24:28+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/EASFDN
-
-#### 73. Resolution Theory: Reading order and glossary
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:24:28+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/EASRTR-2
-
-#### 74. Resolution Theory — Volume I: Foundations (Agency as Resolution)
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:23:19+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/EASRTF
-
-#### 75. Agency Without Metaphysics: Resolution, Suffering, and Normativity
-
-- 作者：H. Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:21:22+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/EASRTS
-
-#### 76. Resolution Theory — Talking Past Each Other: Explanation vs Authorship
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:21:20+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/EASRTA
-
-#### 77. Resolution Theory — Unified Account: Free Will, Responsibility, and Normativity
-
-- 作者：H. Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:21:20+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/EASAAR
-
-#### 78. Resolutionism — Distortion Without Bypass: Addiction, Agency, and Responsibility
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:21:20+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/EASDWB
-
-#### 79. Resolutionist AI — Agency and Responsibility in Artificial Systems
-
-- 作者：Hamilton Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:21:20+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/EASRAA-3
-
-#### 80. Sociometry of Work Management
-
-- 作者：Gnouma Jérôme Kadouno
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:21:19+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/KADSOW
-
-#### 81. Agency as Resolution: A First-Principles Clarification of Determinism and Normativity.
-
-- 作者：Hamilton Ross Easton
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:21:07+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
-- 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/EASCAR-2
-
-#### 82. Pre-Reflective Betrayal and Pre-Responsibility Guilt: Subject Formation and Affective Governance in Late Capitalism
-
-- 作者：대륜 임
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:20:26+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philarchive.org/rec/PBARIZ
-
-#### 83. Blaming and Forgiving as Intimates
-
-- 作者：Rosalind Chaplin
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:20:07+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/CHABAF-3
-
-#### 84. The Discipline of Inevitability: Political Science as Technocratic Fatalism
-
-- 作者：Caitriona Bobb
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:19:50+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/BOBTDO-5
-
-#### 85. The Principle of Regulation: Responsiveness as a Pre-Divisional Foundation of Ethics, Ontology, and Epistemology
-
-- 作者：Mohammad Mahdi Zarnooshe Farahani
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:19:48+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/ZARTPO-5
-
-#### 86. Ethics without Conscious Agency: Non-Conscious Intelligence and the Graded Manifestation of Ethics
-
-- 作者：Mohammad Mahdi Zarnooshe Farahani
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:19:46+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/ZAREWC
-
-#### 87. Silence as Power: Reachability, Answerability, and Bureaucratic Responsibility
-
-- 作者：Wishy Kane
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:19:40+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/KANSAP-3
-
-#### 88. Consider the Carter Case: A Problem For Libertarians about Free Will?
-
-- 作者：Carter, Logan
-- 发表载体：未记录
-- 作品类型：article
-- 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
-- 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:19:20+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Moral Responsibility
-- 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://philarchive.org/rec/CARCTC-4
-
-#### 89. Beyond Power: Why Nietzsche's Ethics Fails and How Syntactic Care Succeeds
-
-- 作者：David Carboni
+- 作者：Volodymyr Hlynskyi
 - 发表载体：未记录
 - 作品类型：article
 - 类型证据状态：compatible
-- 类型证据：philarchive-oai：unrecognized → article；crossref：posted-content → preprint
+- 类型证据：philarchive-oai：article；crossref：posted-content → preprint
 - 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:16:19+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-08T11:08:45+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 命中的兴趣分类：Free Will; Moral Responsibility
+- 已核验的论文分类：Free Will; Moral Responsibility
+- DOI／稳定链接：https://doi.org/10.2139/ssrn.6866658
+
+#### 34. Deconstruction of Free Will by Generalized Harm-Avoidance Monism
+
+- 作者：Yang, Yuming
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：confirmed
+- 类型证据：philarchive-oai：article
+- 新出事件：recently_changed_in_philarchive_oai
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-08T11:08:29+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 命中的兴趣分类：Free Will
+- 已核验的论文分类：Free Will
+- DOI／稳定链接：https://philpapers.org/rec/YANDOF
+
+#### 35. Structural Tension and the Visibility of Loss: Principles S1, S4, S6, S7 of the Axiomatic Theory of Tragic Subjecthood. Article 5
+
+- 作者：Hlynskyi, Volodymyr
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：confirmed
+- 类型证据：philarchive-oai：article
+- 新出事件：recently_changed_in_philarchive_oai
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-08T11:08:23+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 命中的兴趣分类：Free Will; Moral Responsibility
+- 已核验的论文分类：Free Will; Moral Responsibility
+- DOI／稳定链接：https://philpapers.org/rec/HLYSTA
+
+#### 36. The Power of Possession, revisited
+
+- 作者：James, Benjamin
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：confirmed
+- 类型证据：philarchive-oai：article
+- 新出事件：recently_changed_in_philarchive_oai
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-08T11:06:01+00:00（精度：second；来源：philarchive-oai-datestamp）
 - 命中的兴趣分类：Moral Responsibility
 - 已核验的论文分类：Moral Responsibility
-- DOI／稳定链接：https://doi.org/10.2139/ssrn.5679103
+- DOI／稳定链接：https://philpapers.org/rec/JAMTPO-63
 
-#### 90. The Ubiquity of Psychological Manipulation: A Philosophical Examination of Human Autonomy in Modern Society
+#### 37. Authority Illusion and the Architecture of Responsibility in AI Governance
 
-- 作者：Boether, Olivier
+- 作者：Mumtaz Enser
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：compatible
+- 类型证据：philarchive-oai：article；crossref：posted-content → preprint
+- 新出事件：recently_changed_in_philarchive_oai
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-08T11:05:47+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 命中的兴趣分类：Free Will; Moral Responsibility
+- 已核验的论文分类：Free Will; Moral Responsibility
+- DOI／稳定链接：https://doi.org/10.2139/ssrn.6443099
+
+#### 38. Antagonism, Dependence, and Domination
+
+- 作者：Mumtaz Enser
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：compatible
+- 类型证据：philarchive-oai：article；crossref：posted-content → preprint
+- 新出事件：recently_changed_in_philarchive_oai
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-08T11:05:44+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 命中的兴趣分类：Moral Responsibility
+- 已核验的论文分类：Moral Responsibility
+- DOI／稳定链接：https://doi.org/10.2139/ssrn.6460080
+
+#### 39. Free Will, Abilities, and the Grain of Explanation
+
+- 作者：Loew, Christian
+- 发表载体：未记录
+- 作品类型：forthcoming-article
+- 类型证据状态：compatible
+- 类型证据：philpapers-rss-description：forthcoming-article；philarchive-oai：article
+- 新出事件：recently_changed_in_philarchive_oai
+- 发表日期证据：未记录
+- 新近可得证据：2026-10-08T11:04:51+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 命中的兴趣分类：Moral Responsibility
+- 已核验的论文分类：Moral Responsibility
+- DOI／稳定链接：https://philpapers.org/rec/LOEFWA
+
+#### 40. Ethical Chess v1.8
+
+- 作者：Weatherill, Mark
 - 发表载体：未记录
 - 作品类型：article
 - 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
+- 类型证据：philarchive-oai：article
 - 新出事件：recently_changed_in_philarchive_oai
 - 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:13:43+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 新近可得证据：2026-10-08T11:02:57+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 命中的兴趣分类：Moral Responsibility
+- 已核验的论文分类：Moral Responsibility
+- DOI／稳定链接：https://philpapers.org/rec/WEAECV-2
+
+#### 41. The Fixed-Point Paradox and the Incoherence of Counterfactual Freedom
+
+- 作者：Toupin, Daniel
+- 发表载体：未记录
+- 作品类型：article
+- 类型证据状态：confirmed
+- 类型证据：philarchive-oai：article
+- 新出事件：recently_changed_in_philarchive_oai
+- 发表日期证据：未记录
+- 新近可得证据：2026-10-08T10:51:38+00:00（精度：second；来源：philarchive-oai-datestamp）
 - 命中的兴趣分类：Action Theory; Free Will
 - 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philarchive.org/rec/BOETUO-2
+- DOI／稳定链接：https://philpapers.org/rec/TOUTIO-8
 
-#### 91. Making the Goods in Work Accessible and the Paternalism Objection
+#### 42. Freiheit - ein Produkt der Evolution. Teil 1: Eine neue wissenschaftliche Theorie
 
-- 作者：Gilabert, Pablo
+- 作者：Leumann, Christoph
 - 发表载体：未记录
 - 作品类型：article
 - 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article；openalex：article
+- 类型证据：philarchive-oai：article
 - 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T11:11:26+00:00（精度：second；来源：philarchive-oai-datestamp）
-- 命中的兴趣分类：Action Theory; Free Will
-- 已核验的论文分类：Action Theory; Free Will
-- DOI／稳定链接：https://philarchive.org/rec/GILMTG
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-08T10:45:14+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 命中的兴趣分类：Free Will
+- 已核验的论文分类：Free Will
+- DOI／稳定链接：https://philpapers.org/rec/LEUTAE-2
 
-#### 92. Varieties of Moral Agency and Risks of Digital Dystopia
+#### 43. Beyond Intelligence: Artificial Agency, Creaturely Limits, and the Beginning of Wisdom
 
-- 作者：Bradley, Adam &amp; Saad, Bradford
+- 作者：Kosi Gramatikoff
 - 发表载体：未记录
 - 作品类型：article
 - 类型证据状态：confirmed
-- 类型证据：philarchive-oai：unrecognized → article
+- 类型证据：philarchive-oai：article；openalex：article
 - 新出事件：recently_changed_in_philarchive_oai
-- 发表日期证据：未记录
-- 新近可得证据：2026-09-08T10:53:32+00:00（精度：second；来源：philarchive-oai-datestamp）
+- 发表日期证据：2026（精度：year；来源：philpapers-rss-bibliography）
+- 新近可得证据：2026-10-07T10:54:38+00:00（精度：second；来源：philarchive-oai-datestamp）
 - 命中的兴趣分类：Action Theory; Free Will; Moral Responsibility
 - 已核验的论文分类：Action Theory; Free Will; Moral Responsibility
-- DOI／稳定链接：https://philpapers.org/rec/BRAVOM-2
+- DOI／稳定链接：https://philpapers.org/rec/GRABIA-11
 
 </details>
 
-## 人工复核
+## 人工复核与来源边界
 
-有 **18 条记录需要人工复核**。
+**10 条记录尚待复核，其中作品类型冲突 1 条。**
 
 <details>
-<summary>查看复核记录与技术说明（可选）</summary>
-
-本次启用了 PhilArchive OAI 增量筛选：完全没有 feed 时间和书目年份的记录只有在同一 `/rec/` 记录于窗口内发生变化时才继续核验。OAI 只覆盖开放记录，因此非开放且完全无日期的 PhilPapers 记录可能不在本次即时报告中；这不是永久的旧作判断。
+<summary>查看完整复核队列、来源覆盖与技术说明</summary>
 
 ## 数据源覆盖
 
-- `philpapers-rss:4590`：success；检查时间 `2026-09-09T07:49:58.644162+00:00`；分类 feed 完整读取；条目数 500
-- `philpapers-rss:347`：success；检查时间 `2026-09-09T07:49:58.644162+00:00`；分类 feed 完整读取；条目数 500
-- `philpapers-rss:5992`：success；检查时间 `2026-09-09T07:49:58.644162+00:00`；分类 feed 完整读取；条目数 500
-- `philarchive-oai`：success；检查时间 `2026-09-09T07:50:29.643048+00:00`；跨运行缓存增量刷新；完整跟随 resumptionToken；本次网络收割 1766 条，缓存精确窗口内 284443 条，当前非删除记录 144293 条
-- `openalex-bibliography`：failed；检查时间 `2026-09-09T07:49:58.644162+00:00`；OpenAlex lookup failed: source=OpenAlex; kind=permanent http; attempts=1; stop=non_retryable_status; HTTP 400
+- `philpapers-rss:4590`：success；检查时间 `2026-10-09T05:08:21.648638+00:00`；分类 feed 完整读取；条目数 500
+- `philpapers-rss:347`：success；检查时间 `2026-10-09T05:08:21.648638+00:00`；分类 feed 完整读取；条目数 500
+- `philpapers-rss:5992`：success；检查时间 `2026-10-09T05:08:21.648638+00:00`；分类 feed 完整读取；条目数 500
+- `philarchive-oai`：success；检查时间 `2026-10-10T15:27:36.397283+00:00`；跨运行缓存热命中；未发出 OAI 网络请求；完整跟随 resumptionToken；本次网络收割 0 条，缓存精确窗口内 148183 条，当前非删除记录 146751 条
+- `openalex-bibliography`：failed；检查时间 `2026-10-09T05:08:21.648638+00:00`；OpenAlex lookup failed: source=OpenAlex; kind=rate limited or daily budget exhausted; attempts=1; stop=server_wait_exceeds_run_budget; HTTP 429; retry_after_seconds=30737
+- `official-journals`：local_only；检查时间 `2026-10-09T05:08:21.648638+00:00`；读取本地已复核期次 0 条；本次未逐站巡查期刊官网或公众号。
 
 ## 本次核验状态
 
-另有 294 条候选记录尚未完成作品类型、作品同一性、旧文重录或新近可得证据核验，本次不推送，也不写入周报的限次重试队列。下次主动拉取时可以重新核验。
+另有 31 条候选记录尚未完成作品类型、作品同一性、旧文重录或新近可得证据核验，本次不推送，也不写入周报的限次重试队列。下次主动拉取时可以重新核验。
 
-- 本次未轮到远程核验：266 条。它们受这次历史运行采用的旧版逐篇查询预算限制；这是当次运行的处理边界，不表示当前版本保有 266 条跨次积压，也不要求用户逐篇判断。
-- 需要人工复核：18 条。
-- 等待程序自动重试：10 条。
-
-历史口径说明：本报告生成于日期证据不足集合建立前。当前版本会把符合条件的完全无日期记录单列到私人散列集合，不再让它们反复计入“本次未轮到远程核验”；集合数量与真正超出当次远程预算的数量分别报告。
+- 需要人工复核：10 条。
+- 等待程序自动重试：21 条。
 
 具体原因：
 
-- 结构化来源在支持论文形式与不支持形式之间冲突：17 条
-- 来源返回当前词表尚未识别的结构化作品类型：1 条
-- 外部书目来源失败，旧作检查等待程序自动重试：10 条
+- 可能是译名或大幅改题版本，需要人工确认作品同一性：8 条
+- 结构化来源返回相互冲突的 DOI 标识符：1 条
+- 结构化来源在支持论文形式与不支持形式之间冲突：1 条
+- 外部书目来源失败，旧作检查等待程序自动重试：21 条
 
 需要人工复核的候选：
 
-1. AAI-01 - Delegation Is Not Distribution
-   - 作者：Cbp, Hn
+1. Institutional Continuity and Existential Foreclosure in Marriage: A Daseinsanalytic Sociological Synthesis
+   - 作者：Zohrevandi, Talaye &amp; Niami, Morteza
    - 原因：结构化来源在支持论文形式与不支持形式之间冲突
-   - 来源链接：https://philpapers.org/rec/CBPDIN
-2. Respect Without Content: A Formal Theory of Moral Recognition and Its Empirical Determinations
-   - 作者：Han, Tianle
-   - 原因：结构化来源在支持论文形式与不支持形式之间冲突
-   - 来源链接：https://philpapers.org/rec/HANTSA-22
-3. Right-Libertarian Theory of History. Part III: The Libertarian Capitalist Government
-   - 作者：Hermit, Libertarian
-   - 原因：结构化来源在支持论文形式与不支持形式之间冲突
-   - 来源链接：https://philpapers.org/rec/HERRTO-4
-4. Where Does Free Will Hide? Inside the Architecture of Agency
-   - 作者：Maruszewski, Krzysztof
-   - 原因：结构化来源在支持论文形式与不支持形式之间冲突
-   - 来源链接：https://philpapers.org/rec/MARWDF-4
-5. Beyond Teleological Priority: Process, Emergent Purpose, and Finite Continuance in Morteza Niami's Philosophy
-   - 作者：Niami, Morteza
-   - 原因：结构化来源在支持论文形式与不支持形式之间冲突
-   - 来源链接：https://philpapers.org/rec/NIABTP
-6. Finite Continuance: A Normative Theory of Agency Under Chronic Instability
-   - 作者：Niami, Morteza
-   - 原因：结构化来源在支持论文形式与不支持形式之间冲突
-   - 来源链接：https://philpapers.org/rec/NIAFCA-2
-7. From Motivation to Continuance, Volitional Discipline and the Ontological Conditions of Agency Under Chronic Erosion
-   - 作者：Niami, Morteza
-   - 原因：结构化来源在支持论文形式与不支持形式之间冲突
-   - 来源链接：https://philpapers.org/rec/NIAFMT
-8. Ontology of Finite Continuity and the Problem of Contemporary Crises: Four Regimes of Erosion and the Question of the Reconfiguration of Agency
-   - 作者：Niami, Morteza
-   - 原因：结构化来源在支持论文形式与不支持形式之间冲突
-   - 来源链接：https://philpapers.org/rec/NIAOOF-2
-9. Relational Continuance, Multiplicity, Erosion, and the Continuity of Agency
-   - 作者：Niami, Morteza
-   - 原因：结构化来源在支持论文形式与不支持形式之间冲突
-   - 来源链接：https://philpapers.org/rec/NIARCM
-- 另有 9 条人工复核候选未在本报告展开。
+   - 来源链接：https://philpapers.org/rec/ZOHICA
+   - 类型证据：philarchive-oai book → book; openalex preprint → preprint
+   - 证据指纹：`811ccac15109d3f4e1877197ea1a5295ed30785d7ad692f05bdd12307952092b`
+   - 来源日期：2026-01-01 (day; openalex)
+2. The Collective Architect: Role Distribution and the Limits of Collective Tragic Judgment. Article 12
+   - 作者：Hlynskyi, Volodymyr
+   - 原因：结构化来源返回相互冲突的 DOI 标识符
+   - 来源链接：https://philpapers.org/rec/HLYTCA
+3. The Collective Subject and Distributed Responsibility: Ontological Conditions for Organisational Accountability. Article 6
+   - 作者：Hlynskyi, Volodymyr
+   - 原因：可能是译名或大幅改题版本，需要人工确认作品同一性
+   - 来源链接：https://philpapers.org/rec/HLYTCS
+4. THE PRICE OF THE PERFORMANCE: Surface Acting as the Measured Maintenance Cost of Inverted Virtue
+   - 作者：Mattos, José Caetano de
+   - 原因：可能是译名或大幅改题版本，需要人工确认作品同一性
+   - 来源链接：https://philpapers.org/rec/MATTPO-87
+5. The Sovereign Spine: A New Theory of Institutional Coherence and Agency
+   - 作者：Mertens, Robin Edgard Ulrik
+   - 原因：可能是译名或大幅改题版本，需要人工确认作品同一性
+   - 来源链接：https://philpapers.org/rec/MERTSS-5
+6. 48C2Non-Basic Action
+   - 作者：Peacocke, Antonia
+   - 原因：可能是译名或大幅改题版本，需要人工确认作品同一性
+   - 来源链接：https://philpapers.org/rec/PEACAM
+7. 260C10Transparent Self-Knowledge
+   - 作者：Peacocke, Antonia
+   - 原因：可能是译名或大幅改题版本，需要人工确认作品同一性
+   - 来源链接：https://philpapers.org/rec/PEACSG
+8. C245Morality and Freedom in the Groundwork
+   - 作者：Tizzard, Jessica
+   - 原因：可能是译名或大幅改题版本，需要人工确认作品同一性
+   - 来源链接：https://philpapers.org/rec/TIZCAF
+9. C393Freedom in the Critique of Practical Reason
+   - 作者：Tizzard, Jessica
+   - 原因：可能是译名或大幅改题版本，需要人工确认作品同一性
+   - 来源链接：https://philpapers.org/rec/TIZCIT
+10. C5177Setting Up the Postulates of Pure Practical Reason
+   - 作者：Tizzard, Jessica
+   - 原因：可能是译名或大幅改题版本，需要人工确认作品同一性
+   - 来源链接：https://philpapers.org/rec/TIZCUT
+
+## 无日期记录集合
+
+本次有 284 条 OAI 库存记录同时缺少 feed 时间、书目年份、DOI 和明确的手稿／预印本类型；其中 0 条是本次首次进入私人散列隔离集合。它们没有消耗逐篇书目查询额度，也不计入“本次未轮到远程核验”数量或人工复核。
+
+该集合只表示日期证据不足，不表示作品已被证明为旧作或与兴趣无关。以后记录出现年份、DOI、feed 时间或明确的早期稿本类型时，程序会自动移出集合并重新核验。因此，没有这些字段的新手稿可能不会出现在普通即时报告中。
 
 ## 方法说明
 
@@ -1413,14 +740,16 @@ taxonomy 快照：`philpapers:20260905T130303Z:e2538657e2ce`
 
 本报告只能反映运行时成功返回的已配置 PhilPapers 分类 feed，以及当时能够取得的外部书目元数据。尚未被来源收录、来源更新延迟或关键元数据缺失的作品可能延后出现；系统会披露失败来源和未完成核验数量，但不承诺对全球哲学新作的穷尽覆盖。
 
-</details>
-
 ---
+
+</details>
 
 # Philosophy Frontier On-Demand Report
 
-On-demand window: `2026-09-02T07:49:58.644162+00:00` to `2026-09-09T07:49:58.644162+00:00` (exclusive end)
-Interest profile: `pfm:interest:public-demo-20260909` version 1
+> **Individually reviewed on 10 October 2026.** This actual rerun held the seven-day window ending 9 October 13:08 China Standard Time, reread the three public category feeds, and applied document-based work-type decisions. It does not reconstruct the 9 October feed historically. The 39 source-change classifications are retrospective window projections, not proof that those records actually arrived by 9 October; the four confirmed-new works have separate in-window publication-date evidence. The [original 9 October snapshot](public-demo-weekly-report-2026-10-09-original.md) remains available. No formal weekly state was advanced.
+
+On-demand window: `2026-10-02T05:08:21.648638+00:00` to `2026-10-09T05:08:21.648638+00:00` (exclusive end)
+Interest profile: `pfm:interest:public-demo-20261008` version 1
 Taxonomy snapshot: `philpapers:20260905T130303Z:e2538657e2ce`
 Selected categories: Moral Responsibility, Free Will, Action Theory
 
@@ -1428,45 +757,313 @@ This report includes papers only when they are confirmed as new within the windo
 
 This report was generated by an explicit user request and is independent of the formal weekly report. It neither reads weekly notification history nor writes or advances the baseline, retry queue, run history, or feed checkpoints. It is therefore normal for the same paper to appear in a later weekly report.
 
+PhilArchive OAI incremental narrowing was used. Feed records lacking both a timestamp and a bibliographic year continued to verification only when the same `/rec/` record changed within the window. OAI covers open records only, so fully undated non-open PhilPapers records may be absent from this report; this is not a permanent old-work judgment.
+
 ## Results at a glance
 
-### Confirmed new: 1
+### Confirmed new: 4
 
-This record has independent evidence of first availability or formal publication within the window.
+These works have independent evidence of first availability or formal publication within the window.
 
-### Recent PhilPapers source arrivals: 91
+### Recent PhilPapers source arrivals: 39
 
-These records recently entered the PhilPapers or PhilArchive source-change set for the selected categories, and that run's old-work check found no earlier work evidence. This is not a claim that a formal publication date was obtained.
+These works recently entered the PhilPapers or PhilArchive source-change set for the selected categories, and the current old-work check found no earlier work evidence. This is not a claim that a formal publication date was obtained.
 
-The two counts were computed item by item from the 92 actual pull records below using their `freshness_status` and `freshness_event`; no paper or count was synthesized. An additional **18 records require human review**; review records and technical notes can be expanded at the end of this section.
+The two totals are counted from the 43 works below. Another **10 records require human review**, including **one unresolved work-type conflict**. The complete queue and source limits can be expanded later in this report.
 
-## Matching papers (92)
+## Matching papers (43)
 
-### Recently published (1)
+### Recently published (4)
 
 Ordered newest first by the available publication-date evidence.
 
-#### 1. Forgiveness in the plural
+#### 1. The Philosophy of Significance How Importance Is Constituted, Experienced, and Transformed
 
-- Authors: Mario Attie‐Picker
+- Authors: Morteza Niami
 - Venue: Not recorded
-- Work type: forthcoming-article
-- Work-type evidence status: compatible
-- Work-type evidence: philpapers-rss-description: forthcoming-article; philarchive-oai: unrecognized -> article; openalex: article
+- Work type: article
+- Work-type evidence status: reviewed
+- Work-type evidence: philarchive-oai: book; openalex: article; document-review: article (inspected source: https://zenodo.org/records/23142895/files/The\_Philosophy\_of\_Significance.pdf?download=1)
 - Freshness event: recently_published
-- Publication-date evidence: 2026-09-03 (precision: day; source: openalex)
+- Publication-date evidence: 2026-10-04 (precision: day; source: openalex)
 - Recent-availability evidence: Not recorded
 - Matching interest categories: Action Theory; Free Will; Moral Responsibility
 - Verified paper categories: Action Theory; Free Will; Moral Responsibility
-- DOI or stable link: https://doi.org/10.1080/0020174x.2026.2728127
+- DOI or stable link: https://doi.org/10.5281/zenodo.23142894
+
+#### 2. Before Fatelessness: From Fatality and Abolition to Operational Reconfiguration
+
+- Authors: Fujie Naoto
+- Venue: Not recorded
+- Work type: manuscript
+- Work-type evidence status: reviewed
+- Work-type evidence: philarchive-oai: article; openalex: dataset; document-review: manuscript (inspected source: https://zenodo.org/records/23123293/files/fateless\_fixed.docx?download=1)
+- Freshness event: recently_published
+- Publication-date evidence: 2026-10-03 (precision: day; source: openalex)
+- Recent-availability evidence: Not recorded
+- Matching interest categories: Action Theory; Free Will
+- Verified paper categories: Action Theory; Free Will
+- DOI or stable link: https://doi.org/10.5281/zenodo.23123292
+
+#### 3. Free Will and the Significance of Basic Undeservedness
+
+- Authors: Gunnar Björnsson
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: confirmed
+- Work-type evidence: philarchive-oai: article; openalex: article
+- Freshness event: recently_published
+- Publication-date evidence: 2026-10-03 (precision: day; source: openalex)
+- Recent-availability evidence: Not recorded
+- Matching interest categories: Free Will; Moral Responsibility
+- Verified paper categories: Free Will; Moral Responsibility
+- DOI or stable link: https://doi.org/10.1007/s11406-026-01037-6
+
+#### 4. When the Past Cannot Be Narrated Experience, Trace, Memory, and the Emergence of Narrative
+
+- Authors: Morteza Niami
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: reviewed
+- Work-type evidence: philarchive-oai: book; openalex: article; document-review: article (inspected source: https://zenodo.org/api/records/23126386/files/When%20the%20Past%20Cannot%20Be%20Narrated.pdf/content)
+- Freshness event: recently_published
+- Publication-date evidence: 2026-10-03 (precision: day; source: openalex)
+- Recent-availability evidence: Not recorded
+- Matching interest categories: Action Theory; Free Will
+- Verified paper categories: Action Theory; Free Will
+- DOI or stable link: https://doi.org/10.5281/zenodo.23126385
 
 ---
 
-### Recently arrived (2)
+### Recently arrived (19)
 
 Ordered newest first by PhilPapers or PhilArchive recent-availability evidence. A source-arrival time is not a formal publication date.
 
-#### 2. Liberal Principles and the Right to a Private Life: Why Australia's Institutional Press Should Face a Privacy Tort
+#### 5. "Now That I’m Privileged…": World-Traveling, Shifting Positionality, and Responsibility for Intersectional Feminism
+
+- Authors: Kong, Youjin
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory; Free Will; Moral Responsibility
+- Verified paper categories: Action Theory; Free Will; Moral Responsibility
+- DOI or stable link: https://philpapers.org/rec/KONQTI
+
+#### 6. 'The Voluntary is Essentially Superficial.' Bernard Williams on Responsibility and Political Freedom
+
+- Authors: Heuer, Ulrike
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory; Free Will; Moral Responsibility
+- Verified paper categories: Action Theory; Free Will; Moral Responsibility
+- DOI or stable link: https://philpapers.org/rec/HEUTVI
+
+#### 7. 112C5Practical Knowledge
+
+- Authors: Peacocke, Antonia
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory
+- Verified paper categories: Action Theory
+- DOI or stable link: https://philpapers.org/rec/PEACKT
+
+#### 8. 140C6Mental Action
+
+- Authors: Peacocke, Antonia
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory
+- Verified paper categories: Action Theory
+- DOI or stable link: https://philpapers.org/rec/PEACAW-2
+
+#### 9. 183C7Intentional Judgment
+
+- Authors: Peacocke, Antonia
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory
+- Verified paper categories: Action Theory
+- DOI or stable link: https://philpapers.org/rec/PEACJB
+
+#### 10. 207C8Creative Conception
+
+- Authors: Peacocke, Antonia
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory
+- Verified paper categories: Action Theory
+- DOI or stable link: https://philpapers.org/rec/PEACCT
+
+#### 11. 21C1Intentional Action
+
+- Authors: Peacocke, Antonia
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory
+- Verified paper categories: Action Theory
+- DOI or stable link: https://philpapers.org/rec/PEACAU
+
+#### 12. 235C9Imagination
+
+- Authors: Peacocke, Antonia
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory
+- Verified paper categories: Action Theory
+- DOI or stable link: https://philpapers.org/rec/PEACLJ
+
+#### 13. 290C11Inference
+
+- Authors: Peacocke, Antonia
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory
+- Verified paper categories: Action Theory
+- DOI or stable link: https://philpapers.org/rec/PEACBX
+
+#### 14. 325C12Inquiry
+
+- Authors: Peacocke, Antonia
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory
+- Verified paper categories: Action Theory
+- DOI or stable link: https://philpapers.org/rec/PEACCV
+
+#### 15. 353Conclusion
+
+- Authors: Peacocke, Antonia
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory
+- Verified paper categories: Action Theory
+- DOI or stable link: https://philpapers.org/rec/PEACEG
+
+#### 16. 67C3Basic Action
+
+- Authors: Peacocke, Antonia
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory
+- Verified paper categories: Action Theory
+- DOI or stable link: https://philpapers.org/rec/PEACAC-6
+
+#### 17. Artificial Intelligence as a Condition for Kamma: Utu-niyāma, Cetanā, and Moral Responsibility in Theravāda Abhidhamma
+
+- Authors: Karunanayaka, Indrajith P.
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory; Free Will; Moral Responsibility
+- Verified paper categories: Action Theory; Free Will; Moral Responsibility
+- DOI or stable link: https://philpapers.org/rec/KARAIA-8
+
+#### 18. C121The Faculty of Reason
+
+- Authors: Tizzard, Jessica
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Free Will
+- Verified paper categories: Free Will
+- DOI or stable link: https://philpapers.org/rec/TIZCFO
+
+#### 19. Epistemological Dualism in Functionalism and the Explanation of Causal Roles
+
+- Authors: Roshani Payan, Milad
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory
+- Verified paper categories: Action Theory
+- DOI or stable link: https://philpapers.org/rec/ROSEDI-3
+
+#### 20. Illusions, Art, and Seeing with Color
+
+- Authors: Rosenqvist, Tiina Carita
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory
+- Verified paper categories: Action Theory
+- DOI or stable link: https://philpapers.org/rec/ROSIAA-14
+
+#### 21. Liberal Principles and the Right to a Private Life: Why Australia's Institutional Press Should Face a Privacy Tort
 
 - Authors: Blackford, Russell
 - Venue: Not recorded
@@ -1475,12 +1072,12 @@ Ordered newest first by PhilPapers or PhilArchive recent-availability evidence. 
 - Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
 - Freshness event: recently_arrived_in_philpapers_alert
 - Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
-- Recent-availability evidence: 2026-09-09T07:49:58.644162+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
 - Matching interest categories: Action Theory; Free Will
 - Verified paper categories: Action Theory; Free Will
 - DOI or stable link: https://philpapers.org/rec/BLALPA-4
 
-#### 3. Replies to Brown, Kauppinen, and Mitova
+#### 22. Replies to Brown, Kauppinen, and Mitova
 
 - Authors: Boult, Cameron
 - Venue: Not recorded
@@ -1489,1340 +1086,397 @@ Ordered newest first by PhilPapers or PhilArchive recent-availability evidence. 
 - Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
 - Freshness event: recently_arrived_in_philpapers_alert
 - Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
-- Recent-availability evidence: 2026-09-09T07:49:58.644162+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
 - Matching interest categories: Moral Responsibility
 - Verified paper categories: Moral Responsibility
 - DOI or stable link: https://philpapers.org/rec/BOUBSO-2
 
+#### 23. The Circular Theory Video 7
+
+- Authors: Yardley, Ilexa
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: defaulted
+- Work-type evidence: The sources supplied no usable structured work type; article is the alert-stream candidate default, not a source assertion
+- Freshness event: recently_arrived_in_philpapers_alert
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-09T05:08:21.648638+00:00 (precision: second; source: philpapers-rss-current-alert-observation)
+- Matching interest categories: Action Theory
+- Verified paper categories: Action Theory
+- DOI or stable link: https://philpapers.org/rec/YARTCT-12
+
 ---
 
-### Recently changed (89)
+### Recently changed (20)
 
 Ordered newest first by PhilArchive OAI record-change time. A record change means that source metadata changed, not that the paper was published at that time.
 
 <details>
-<summary>Show/hide recently changed (89; hidden by default)</summary>
+<summary>Show/hide recently changed (20; hidden by default)</summary>
 
-#### 4. Many Worlds, One Branch: Why the Many-Worlds Interpretation Cannot Ground Libertarian Free Will
-
-- Authors: Buré, Simon
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:34:30+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philpapers.org/rec/BURMWO-2
-
-#### 5. Rethinking the Formal Object of the Will: Ockham's Theoretical Shift
-
-- Authors: Braekman, Valentin
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
-- Recent-availability evidence: 2026-09-08T11:34:26+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philpapers.org/rec/BRARTF-2
-
-#### 6. Self-Pertinent Volition: Beyond Determinism and Free Will
-
-- Authors: Akhondi, Daniel
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:34:26+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philpapers.org/rec/AKHSVB
-
-#### 7. The causality of the future: Implications for determinism and free will
-
-- Authors: Matzen, Ted
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:34:02+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philarchive.org/rec/MATTCO-45
-
-#### 8. Making the vague precise: What Bohmian mechanics really says
-
-- Authors: Adam Brownstein
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:33:51+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory
-- Verified paper categories: Action Theory
-- DOI or stable link: https://philpapers.org/rec/BROMTV-2
-
-#### 9. Responsibility for Causing Change
-
-- Authors: Bianchi, Robin T. &amp; Simon-Pierre, Chevarie-Cossette
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:33:30+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will; Moral Responsibility
-- Verified paper categories: Action Theory; Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/BIARFC
-
-#### 10. Short Essays: Grief
-
-- Authors: Marga Jackson
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:33:13+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will; Moral Responsibility
-- Verified paper categories: Action Theory; Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/JACSEG
-
-#### 11. Reflections- A Story of My Unlearnings in Life: A Pragmatic Deconstruction of Meritocratic Illusion.
-
-- Authors: Anubhav Srivastava
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:33:07+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philpapers.org/rec/SRIRAS-2
-
-#### 12. Liberty Without Stability: John Stuart Mill, Economic Precarity, and the Limits of Formal Freedom
-
-- Authors: Lyric Helena Emerson
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:32:59+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philpapers.org/rec/EMELWS
-
-#### 13. The Moral Limits of Neutrality: When Silence Protects Power
-
-- Authors: Lyric Helena Emerson
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:32:59+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will; Moral Responsibility
-- Verified paper categories: Action Theory; Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/EMETML
-
-#### 14. The Right to Build: Entrepreneurship, Social Cooperation, and the Ethics of Economic Agency
-
-- Authors: Lyric Helena Emerson
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:32:59+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philpapers.org/rec/EMETRT
-
-#### 15. Resistible Grace without (Semi) Pelagianism
-
-- Authors: Capes, Justin A.
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:32:58+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philpapers.org/rec/CAPRGW-2
-
-#### 16. L’action du virtuel : une échappée historique entre réalité et possibilité
-
-- Authors: Charles Bodon
-- Venue: Implications philosophiques
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; crossref: journal-article -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: 2026 (precision: year; source: crossref)
-- Recent-availability evidence: 2026-09-08T11:32:42+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory
-- Verified paper categories: Action Theory
-- DOI or stable link: https://doi.org/10.4000/16ji3
-
-#### 17. The Improbable Witness: Contingency, Embodiment, and the Fittedness of Human Existence
-
-- Authors: Boether, Olivier
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:32:34+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philpapers.org/rec/BOETIW
-
-#### 18. Dall'essenza alla pena: perché l'assenza di libero arbitrio impone il passaggio dalla giustizia retributiva alla difesa sociale
-
-- Authors: Barsotti, Antonio
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:32:30+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philpapers.org/rec/BARDAP-14
-
-#### 19. Osservazioni sulla logica e la causalità
-
-- Authors: Barsotti, Antonio
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:32:26+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philpapers.org/rec/BAROSL-3
-
-#### 20. Sapolsky’s Error: Hard Determinism, the Denial of the Philosophical Self, and the Reconstruction of Agency Through Developmental Convergence
-
-- Authors: Boether, Olivier
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:32:11+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will; Moral Responsibility
-- Verified paper categories: Action Theory; Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/BOESEH
-
-#### 21. CVIARP: A Framework for Identifying the Points of Motion in Consciously Created Results
-
-- Authors: Orion Simerl
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:32:04+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory
-- Verified paper categories: Action Theory
-- DOI or stable link: https://philpapers.org/rec/SIMCAF-7
-
-#### 22. Determinism as the Ground of Freedom of Choice
-
-- Authors: Artemov, D.
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:31:57+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philpapers.org/rec/ARTDAT
-
-#### 23. 从人类繁荣到全球共同体：我们如何共同繁荣
-
-- Authors: Terrence Moore
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:31:45+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philpapers.org/rec/MOONXU
-
-#### 24. Civilization's Debt: A Continuation On the Inescapability of the Ameliorative Premise, the Compatibilist Concession, and the Closure of the Consistency Argument
-
-- Authors: Al-Tamr, Bassel
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
-- Recent-availability evidence: 2026-09-08T11:31:35+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will; Moral Responsibility
-- Verified paper categories: Action Theory; Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/ALTCDA
-
-#### 25. Moving On: Desire, Grief, and the Death of Possibility
-
-- Authors: Bobb, Caitriona
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:31:29+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philpapers.org/rec/BOBMOD
-
-#### 26. Consistentism: Justice After the Death of Meaning
-
-- Authors: Xuan Yang
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:31:23+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will; Moral Responsibility
-- Verified paper categories: Action Theory; Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/YANCJA
-
-#### 27. Terminal Recursion as Moral Death: \_Agency Collapse and the Wantonhood of Systems\_
-
-- Authors: Arkema, D.
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:31:17+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will; Moral Responsibility
-- Verified paper categories: Action Theory; Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/ARKTRA-3
-
-#### 28. The Gate Between Constraint and Identification
-
-- Authors: Bostick, Devin
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:31:11+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philpapers.org/rec/BOSTGB
-
-#### 29. A Topos Model for Neural Networks
+#### 24. A Topos Model for Natural Neural Networks
 
 - Authors: Cacioppo, Robert
 - Venue: Not recorded
 - Work type: article
 - Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
+- Work-type evidence: philarchive-oai: article
 - Freshness event: recently_changed_in_philarchive_oai
 - Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:31:10+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
+- Recent-availability evidence: 2026-10-08T23:44:44+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Matching interest categories: Free Will
+- Verified paper categories: Free Will
 - DOI or stable link: https://philpapers.org/rec/CACFED
 
-#### 30. Civilization's Debt: On Basic Rights, Diminished Agency, and the Incoherence of Retributive Justice
+#### 25. Epistemic Antibodies: A Technical Implementation of Semantic Immunity for Conceptual Lineage Protection
+
+- Authors: Ostachuk, Agustin
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: confirmed
+- Work-type evidence: philarchive-oai: article
+- Freshness event: recently_changed_in_philarchive_oai
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-08T11:13:10+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Matching interest categories: Action Theory; Free Will
+- Verified paper categories: Action Theory; Free Will
+- DOI or stable link: https://philpapers.org/rec/OSTEAA
+
+#### 26. La firma como criterio del orden admisible. Nota de prioridad sobre el tercer movimiento de La Obra
+
+- Authors: Jose Fernández Tamames
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: confirmed
+- Work-type evidence: philarchive-oai: article; openalex: article
+- Freshness event: recently_changed_in_philarchive_oai
+- Publication-date evidence: Not recorded
+- Recent-availability evidence: 2026-10-08T11:13:03+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Matching interest categories: Action Theory; Free Will; Moral Responsibility
+- Verified paper categories: Action Theory; Free Will; Moral Responsibility
+- DOI or stable link: https://philpapers.org/rec/FERLFC-11
+
+#### 27. Comparative analysis of moral development and responsibility from the perspective of developmental psychology, moral duty, and Islamic innate morality: Designing an applied …
+
+- Authors: Tabarsi, Muhammad &amp; Tabatabaei, Morteza
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: confirmed
+- Work-type evidence: philarchive-oai: article
+- Freshness event: recently_changed_in_philarchive_oai
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-08T11:12:12+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Matching interest categories: Action Theory; Free Will; Moral Responsibility
+- Verified paper categories: Action Theory; Free Will; Moral Responsibility
+- DOI or stable link: https://philpapers.org/rec/TABCAO
+
+#### 28. L’action du virtuel : une échappée historique entre réalité et possibilité
+
+- Authors: Charles Bodon
+- Venue: Implications philosophiques
+- Work type: article
+- Work-type evidence status: confirmed
+- Work-type evidence: philarchive-oai: article; crossref: journal-article -> article
+- Freshness event: recently_changed_in_philarchive_oai
+- Publication-date evidence: 2026 (precision: year; source: crossref)
+- Recent-availability evidence: 2026-10-08T11:11:09+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Matching interest categories: Action Theory
+- Verified paper categories: Action Theory
+- DOI or stable link: https://doi.org/10.4000/16ji3
+
+#### 29. Civilization's Debt: A Continuation On the Inescapability of the Ameliorative Premise, the Compatibilist Concession, and the Closure of the Consistency Argument
 
 - Authors: Al-Tamr, Bassel
 - Venue: Not recorded
 - Work type: article
 - Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
+- Work-type evidence: philarchive-oai: article
 - Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:31:09+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-08T11:10:01+00:00 (precision: second; source: philarchive-oai-datestamp)
 - Matching interest categories: Action Theory; Free Will; Moral Responsibility
 - Verified paper categories: Action Theory; Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/ALTCDO-2
+- DOI or stable link: https://philpapers.org/rec/ALTCDA
 
-#### 31. Are Desires Aligned with the Self? : A Model of Desire Self-Alignment and Desire–Self-Image Incongruence
+#### 30. Evolutio Unfolding Theory: the Ontologization of Unfolding and its Systematic Stabilization
 
-- Authors: Suji Choi
+- Authors: Ostachuk, Agustin
 - Venue: Not recorded
 - Work type: article
 - Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
+- Work-type evidence: philarchive-oai: article
 - Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:31:04+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory
-- Verified paper categories: Action Theory
-- DOI or stable link: https://philpapers.org/rec/CHOADA-2
-
-#### 32. The Circuit-Breaker as Self-Governance Architecture: \_Pre-Committed Pause Triggers and the Discipline of Required Re-Engagement\_
-
-- Authors: Arkema, D.
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:31:02+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will; Moral Responsibility
-- Verified paper categories: Action Theory; Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/ARKTCA-2
-
-#### 33. The Description–Ontology Gap: A Methodological Reconstruction
-
-- Authors: Mateusz Skarbek
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:29:47+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory
-- Verified paper categories: Action Theory
-- DOI or stable link: https://philpapers.org/rec/SKATDG
-
-#### 34. A Reality that Even Your Shallow Intentions Are Seen Through
-
-- Authors: Keiichi Hori
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:29:39+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory
-- Verified paper categories: Action Theory
-- DOI or stable link: https://philpapers.org/rec/HORART-3
-
-#### 35. The Structural Architecture of Ideology: A Functional Analysis of the Core Emotion Framework in Political and Economic Systems
-
-- Authors: Bulgaria, Jamel
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:29:25+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-08T11:09:39+00:00 (precision: second; source: philarchive-oai-datestamp)
 - Matching interest categories: Free Will
 - Verified paper categories: Free Will
-- DOI or stable link: https://philpapers.org/rec/BULTSA-10
+- DOI or stable link: https://philpapers.org/rec/OSTEUT-3
 
-#### 36. The Structural Architecture of Ideology: Applying the Core Emotion Framework to Political and Economic Systems
+#### 31. To Expect the Unexpected: On Cultivating the Accident of Freedom
 
-- Authors: Bulgaria, Jamel
+- Authors: Saad, George
 - Venue: Not recorded
 - Work type: article
 - Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
+- Work-type evidence: philarchive-oai: article
 - Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:29:25+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-08T11:09:21+00:00 (precision: second; source: philarchive-oai-datestamp)
 - Matching interest categories: Free Will
 - Verified paper categories: Free Will
-- DOI or stable link: https://philpapers.org/rec/BULTSA-9
+- DOI or stable link: https://philpapers.org/rec/SAATET
 
-#### 37. Pre-Possessive Mineness and Structural Responsibility: Immediate Givenness, Suffering, and Re-Inheritance
+#### 32. \_Layered Causal Realism I.S\_ : Determinism, Continuity, and the Structure of Agency
 
-- Authors: Ian William van Eenennaam
+- Authors: Qian, Chenghao
 - Venue: Not recorded
 - Work type: article
 - Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
+- Work-type evidence: philarchive-oai: article
 - Freshness event: recently_changed_in_philarchive_oai
 - Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:29:24+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Recent-availability evidence: 2026-10-08T11:09:09+00:00 (precision: second; source: philarchive-oai-datestamp)
 - Matching interest categories: Free Will; Moral Responsibility
 - Verified paper categories: Free Will; Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/VANPMA-11
+- DOI or stable link: https://philpapers.org/rec/QIALCR-6
 
-#### 38. The Dissolution of the Dualism between Utilitarianism and Deontology Based on the System of Generalized Harm-Avoidance Monism
+#### 33. Can a System That Cannot Lose Have Dignity? An Axiomatic Argument Against Functional Criteria for AI Moral Status.
 
-- Authors: Yuming Yang
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:28:50+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will; Moral Responsibility
-- Verified paper categories: Free Will; Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/YANTDO-25
-
-#### 39. Free Will and the Significance of Basic Undeservedness
-
-- Authors: Björnsson, Gunnar
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:28:26+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will; Moral Responsibility
-- Verified paper categories: Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/BJRFWA
-
-#### 40. Complicity as accountability; accountability as one
-
-- Authors: Björnsson, Gunnar
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:28:25+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will; Moral Responsibility
-- Verified paper categories: Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/BJRCAA-2
-
-#### 41. The Closest Anything Can Get To Absolute Free Will
-
-- Authors: Obie Hans von
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:28:25+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will
-- Verified paper categories: Free Will
-- DOI or stable link: https://philpapers.org/rec/HANTCA-15
-
-#### 42. Genuine Institutional Agency and Its Simulacrum
-
-- Authors: Radha Sarma
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:27:47+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will; Moral Responsibility
-- Verified paper categories: Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/SARGIA
-
-#### 43. Free Won't vs Free Will
-
-- Authors: Arkema, D.
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:27:46+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will
-- Verified paper categories: Free Will
-- DOI or stable link: https://philpapers.org/rec/ARKFWV
-
-#### 44. (This is Incomplete Version) The Causality Game: A Framework for the Physical Universe, Human Perception, and Social Structure Based on the Principle of Causality
-
-- Authors: Keiichi Hori
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:27:43+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will
-- Verified paper categories: Free Will
-- DOI or stable link: https://philpapers.org/rec/HORTCG
-
-#### 45. Resolution Theory: Canon, Working Notes, and Suggested Start Points
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:27:43+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will
-- Verified paper categories: Free Will
-- DOI or stable link: https://philpapers.org/rec/EASRTC
-
-#### 46. THE POPPY AND THE FLAG : Drug Economy Management, Mass Incarceration, and the Architecture That Has Never Been at War with Its Own Supply Chain
-
-- Authors: Barteau, Stewart
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:27:38+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will; Moral Responsibility
-- Verified paper categories: Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/BARTPA-36
-
-#### 47. Moral Theories as Compression Strategies: What We’re Really Doing When We Argue Morally
-
-- Authors: Bobb, Caitriona
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:27:36+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will; Moral Responsibility
-- Verified paper categories: Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/BOBMTA
-
-#### 48. The Illusion of Agency: Why Free Will Does Not Exist
-
-- Authors: Being, Zane
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:27:34+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will
-- Verified paper categories: Free Will
-- DOI or stable link: https://philpapers.org/rec/BEITIO-13
-
-#### 49. Rethinking Counterfactual Responsibility Institutional Constraint and Normative Accessibility
-
-- Authors: Timothy Fuller
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:27:20+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will; Moral Responsibility
-- Verified paper categories: Free Will; Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/FULRCR
-
-#### 50. War in Superposition : The Observers Dissent
-
-- Authors: Stewart Barteau
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:27:10+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will; Moral Responsibility
-- Verified paper categories: Free Will; Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/BARWIS-6
-
-#### 51. Resolution Theory: The Hindsight and Displacement Fallacies
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:27:03+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will; Moral Responsibility
-- Verified paper categories: Free Will; Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/EASRTT
-
-#### 52. The Wizard Story: A Thought Experiment on Freedom, Control, and Responsibility
-
-- Authors: Dmitry Artemov
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:27:03+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philpapers.org/rec/ARTTWS
-
-#### 53. Theorem: Morality as a rationally deducible law
-
-- Authors: Simone Lattanzio
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:26:48+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will; Moral Responsibility
-- Verified paper categories: Action Theory; Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/LATTMA-3
-
-#### 54. Experience as the Foundation of Consciousness: The Iterative Subject, Free Will, and the Universal Vector of Unification
-
-- Authors: Kirill Ulyanov
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:26:46+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will
-- Verified paper categories: Free Will
-- DOI or stable link: https://philpapers.org/rec/ULYEAT
-
-#### 55. The Convergence: Independent Approaches to a Single Structural Wall Across Philosophy, Mathematics, Physics, Theology, and Culture
-
-- Authors: Stewart Barteau
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:26:46+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Free Will
-- Verified paper categories: Free Will
-- DOI or stable link: https://philarchive.org/rec/BARTCI-10
-
-#### 56. TELEOLOGICAL OPACITY AND DETERMINATE PREFERENCE FAILURE: A Structural Critique of Revealed Preference in Complex Social Systems
-
-- Authors: Tommaso Biagi
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:26:11+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/BIATOA-2
-
-#### 57. The Emergence of Moral Normativity: Fragility, Agency, Modulation, and Coupling
-
-- Authors: Andre Hampshire
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:26:04+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/HAMTEO-39
-
-#### 58. The Telic Way: Capitalism-Ending Responsibility Subsidies (A Resolutionist Account of the Economy)
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:25:56+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/EASTCE
-
-#### 59. The Displacement Fallacy: Resolution Theory as an Interface Layer for Agency, Responsibility, and Normativity
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:25:11+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/EASTDF
-
-#### 60. Distinction Without Escape: Resolution, Exposure, and the Location of Free Will
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:24:58+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/EASART-2
-
-#### 61. Right Action as Loss-Minimization Among Viable Options: A Structural Theory
-
-- Authors: Andre Hampshire
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:24:54+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/HAMRAA-7
-
-#### 62. When Power Becomes Procedure: Why Power Does Not Corrupt People, but Normalizes Corruption
-
-- Authors: Craig Stilley
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:24:54+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/STIWPB
-
-#### 63. Generativity Under Constraint: A Structural Framework for Creative, Coherent, and Safe Intelligent Systems
-
-- Authors: Abdulaziz Abdi
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:24:50+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/ABDGUC
-
-#### 64. Moral Agency Under Scale: Structural Conditions for Recognition, Inertia, and Failure
-
-- Authors: Abdulaziz Abdi
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:24:50+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/ABDMAU
-
-#### 65. Compatibilism and Responsibility Realism
-
-- Authors: Paul Russell
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:24:47+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/RUSCAR-5
-
-#### 66. Resolution Theory on Free Will in a Deterministic Universe: Steelman Objections
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:24:46+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/EASRTO
-
-#### 67. Coherence, Power, and Moral Rupture: Why Systems Fail and Exemplars Reappear
-
-- Authors: Abdulaziz Abdi
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:24:45+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/ABDCPA
-
-#### 68. Resolutionist Foundations of Artificial Agency
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:24:37+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/EASRFO
-
-#### 69. The Heart Of Conciousness: Determinism, Exposure, and the Conditions of Free Will in a Shared World
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:24:37+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/EASTHO
-
-#### 70. Resolution Ethics III: Telic Justice — Punishment, Repair, and the Preservation of Civic Order
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:24:34+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/EASREB
-
-#### 71. Resolution Ethics I
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:24:32+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/EASRED
-
-#### 72. Fixed Does Not Mean Bypassed: Evaluative Resolution and Authorship
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:24:28+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/EASFDN
-
-#### 73. Resolution Theory: Reading order and glossary
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:24:28+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/EASRTR-2
-
-#### 74. Resolution Theory — Volume I: Foundations (Agency as Resolution)
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:23:19+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/EASRTF
-
-#### 75. Agency Without Metaphysics: Resolution, Suffering, and Normativity
-
-- Authors: H. Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:21:22+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/EASRTS
-
-#### 76. Resolution Theory — Talking Past Each Other: Explanation vs Authorship
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:21:20+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/EASRTA
-
-#### 77. Resolution Theory — Unified Account: Free Will, Responsibility, and Normativity
-
-- Authors: H. Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:21:20+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/EASAAR
-
-#### 78. Resolutionism — Distortion Without Bypass: Addiction, Agency, and Responsibility
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:21:20+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/EASDWB
-
-#### 79. Resolutionist AI — Agency and Responsibility in Artificial Systems
-
-- Authors: Hamilton Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:21:20+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/EASRAA-3
-
-#### 80. Sociometry of Work Management
-
-- Authors: Gnouma Jérôme Kadouno
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:21:19+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/KADSOW
-
-#### 81. Agency as Resolution: A First-Principles Clarification of Determinism and Normativity.
-
-- Authors: Hamilton Ross Easton
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:21:07+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will; Moral Responsibility
-- Verified paper categories: Action Theory; Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/EASCAR-2
-
-#### 82. Pre-Reflective Betrayal and Pre-Responsibility Guilt: Subject Formation and Affective Governance in Late Capitalism
-
-- Authors: 대륜 임
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:20:26+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philarchive.org/rec/PBARIZ
-
-#### 83. Blaming and Forgiving as Intimates
-
-- Authors: Rosalind Chaplin
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:20:07+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/CHABAF-3
-
-#### 84. The Discipline of Inevitability: Political Science as Technocratic Fatalism
-
-- Authors: Caitriona Bobb
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:19:50+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/BOBTDO-5
-
-#### 85. The Principle of Regulation: Responsiveness as a Pre-Divisional Foundation of Ethics, Ontology, and Epistemology
-
-- Authors: Mohammad Mahdi Zarnooshe Farahani
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:19:48+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/ZARTPO-5
-
-#### 86. Ethics without Conscious Agency: Non-Conscious Intelligence and the Graded Manifestation of Ethics
-
-- Authors: Mohammad Mahdi Zarnooshe Farahani
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:19:46+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/ZAREWC
-
-#### 87. Silence as Power: Reachability, Answerability, and Bureaucratic Responsibility
-
-- Authors: Wishy Kane
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:19:40+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/KANSAP-3
-
-#### 88. Consider the Carter Case: A Problem For Libertarians about Free Will?
-
-- Authors: Carter, Logan
-- Venue: Not recorded
-- Work type: article
-- Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
-- Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:19:20+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Moral Responsibility
-- Verified paper categories: Moral Responsibility
-- DOI or stable link: https://philarchive.org/rec/CARCTC-4
-
-#### 89. Beyond Power: Why Nietzsche's Ethics Fails and How Syntactic Care Succeeds
-
-- Authors: David Carboni
+- Authors: Volodymyr Hlynskyi
 - Venue: Not recorded
 - Work type: article
 - Work-type evidence status: compatible
-- Work-type evidence: philarchive-oai: unrecognized -> article; crossref: posted-content -> preprint
+- Work-type evidence: philarchive-oai: article; crossref: posted-content -> preprint
 - Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:16:19+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-08T11:08:45+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Matching interest categories: Free Will; Moral Responsibility
+- Verified paper categories: Free Will; Moral Responsibility
+- DOI or stable link: https://doi.org/10.2139/ssrn.6866658
+
+#### 34. Deconstruction of Free Will by Generalized Harm-Avoidance Monism
+
+- Authors: Yang, Yuming
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: confirmed
+- Work-type evidence: philarchive-oai: article
+- Freshness event: recently_changed_in_philarchive_oai
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-08T11:08:29+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Matching interest categories: Free Will
+- Verified paper categories: Free Will
+- DOI or stable link: https://philpapers.org/rec/YANDOF
+
+#### 35. Structural Tension and the Visibility of Loss: Principles S1, S4, S6, S7 of the Axiomatic Theory of Tragic Subjecthood. Article 5
+
+- Authors: Hlynskyi, Volodymyr
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: confirmed
+- Work-type evidence: philarchive-oai: article
+- Freshness event: recently_changed_in_philarchive_oai
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-08T11:08:23+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Matching interest categories: Free Will; Moral Responsibility
+- Verified paper categories: Free Will; Moral Responsibility
+- DOI or stable link: https://philpapers.org/rec/HLYSTA
+
+#### 36. The Power of Possession, revisited
+
+- Authors: James, Benjamin
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: confirmed
+- Work-type evidence: philarchive-oai: article
+- Freshness event: recently_changed_in_philarchive_oai
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-08T11:06:01+00:00 (precision: second; source: philarchive-oai-datestamp)
 - Matching interest categories: Moral Responsibility
 - Verified paper categories: Moral Responsibility
-- DOI or stable link: https://doi.org/10.2139/ssrn.5679103
+- DOI or stable link: https://philpapers.org/rec/JAMTPO-63
 
-#### 90. The Ubiquity of Psychological Manipulation: A Philosophical Examination of Human Autonomy in Modern Society
+#### 37. Authority Illusion and the Architecture of Responsibility in AI Governance
 
-- Authors: Boether, Olivier
+- Authors: Mumtaz Enser
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: compatible
+- Work-type evidence: philarchive-oai: article; crossref: posted-content -> preprint
+- Freshness event: recently_changed_in_philarchive_oai
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-08T11:05:47+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Matching interest categories: Free Will; Moral Responsibility
+- Verified paper categories: Free Will; Moral Responsibility
+- DOI or stable link: https://doi.org/10.2139/ssrn.6443099
+
+#### 38. Antagonism, Dependence, and Domination
+
+- Authors: Mumtaz Enser
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: compatible
+- Work-type evidence: philarchive-oai: article; crossref: posted-content -> preprint
+- Freshness event: recently_changed_in_philarchive_oai
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-08T11:05:44+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Matching interest categories: Moral Responsibility
+- Verified paper categories: Moral Responsibility
+- DOI or stable link: https://doi.org/10.2139/ssrn.6460080
+
+#### 39. Free Will, Abilities, and the Grain of Explanation
+
+- Authors: Loew, Christian
+- Venue: Not recorded
+- Work type: forthcoming-article
+- Work-type evidence status: compatible
+- Work-type evidence: philpapers-rss-description: forthcoming-article; philarchive-oai: article
+- Freshness event: recently_changed_in_philarchive_oai
+- Publication-date evidence: Not recorded
+- Recent-availability evidence: 2026-10-08T11:04:51+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Matching interest categories: Moral Responsibility
+- Verified paper categories: Moral Responsibility
+- DOI or stable link: https://philpapers.org/rec/LOEFWA
+
+#### 40. Ethical Chess v1.8
+
+- Authors: Weatherill, Mark
 - Venue: Not recorded
 - Work type: article
 - Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
+- Work-type evidence: philarchive-oai: article
 - Freshness event: recently_changed_in_philarchive_oai
 - Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:13:43+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Recent-availability evidence: 2026-10-08T11:02:57+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Matching interest categories: Moral Responsibility
+- Verified paper categories: Moral Responsibility
+- DOI or stable link: https://philpapers.org/rec/WEAECV-2
+
+#### 41. The Fixed-Point Paradox and the Incoherence of Counterfactual Freedom
+
+- Authors: Toupin, Daniel
+- Venue: Not recorded
+- Work type: article
+- Work-type evidence status: confirmed
+- Work-type evidence: philarchive-oai: article
+- Freshness event: recently_changed_in_philarchive_oai
+- Publication-date evidence: Not recorded
+- Recent-availability evidence: 2026-10-08T10:51:38+00:00 (precision: second; source: philarchive-oai-datestamp)
 - Matching interest categories: Action Theory; Free Will
 - Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philarchive.org/rec/BOETUO-2
+- DOI or stable link: https://philpapers.org/rec/TOUTIO-8
 
-#### 91. Making the Goods in Work Accessible and the Paternalism Objection
+#### 42. Freiheit - ein Produkt der Evolution. Teil 1: Eine neue wissenschaftliche Theorie
 
-- Authors: Gilabert, Pablo
+- Authors: Leumann, Christoph
 - Venue: Not recorded
 - Work type: article
 - Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article; openalex: article
+- Work-type evidence: philarchive-oai: article
 - Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T11:11:26+00:00 (precision: second; source: philarchive-oai-datestamp)
-- Matching interest categories: Action Theory; Free Will
-- Verified paper categories: Action Theory; Free Will
-- DOI or stable link: https://philarchive.org/rec/GILMTG
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-08T10:45:14+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Matching interest categories: Free Will
+- Verified paper categories: Free Will
+- DOI or stable link: https://philpapers.org/rec/LEUTAE-2
 
-#### 92. Varieties of Moral Agency and Risks of Digital Dystopia
+#### 43. Beyond Intelligence: Artificial Agency, Creaturely Limits, and the Beginning of Wisdom
 
-- Authors: Bradley, Adam &amp; Saad, Bradford
+- Authors: Kosi Gramatikoff
 - Venue: Not recorded
 - Work type: article
 - Work-type evidence status: confirmed
-- Work-type evidence: philarchive-oai: unrecognized -> article
+- Work-type evidence: philarchive-oai: article; openalex: article
 - Freshness event: recently_changed_in_philarchive_oai
-- Publication-date evidence: Not recorded
-- Recent-availability evidence: 2026-09-08T10:53:32+00:00 (precision: second; source: philarchive-oai-datestamp)
+- Publication-date evidence: 2026 (precision: year; source: philpapers-rss-bibliography)
+- Recent-availability evidence: 2026-10-07T10:54:38+00:00 (precision: second; source: philarchive-oai-datestamp)
 - Matching interest categories: Action Theory; Free Will; Moral Responsibility
 - Verified paper categories: Action Theory; Free Will; Moral Responsibility
-- DOI or stable link: https://philpapers.org/rec/BRAVOM-2
+- DOI or stable link: https://philpapers.org/rec/GRABIA-11
 
 </details>
 
-## Human review
+## Human review and source limits
 
-**18 records require human review.**
+**10 records remain for review, including one work-type conflict.**
 
 <details>
-<summary>Review records and technical notes (optional)</summary>
-
-PhilArchive OAI incremental narrowing was used. Feed records lacking both a timestamp and a bibliographic year continued to verification only when the same `/rec/` record changed within the window. OAI covers open records only, so fully undated non-open PhilPapers records may be absent from this report; this is not a permanent old-work judgment.
+<summary>View the complete review queue, source coverage, and technical notes</summary>
 
 ## Source coverage
 
-- `philpapers-rss:4590`: success; checked at `2026-09-09T07:49:58.644162+00:00`; category feed read completely; 500 entries
-- `philpapers-rss:347`: success; checked at `2026-09-09T07:49:58.644162+00:00`; category feed read completely; 500 entries
-- `philpapers-rss:5992`: success; checked at `2026-09-09T07:49:58.644162+00:00`; category feed read completely; 500 entries
-- `philarchive-oai`: success; checked at `2026-09-09T07:50:29.643048+00:00`; cross-run cache incremental refresh; followed every resumptionToken; harvested 1766 records from the network; the exact cached window contains 284443 records and 144293 currently active records
-- `openalex-bibliography`: failed; checked at `2026-09-09T07:49:58.644162+00:00`; The bibliographic source failed; affected candidates remain unresolved rather than being treated as verified.
+- `philpapers-rss:4590`: success; checked at `2026-10-09T05:08:21.648638+00:00`; category feed read completely; 500 entries
+- `philpapers-rss:347`: success; checked at `2026-10-09T05:08:21.648638+00:00`; category feed read completely; 500 entries
+- `philpapers-rss:5992`: success; checked at `2026-10-09T05:08:21.648638+00:00`; category feed read completely; 500 entries
+- `philarchive-oai`: success; checked at `2026-10-10T15:27:36.397283+00:00`; cross-run cache hit; no OAI network request was sent; followed every resumptionToken; harvested 0 records from the network; the exact cached window contains 148183 records and 146751 currently active records
+- `openalex-bibliography`: failed; checked at `2026-10-09T05:08:21.648638+00:00`; The bibliographic source failed; affected candidates remain unresolved rather than being treated as verified.
+- `official-journals`: local_only; checked at `2026-10-09T05:08:21.648638+00:00`; Read 0 reviewed local issue leads; journal sites and official WeChat were not checked live.
 
 ## Verification status for this request
 
-Another 294 candidate records have not completed work-type, bibliographic-identity, old-work, or recent-availability verification. They were not reported as matches and were not written to the weekly bounded retry queue; a later explicit pull may verify them again.
+Another 31 candidate records have not completed work-type, bibliographic-identity, old-work, or recent-availability verification. They were not reported as matches and were not written to the weekly bounded retry queue; a later explicit pull may verify them again.
 
-- Not reached by remote verification in this run: 266. The older per-item query budget used by this historical run ended before these candidates were processed. This was a boundary of that run, not a persistent 266-item backlog in the current version, and it did not require item-by-item user judgment.
-- Human review required: 18.
-- Awaiting automatic retry: 10.
-
-Historical terminology note: this report predates the date-evidence-insufficient set. The current version places qualifying fully undated records in that separate private hashed set instead of repeatedly counting them as not reached by remote verification; the set count and any genuine per-run budget remainder are reported separately.
+- Human review required: 10.
+- Awaiting automatic retry: 21.
 
 Reasons:
 
-- Structured sources conflict across supported and unsupported work types: 17
-- A source returned a structured work type not recognized by the current vocabulary: 1
-- An external bibliographic source failed; the old-work check awaits automatic retry: 10
+- The item may be a translated or substantially retitled version and requires manual identity review: 8
+- Structured sources returned conflicting DOI identifiers: 1
+- Structured sources conflict across supported and unsupported work types: 1
+- An external bibliographic source failed; the old-work check awaits automatic retry: 21
 
 Candidates requiring human review:
 
-1. AAI-01 - Delegation Is Not Distribution
-   - Authors: Cbp, Hn
+1. Institutional Continuity and Existential Foreclosure in Marriage: A Daseinsanalytic Sociological Synthesis
+   - Authors: Zohrevandi, Talaye &amp; Niami, Morteza
    - Reason: Structured sources conflict across supported and unsupported work types
-   - Source link: https://philpapers.org/rec/CBPDIN
-2. Respect Without Content: A Formal Theory of Moral Recognition and Its Empirical Determinations
-   - Authors: Han, Tianle
-   - Reason: Structured sources conflict across supported and unsupported work types
-   - Source link: https://philpapers.org/rec/HANTSA-22
-3. Right-Libertarian Theory of History. Part III: The Libertarian Capitalist Government
-   - Authors: Hermit, Libertarian
-   - Reason: Structured sources conflict across supported and unsupported work types
-   - Source link: https://philpapers.org/rec/HERRTO-4
-4. Where Does Free Will Hide? Inside the Architecture of Agency
-   - Authors: Maruszewski, Krzysztof
-   - Reason: Structured sources conflict across supported and unsupported work types
-   - Source link: https://philpapers.org/rec/MARWDF-4
-5. Beyond Teleological Priority: Process, Emergent Purpose, and Finite Continuance in Morteza Niami's Philosophy
-   - Authors: Niami, Morteza
-   - Reason: Structured sources conflict across supported and unsupported work types
-   - Source link: https://philpapers.org/rec/NIABTP
-6. Finite Continuance: A Normative Theory of Agency Under Chronic Instability
-   - Authors: Niami, Morteza
-   - Reason: Structured sources conflict across supported and unsupported work types
-   - Source link: https://philpapers.org/rec/NIAFCA-2
-7. From Motivation to Continuance, Volitional Discipline and the Ontological Conditions of Agency Under Chronic Erosion
-   - Authors: Niami, Morteza
-   - Reason: Structured sources conflict across supported and unsupported work types
-   - Source link: https://philpapers.org/rec/NIAFMT
-8. Ontology of Finite Continuity and the Problem of Contemporary Crises: Four Regimes of Erosion and the Question of the Reconfiguration of Agency
-   - Authors: Niami, Morteza
-   - Reason: Structured sources conflict across supported and unsupported work types
-   - Source link: https://philpapers.org/rec/NIAOOF-2
-9. Relational Continuance, Multiplicity, Erosion, and the Continuity of Agency
-   - Authors: Niami, Morteza
-   - Reason: Structured sources conflict across supported and unsupported work types
-   - Source link: https://philpapers.org/rec/NIARCM
-- 9 additional human-review candidates are not expanded in this report.
+   - Source link: https://philpapers.org/rec/ZOHICA
+   - Work-type evidence: philarchive-oai book → book; openalex preprint → preprint
+   - Evidence fingerprint: `811ccac15109d3f4e1877197ea1a5295ed30785d7ad692f05bdd12307952092b`
+   - Source date: 2026-01-01 (day; openalex)
+2. The Collective Architect: Role Distribution and the Limits of Collective Tragic Judgment. Article 12
+   - Authors: Hlynskyi, Volodymyr
+   - Reason: Structured sources returned conflicting DOI identifiers
+   - Source link: https://philpapers.org/rec/HLYTCA
+3. The Collective Subject and Distributed Responsibility: Ontological Conditions for Organisational Accountability. Article 6
+   - Authors: Hlynskyi, Volodymyr
+   - Reason: The item may be a translated or substantially retitled version and requires manual identity review
+   - Source link: https://philpapers.org/rec/HLYTCS
+4. THE PRICE OF THE PERFORMANCE: Surface Acting as the Measured Maintenance Cost of Inverted Virtue
+   - Authors: Mattos, José Caetano de
+   - Reason: The item may be a translated or substantially retitled version and requires manual identity review
+   - Source link: https://philpapers.org/rec/MATTPO-87
+5. The Sovereign Spine: A New Theory of Institutional Coherence and Agency
+   - Authors: Mertens, Robin Edgard Ulrik
+   - Reason: The item may be a translated or substantially retitled version and requires manual identity review
+   - Source link: https://philpapers.org/rec/MERTSS-5
+6. 48C2Non-Basic Action
+   - Authors: Peacocke, Antonia
+   - Reason: The item may be a translated or substantially retitled version and requires manual identity review
+   - Source link: https://philpapers.org/rec/PEACAM
+7. 260C10Transparent Self-Knowledge
+   - Authors: Peacocke, Antonia
+   - Reason: The item may be a translated or substantially retitled version and requires manual identity review
+   - Source link: https://philpapers.org/rec/PEACSG
+8. C245Morality and Freedom in the Groundwork
+   - Authors: Tizzard, Jessica
+   - Reason: The item may be a translated or substantially retitled version and requires manual identity review
+   - Source link: https://philpapers.org/rec/TIZCAF
+9. C393Freedom in the Critique of Practical Reason
+   - Authors: Tizzard, Jessica
+   - Reason: The item may be a translated or substantially retitled version and requires manual identity review
+   - Source link: https://philpapers.org/rec/TIZCIT
+10. C5177Setting Up the Postulates of Pure Practical Reason
+   - Authors: Tizzard, Jessica
+   - Reason: The item may be a translated or substantially retitled version and requires manual identity review
+   - Source link: https://philpapers.org/rec/TIZCUT
+
+## Fully undated record set
+
+This run placed 284 OAI stock records lacking a feed timestamp, bibliographic year, DOI, and explicit manuscript or preprint type in the private hashed quarantine set; 0 entered it for the first time in this run. They consumed no per-item bibliographic lookup budget and are not counted as not reached by remote verification or as human review.
+
+Membership means only that date evidence is insufficient; it is not an old-work or relevance judgment. A later year, DOI, feed timestamp, or explicit early-work type automatically returns the record to verification. A new manuscript lacking all of those fields may therefore be absent from the ordinary on-demand report.
 
 ## Method
 

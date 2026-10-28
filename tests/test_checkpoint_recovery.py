@@ -131,7 +131,8 @@ def test_schema_two_run_table_is_migrated_without_rebuilding_database(monkeypatc
     assert schema_version == "6"
 
 
-def test_file_schema_upgrade_creates_verified_backup():
+@pytest.mark.parametrize("original_schema", ["4", "5"])
+def test_file_schema_upgrade_creates_verified_backup(original_schema):
     database = Path("var") / f"test-state-upgrade-{uuid.uuid4().hex}.sqlite3"
     backup = None
     try:
@@ -139,9 +140,37 @@ def test_file_schema_upgrade_creates_verified_backup():
         connection.executescript(
             """
             CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-            INSERT INTO schema_meta(key, value) VALUES ('schema_version', '5');
+            CREATE TABLE checkpoints (
+                source TEXT PRIMARY KEY, cursor TEXT,
+                window_end TEXT NOT NULL, completed_at TEXT NOT NULL
+            );
+            INSERT INTO checkpoints(source, cursor, window_end, completed_at)
+            VALUES (
+                'philpapers:test', 'page-9',
+                '2026-09-07T00:00:00+00:00', '2026-09-07T00:00:00+00:00'
+            );
+            CREATE TABLE notifications (
+                notification_id TEXT PRIMARY KEY, work_id TEXT NOT NULL,
+                match_id TEXT NOT NULL, report_window_start TEXT NOT NULL,
+                report_window_end TEXT NOT NULL, notification_type TEXT NOT NULL,
+                created_at TEXT NOT NULL, matched_category_ids TEXT NOT NULL,
+                UNIQUE(work_id, notification_type)
+            );
+            INSERT INTO notifications(
+                notification_id, work_id, match_id, report_window_start,
+                report_window_end, notification_type, created_at, matched_category_ids
+            ) VALUES (
+                'notice-1', 'work-1', 'match-1',
+                '2026-08-31T00:00:00+00:00', '2026-09-07T00:00:00+00:00',
+                'new-paper', '2026-09-07T00:00:00+00:00', '["74924"]'
+            );
             """
         )
+        connection.execute(
+            "INSERT INTO schema_meta(key, value) VALUES ('schema_version', ?)",
+            (original_schema,),
+        )
+        connection.commit()
         connection.close()
 
         with StateStore(database) as store:
@@ -149,8 +178,14 @@ def test_file_schema_upgrade_creates_verified_backup():
             schema_version = store.connection.execute(
                 "SELECT value FROM schema_meta WHERE key = 'schema_version'"
             ).fetchone()["value"]
+            checkpoint = store.get_checkpoint("philpapers:test")
+            notification_count = store.connection.execute(
+                "SELECT COUNT(*) FROM notifications WHERE notification_id = 'notice-1'"
+            ).fetchone()[0]
 
         assert schema_version == "6"
+        assert checkpoint is not None and checkpoint.cursor == "page-9"
+        assert notification_count == 1
         assert backup is not None and backup.is_file()
         verification = sqlite3.connect(backup)
         try:
@@ -159,8 +194,14 @@ def test_file_schema_upgrade_creates_verified_backup():
                 verification.execute(
                     "SELECT value FROM schema_meta WHERE key = 'schema_version'"
                 ).fetchone()[0]
-                == "5"
+                == original_schema
             )
+            assert verification.execute(
+                "SELECT cursor FROM checkpoints WHERE source = 'philpapers:test'"
+            ).fetchone()[0] == "page-9"
+            assert verification.execute(
+                "SELECT COUNT(*) FROM notifications WHERE notification_id = 'notice-1'"
+            ).fetchone()[0] == 1
         finally:
             verification.close()
     finally:

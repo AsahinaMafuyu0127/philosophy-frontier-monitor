@@ -154,16 +154,16 @@ def test_cnki_weekly_first_scan_is_baseline_and_later_issue_is_reported_once(mon
         venue="哲学分析",
         year=2026,
         issue="9",
-        label_month=None,
+        label_month=9,
     )
-    first = CnkiIssue("first", "哲学分析", 2026, "9", None, (first_record,), (), RUN_TIME)
+    first = CnkiIssue("first", "哲学分析", 2026, "9", 9, (first_record,), (), RUN_TIME)
     second_record = replace(
         first_record,
         title="后期论文",
         url="https://www.cnki.com.cn/Article/CJFDTOTAL-ZXFX202610001.htm",
         issue="10",
     )
-    second = CnkiIssue("second", "哲学分析", 2026, "10", None, (second_record,), (), RUN_TIME)
+    second = CnkiIssue("second", "哲学分析", 2026, "10", 9, (second_record,), (), RUN_TIME)
     scans = [(first,), (first, second), (first, second)]
 
     def cnki_loader(*args, **kwargs):
@@ -220,6 +220,61 @@ def test_cnki_weekly_first_scan_is_baseline_and_later_issue_is_reported_once(mon
     assert wanfang_titles == ["概念与论证", "后期论文"]
     assert "万方期刊题录的题名" in results[0].report_markdown
     assert "万方期刊题录的题名" in results[1].report_markdown
+
+
+def test_weekly_cnki_dates_gate_baseline_crosschecks_and_later_date_resolution(monkeypatch):
+    allow_test_fixture_for_committing_run(monkeypatch)
+    config = replace(
+        CONFIG, cnki_space=CnkiSpaceConfig(True, (CnkiSearchTerm("generic"),), 1),
+        wanfang=WanfangConfig(True, 5),
+    )
+    def issue(key, month):
+        record = CnkiRecord(
+            "论文" + key, f"https://www.cnki.com.cn/Article/CJFDTOTAL-TEST2026{key}.htm",
+            ("甲",), "测试期刊", 2026, key, month,
+        )
+        return CnkiIssue(key, record.venue, 2026, key, month, (record,), (), RUN_TIME)
+
+    current, old, unknown = issue("5", 9), issue("4", 7), issue("9", None)
+    future = issue("10", 10)
+    calls = []
+    scans = [(current, old, unknown, future),
+             (current, old, replace(unknown, label_month=9), future),
+             (current, old, replace(unknown, label_month=9), future),
+             (current, old, replace(unknown, label_month=9), future)]
+    def cnki_loader(*args, **kwargs):
+        issues = scans.pop(0)
+        return CnkiScan(issues, tuple(r for i in issues for r in i.records),
+                        kwargs["checked_at"], "success", 1, 1, (), ())
+    def wanfang_loader(records, **kwargs):
+        calls.extend(r.title for r in records)
+        return WanfangScan((), kwargs["checked_at"], "success", len(records), len(records), 0)
+    with StateStore(":memory:") as state:
+        establish_baseline(config, state, now=BASELINE_TIME,
+                           feed_loader=loader_for({"entries": (BASE_ENTRY,)}),
+                           allow_development_fixture=True)
+        results = []
+        for start, end in ((WINDOW_START, WINDOW_END),
+                           (WINDOW_END, datetime(2026, 9, 14, tzinfo=UTC)),
+                           (datetime(2026, 9, 14, tzinfo=UTC), datetime(2026, 9, 21, tzinfo=UTC)),
+                           (datetime(2026, 10, 5, tzinfo=UTC), datetime(2026, 10, 12, tzinfo=UTC))):
+            results.append(run_weekly(
+                config, state, now=end, window_start=start, window_end=end,
+                feed_loader=loader_for({"entries": (BASE_ENTRY,)}), cnki_loader=cnki_loader,
+                wanfang_loader=wanfang_loader,
+                report_writer=lambda directory, filename, content: Path("F:/virtual") / filename,
+            ))
+    assert results[0].stats["cnki_issue_month_unknown"] == 1
+    assert results[0].stats["cnki_issue_outside_window"] == 2
+    assert "论文5" in results[0].report_markdown
+    assert "论文4" not in results[0].report_markdown
+    assert "论文9" not in results[0].report_markdown
+    assert "论文9" in results[1].report_markdown
+    assert "论文5" not in results[1].report_markdown
+    assert "论文9" not in results[2].report_markdown
+    assert "论文10" not in results[0].report_markdown
+    assert "论文10" in results[3].report_markdown
+    assert calls == ["论文5", "论文9", "论文10"]
 
 
 def test_wanfang_discovery_weekly_baseline_and_new_record_are_atomic(monkeypatch):
@@ -623,10 +678,22 @@ def test_catch_up_stops_before_network_when_profile_changed_after_a_missed_week(
 def test_catch_up_reconstructs_the_profile_effective_for_each_missed_window(monkeypatch):
     allow_test_fixture_for_committing_run(monkeypatch)
     holder = {"entries": (BASE_ENTRY,)}
+    official_rss_url = (
+        "https://philpapers.org/browse/plato-theaetetus/"
+        "?cId=74924&catId=74924&cn=plato-theaetetus&dg=example123"
+        "&format=rss&import_options=1&new=1&proOnly=on&search_inside=1&sort=pubYear"
+    )
+    observed_access_urls = []
+
+    def catch_up_loader(feed, checked_at):
+        observed_access_urls.append(feed.official_rss_url)
+        return snapshot(holder["entries"], checked_at)
+
     changed_config = replace(
         CONFIG,
         profile_version=4,
         profile_effective_from=datetime(2026, 9, 20, 12, tzinfo=UTC),
+        feeds=(replace(CONFIG.feeds[0], official_rss_url=official_rss_url),),
     )
     with StateStore(":memory:") as state:
         establish_baseline(
@@ -636,6 +703,18 @@ def test_catch_up_reconstructs_the_profile_effective_for_each_missed_window(monk
             feed_loader=loader_for(holder),
             allow_development_fixture=True,
         )
+        stored_profile = state.get_interest_profile(CONFIG.profile_id, CONFIG.profile_version)
+        assert stored_profile is not None
+        different_page = replace(
+            changed_config,
+            feeds=(
+                replace(changed_config.feeds[0], url="https://philpapers.org/browse/another-category"),
+            ),
+        )
+        reconstructed = pipeline._config_for_stored_profile(
+            different_page, stored_profile, taxonomy_path=CONFIG.taxonomy_path
+        )
+        assert reconstructed.feeds[0].official_rss_url is None
         run_weekly(
             CONFIG,
             state,
@@ -650,7 +729,7 @@ def test_catch_up_reconstructs_the_profile_effective_for_each_missed_window(monk
             changed_config,
             state,
             now=datetime(2026, 9, 21, 2, tzinfo=UTC),
-            feed_loader=loader_for(holder),
+            feed_loader=catch_up_loader,
             report_writer=lambda directory, filename, content: Path("F:/virtual") / filename,
         )
         versions = [
@@ -667,6 +746,7 @@ def test_catch_up_reconstructs_the_profile_effective_for_each_missed_window(monk
         ]
 
     assert len(result.completed_runs) == 2
+    assert observed_access_urls == [official_rss_url, official_rss_url]
     assert result.profile_snapshot_registered is True
     assert versions == [3, 3, 4]
     assert stored_versions == [3, 4]
@@ -880,6 +960,10 @@ def test_crossref_and_openalex_supported_unsupported_type_conflict_is_withheld(m
 
     assert result.work is None
     assert result.reason_code == "structured_work_type_conflict"
+    assert {evidence.source for evidence in result.work_type_evidence} == {
+        "crossref",
+        "openalex",
+    }
 
 
 def test_future_publication_date_is_reported_as_current_source_arrival(monkeypatch):
@@ -1157,7 +1241,7 @@ def test_weekly_pipeline_resolves_only_records_new_since_baseline(monkeypatch):
     assert run_context["taxonomy_snapshot_id"] == "philpapers-fixture:2026-09-05"
     assert run_context["interest_profile_id"] == "pfm:interest:test"
     assert run_context["interest_profile_version"] == 3
-    assert run_context["pipeline_version"] == "0.6.0"
+    assert run_context["pipeline_version"] == "0.6.2"
     assert run_context["matching_rule_version"] == "set_intersection_v1"
 
 

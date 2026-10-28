@@ -1,78 +1,50 @@
 # Philosophy Frontier Monitor
 
-Search existing papers from confirmed interests with `pfm search --config config/watchlist.yaml`.
-Historical search has no recent-publication gate and accepts supported paper forms only; books,
-chapters and book reviews are excluded. Available OpenAlex citation counts sort descending, with
-missing values labelled and placed last. Temporary active-category selection, year/type filters,
-and result pagination do not change subscriptions or weekly state. Coverage is the current category
-feed inventory, not the complete historical index. Without year bounds, all verified matches are
-returned by default, including undated feed records. Only year-bounded searches exclude records
-without feed year hints; an explicit result limit still enables pagination.
-See the [search contract](references/paper-search.md).
-
 English | [简体中文](README.md)
 
-**Factual weekly philosophy-paper monitoring, organized around the research areas you confirm.**
+**Find existing philosophy papers and follow new work in your research areas.**
 
-A researcher describes an area in ordinary Chinese or English. The Skill maps that description to
-verified PhilPapers taxonomy categories and activates only the categories the researcher confirms.
-Reports preserve titles, authors, date evidence, matched categories, source links, and coverage
-gaps. They do not rank paper quality or filter results by a model score.
+Philosophy Frontier Monitor is a Codex Skill backed by a local Python application.
+Describe your interests in Chinese or English, review the verified PhilPapers categories it proposes,
+then search existing papers, check recent work on demand, or receive weekly reports in your local time.
+
+Each result retains its title, authors, date evidence, matching categories, and source links
+so you can follow the discovery through to further reading.
+
+[Features](#features) · [Installation](#installation-and-first-use) · [Example prompts](#example-prompts) ·
+[Real report](#real-report) · [Documentation](#documentation-and-sources) · [Technical update](#technical-update)
 
 ![Four steps from a research interest to a weekly philosophy-paper report](assets/demo/philosophy-frontier-monitor-demo.png)
 
-[Read the complete public sample report](examples/public-demo-weekly-report.md) ·
-[Open the report-preview image](assets/demo/public-demo-weekly-report-2026-09-09.png) ·
-[Read the full installation guide](references/installation.en.md)
+## Features
 
-### Public example: an actual pull from three real categories
+One confirmed research scope supports three workflows:
 
-The report below is not a synthetic mock-up. On 9 September 2026, the project actually ran a
-seven-day `pull-now` using `Moral Responsibility` (4590), `Free Will` (347), and `Action Theory`
-(5992) from the complete PhilPapers taxonomy. Each category was monitored exactly as selected;
-descendants were not added. The example uses the read-only on-demand mode—which shares the weekly
-evidence rules—so that it does not pretend a scheduled run occurred or alter formal weekly state.
+| What you want to do | Workflow | What you get |
+|---|---|---|
+| Find existing papers in your research areas | Historical search · `pfm search` | Papers filtered by year, work type, or category; ordered by citation counts when available, with missing data labelled |
+| Check recent work now | On-demand pull · `pfm pull-now` | A report for the latest 1–31 local days, distinguishing publication, recent availability, and source-record changes |
+| Follow a field over time | Weekly monitoring · `pfm weekly-run` / `pfm catch-up` | Weekly reports after an initial historical baseline, with duplicate sources merged and missed windows processed in order |
 
-The primary result of the actual run was **1 confirmed-new paper**, plus **91 recent PhilPapers
-source arrivals**. The latter entered the PhilPapers or PhilArchive source-change set for the
-selected categories, and that run's old-work check found no earlier work evidence; this is not a
-claim that a formal publication date was obtained. Together they make 92 deduplicated works.
-The matching-paper block is now divided into **recently published** (1), **recently arrived** (2),
-and **recently changed** (89), in that order. Each group is ordered newest first by the evidence
-appropriate to its meaning and separated by a rule. Recently changed is collapsed by default, but
-the report always leaves a visible show/hide control.
+- **Start with your own words:** map research interests to real PhilPapers categories, then accept, reject, or defer each proposal.
+- **Keep the evidence for each work:** merge multiple sources, show date and work-type evidence, and route conflicting records to individual review.
+- **Read bilingual reports:** follow matching works, source coverage, and records awaiting review in Chinese and English.
+- **Optionally include Chinese sources:** show bounded CNKI Space and Wanfang metadata and reviewed publisher issue leads in separate sections.
 
-An additional **18 records require human review**.
+Historical search covers the records actually returned by the category feeds in that run.
+Weekly monitoring and on-demand pulls also apply their respective time windows.
+Citation counts only order search results; confirmed categories and evidence rules determine inclusion.
+See the [search guide](references/paper-search.md) and [monitoring policy](references/monitoring-policy.md).
 
-The image shows the report's first page. The
-[complete Markdown report](examples/public-demo-weekly-report.md) contains all 92 papers in Chinese
-and English. Review records and technical notes can be expanded there if the reader wants details.
+## Installation and first use
 
-![Classical ivory first-page preview of a report generated from three real PhilPapers categories](assets/demo/public-demo-weekly-report-2026-09-09.png)
+You need **Codex, Git, [uv](https://docs.astral.sh/uv/), and Python 3.12 or 3.13**,
+with network access to your chosen scholarly sources. Scheduled operation has been validated on Windows.
+macOS and Linux path support is in place; scheduled operation still awaits real-machine validation.
 
-The CLI's native report format is Markdown. In a Codex environment with document or presentation
-generation capabilities, a user may also ask Codex to typeset the same report as **Word (.docx)**
-or **PowerPoint (.pptx)**. That is a post-report presentation conversion: it does not re-filter the
-papers, and it is not a native `pfm` CLI export format.
-In interactive Markdown, the record-change group can be expanded directly. Before conversion to
-Word or PowerPoint, add `--show-recently-changed` when that group should be expanded in the source
-report.
+### 1. Install the Skill
 
-### What makes it different
-
-- **You control the scope:** natural-language interests become real, reviewable categories before
-  anything is monitored.
-- **Complete reporting rather than quality ranking:** author reputation, journal prestige,
-  citation counts, and model judgements do not remove results.
-- **Evidence and gaps appear together:** the report distinguishes publication, recent
-  availability, source re-entry, and metadata updates, and does not disguise source failures as
-  zero results.
-- **Private configuration stays local:** research interests, credentials, SQLite state, caches,
-  and reports are excluded from the public repository by default.
-
-### Start installation
-
-You need Codex, Git, [`uv`](https://docs.astral.sh/uv/), and Python 3.12 or 3.13. In Codex, invoke:
+Send this to Codex:
 
 ```text
 $skill-installer Install the Skill from the repository root at
@@ -80,17 +52,579 @@ https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor;
 use path . and the install name philosophy-frontier-monitor.
 ```
 
-Then, in a new conversation, ask:
+### 2. Describe your interests and complete setup
+
+Use the Skill in the next conversation turn after installation. If it is not yet discovered,
+restart Codex, then ask:
 
 ```text
-Use $philosophy-frontier-monitor to map my research interests to verified PhilPapers categories.
-Let me confirm the categories, then guide me through local setup, the historical baseline, and my
-first weekly report. Do not ask me to paste credentials into the conversation.
+Use $philosophy-frontier-monitor. I study moral responsibility, free will, and action theory.
+Propose verified PhilPapers categories for me to confirm individually, then set up the local
+environment and private configuration. I would like a report every Monday at 08:00 local time.
+Guide me through the historical baseline and my first weekly report. Keep credentials local;
+do not ask me to paste API keys, passwords, or cookies into the conversation.
 ```
 
-The latest tagged application release is **v0.3.0**; the internal evidence-pipeline version is **0.6.0**. `main` includes subsequent updates.
-Formal real-machine acceptance has been completed on Windows. macOS and Linux paths are supported,
-but have not yet received equivalent real scheduled-run validation.
+Replace the example interests and time with your own. You do not need to know the category names.
+The Skill guides you through Python setup, category confirmation, local storage of taxonomy credentials,
+the historical baseline, a dry run, and a production weekly run before you confirm the recurring schedule.
+The default is Monday at 08:00 in your local timezone. A public profile is an optional source of
+additional interest information; a text description is enough to complete setup.
+
+<details>
+<summary>Check the environment from a terminal after installation</summary>
+
+Run these commands in the Skill directory returned by the installer. Create a watchlist from the public
+example only if no private configuration exists; reuse an existing file with its research scope and local settings.
+
+```powershell
+uv sync --python 3.12
+if (-not (Test-Path .\config\watchlist.yaml)) {
+    Copy-Item .\config\watchlist.example.yaml .\config\watchlist.yaml
+}
+.\.venv\Scripts\pfm.exe doctor
+```
+
+The executable is `.venv/bin/pfm` on macOS and Linux. See
+[Installation and first deployment](references/installation.en.md) and the
+[Chinese installation guide](references/installation.md) for the full procedure.
+
+</details>
+
+## Example prompts
+
+After confirming categories and completing local setup, you can ask Codex directly.
+
+### Find existing papers
+
+```text
+Use $philosophy-frontier-monitor to find papers from 2020–2026 in my confirmed categories.
+Order by citation counts where available and show titles, authors, years, matching categories,
+and source links. Keep papers with missing citation counts and describe the source scope actually read.
+```
+
+Historical search reuses confirmed categories without requiring a weekly baseline.
+Year filters use publication-year evidence; an unrestricted search can retain verified papers
+with missing dates. See the [search guide](references/paper-search.md) for the rules and commands.
+
+### Check the latest week
+
+```text
+Use $philosophy-frontier-monitor to pull papers from the latest 7 local days in my confirmed
+research areas. Distinguish confirmed-new works, recent availability, and source-record changes,
+and list records that need human review.
+```
+
+An on-demand pull generates a separate report and preserves weekly notification progress.
+Choose a window from 1 to 31 local days.
+
+### Change the weekly schedule
+
+```text
+Use $philosophy-frontier-monitor to move my weekly report to Friday at 18:00 local time.
+Keep my confirmed research scope and let me confirm the final time before creating or updating
+the scheduled task.
+```
+
+Scheduling uses your local timezone. Research scope, delivery time, and optional Chinese sources
+can each be adjusted independently.
+
+## Real report
+
+### Public example: an actual pull from three real categories
+
+**Individually reviewed on 10 October 2026.** This sample uses the seven-day window from
+2 October 13:08 to 9 October 13:08 China Standard Time (exclusive end). Sources were read
+again on 10 October, and conflicting work types were checked individually. The scope comprises
+three exact PhilPapers categories: `Moral Responsibility` (4590), `Free Will` (347), and
+`Action Theory` (5992). All three official RSS feeds were read successfully.
+
+The rerun found **4 confirmed-new works** and **39 source-change candidates**, for 43 distinct
+matching works; **10 further records require human review**. The complete report groups the matches
+as **recently published** (4), **recently arrived** (19), and **recently changed** (20).
+The four confirmed-new works have in-window publication-date evidence. The other 39 were
+classified retrospectively using the records available at the rerun; the report explains
+what those source observations establish about arrival.
+
+#### Four confirmed-new works
+
+Dates come from this run's OpenAlex bibliographic check. The original documents were also
+inspected for the three records with conflicting work-type metadata.
+
+1. **[The Philosophy of Significance How Importance Is Constituted, Experienced, and Transformed](https://doi.org/10.5281/zenodo.23142894)** — Morteza Niami; article; publication-date evidence: 4 October 2026; Action Theory, Free Will, Moral Responsibility. [Inspected PDF](https://zenodo.org/records/23142895/files/The_Philosophy_of_Significance.pdf?download=1).
+2. **[Before Fatelessness: From Fatality and Abolition to Operational Reconfiguration](https://doi.org/10.5281/zenodo.23123292)** — Fujie Naoto; manuscript; publication-date evidence: 3 October 2026; Action Theory, Free Will. [Inspected DOCX](https://zenodo.org/records/23123293/files/fateless_fixed.docx?download=1).
+3. **[Free Will and the Significance of Basic Undeservedness](https://doi.org/10.1007/s11406-026-01037-6)** — Gunnar Björnsson; article; publication-date evidence: 3 October 2026; Free Will, Moral Responsibility.
+4. **[When the Past Cannot Be Narrated Experience, Trace, Memory, and the Emergence of Narrative](https://doi.org/10.5281/zenodo.23126385)** — Morteza Niami; article; publication-date evidence: 3 October 2026; Action Theory, Free Will. [Inspected PDF](https://zenodo.org/api/records/23126386/files/When%20the%20Past%20Cannot%20Be%20Narrated.pdf/content).
+
+The image shows all four entries and the report groups. The
+[complete report](examples/public-demo-weekly-report.md) includes Chinese and English records for
+all 43 works, the review queue, and source notes. You can also compare the
+[original 9 October snapshot](examples/public-demo-weekly-report-2026-10-09-original.md) and
+[9 September snapshot](examples/public-demo-weekly-report-2026-09-09.md).
+
+![Report preview listing all four confirmed-new works from three real PhilPapers categories](assets/demo/public-demo-weekly-report-2026-10-10.png)
+
+<details>
+<summary>Coverage and verification limits for this pull</summary>
+
+Each official category RSS feed returned 500 entries. The program read all returned entries,
+but exactly 500 does not establish that the source has no item cap or that the feed contains
+every work from the seven-day period. PhilArchive OAI returned 148,183 source events in the
+window, mainly record changes rather than new publications. This rerun used the OAI cache
+without a new OAI network harvest. OpenAlex lookup failures and a rate limit left 21 candidates
+awaiting a later automatic retry; 10 others require human review. None of these unresolved
+candidates is counted among the 43 matches. The remaining work-type conflict could not be
+decided from an accessible original document, so an abstract alone did not override it. This public
+example did not enable CNKI or Wanfang or check Chinese journal sites live. The report gives
+the full source status and evidence boundaries.
+
+</details>
+
+The CLI produces Markdown reports. A Codex environment with document or presentation tools can
+also typeset a report as **Word (.docx)** or **PowerPoint (.pptx)**. Add
+`--show-recently-changed` before conversion to include the expanded source-change group.
+
+## Documentation and sources
+
+| What you want to understand | Documentation |
+|---|---|
+| Installation, credentials, runtime directory, first baseline, and cache management | [Installation and first deployment](references/installation.en.md) |
+| Historical search, year and type filters, citation counts, and missing data | [Interest-based paper search](references/paper-search.md) |
+| New-paper evidence, monitoring windows, and report inclusion | [Monitoring policy](references/monitoring-policy.md) · [Date and version semantics](references/date-and-version-semantics.md) |
+| Source roles and Chinese-journal coverage | [Source catalog](references/source-catalog.md) · [Chinese sources](references/chinese-source-expansion.md) |
+| Individual checks and evidence-bound review decisions | [Work-type review](references/work-type-policy.md) · [Bibliographic identity review](references/identity-review-policy.md) |
+| Commands in English | [English user guide](references/usage.en.md) |
+
+PhilPapers category feeds establish category membership; PhilArchive OAI supplies source-record changes;
+Crossref and OpenAlex support bibliographic, work-type, and date checks. Reports distinguish an OAI record
+timestamp from a work's publication date. When enabled, publisher, CNKI, and Wanfang leads appear separately
+with their sources and date precision. Publisher directories for nine journals can be scanned automatically;
+the other registered journals need manual review. Each report describes the scope actually read and
+records still awaiting review.
+
+## Current version
+
+The latest tagged application release is [`v0.4.0`](https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor/releases/tag/v0.4.0).
+The current code also includes individual work-type, bibliography, and identity review improvements beyond that release; its internal
+evidence-pipeline version is `0.6.2`.
+
+| Capability | Current status |
+|---|---|
+| Interest mapping, category confirmation, baseline, and weekly monitoring | Stable |
+| On-demand pulls, existing-paper search, and bilingual reports | Stable |
+| Cross-run OAI caching, pagination recovery, and incremental refresh | Stable |
+| Bounded Chinese metadata and reviewed issue leads | Optional since `v0.4.0` |
+
+Chinese leads appear separately with their source and month evidence. Publisher directories for
+nine journals can be scanned separately; the other registered journals still require manual
+review. See [Chinese sources](references/chinese-source-expansion.md) for scope and entry rules.
+
+The OAI candidate approach was inspired by `list_recent` in
+[`sea9401/philosophy-mcp`](https://github.com/sea9401/philosophy-mcp). This project adds complete
+pagination, window filtering, category intersection, separate date semantics, and cross-run
+recovery. See [design lineage](references/design-lineage.md) for pinned upstream revisions,
+licensing, and the implementation comparison. Changes appear in [CHANGELOG.md](CHANGELOG.md),
+and contribution requirements in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Security and source boundaries
+
+Private research interests, confirmed categories, credentials, SQLite state, caches, and reports
+stay local by default. Git ignores `config/watchlist.yaml`, `var/`, `reports/`, and `.env`. API keys
+are read from private files or the process environment. The OAI cache stores minimal record evidence
+and a pagination token for recovery; status output shows counts and coverage.
+
+Reports identify the categories and sources actually read, along with date precision and records
+awaiting review. The project reads bibliography and metadata by default; researchers decide
+separately whether to obtain full texts. See the [security policy](references/security-and-privacy.md),
+[source catalog](references/source-catalog.md), [date and version semantics](references/date-and-version-semantics.md),
+and [third-party notices](THIRD_PARTY_NOTICES.md).
+
+## Feedback
+
+- Maintainer: **Asahina Mafuyu**
+- Contact: [junxuanxie@stu.xjtu.edu.cn](mailto:junxuanxie@stu.xjtu.edu.cn)
+
+Open a [GitHub Issue](https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor/issues)
+for installation questions, reproducible bugs, or suggestions. Include the version, operating
+system, command, window length, and a redacted error summary. For on-demand pulls, count and
+coverage fields from `pfm oai-cache status` also help. Keep credentials, private configuration,
+databases, and complete reports local. Report vulnerabilities involving credentials or private
+data through GitHub Private Vulnerability Reporting as described in [SECURITY.md](SECURITY.md).
+
+## Technical update
+
+### 29 October 2026: accept current PhilPapers RSS ordering and repair catch-up access
+
+PhilPapers category pages can now generate an official subscription link with `sort=pubYear`.
+Private `official_rss_url` validation accepts both reviewed orderings, `sort=cat` and
+`sort=pubYear`, while still checking the HTTPS source, category ID, page path, `new=1`, and
+absence of added filters. Weekly monitoring, on-demand pulls, and historical search share
+this source-reading rule. When command-line RSS generation receives HTTP 403, the official
+link can be taken from the category page's `RSS feed` control in a normal browser, saved in
+the Git-ignored private configuration, and read directly.
+Historical-window catch-up now passes the matching current private official link by category
+ID and page URL. The link is not stored in historical interest profiles or applied to a
+different category page. Ordering changes which records
+appear first in a bounded feed; it is not publication-date evidence, and a 500-entry response
+does not prove that more records are unavailable. See the [installation guide](references/installation.en.md)
+and [source audit](references/source-catalog.md#2026-10-29-官方-rss-排序参数复核).
+
+The read-only `pfm doctor --live --source philpapers --feeds-config config/watchlist.yaml`
+checks every configured subscription before a scheduled run. It reports feed ordinals, status,
+and entry counts without exposing private URLs, returns a nonzero exit code for a failed feed,
+and does not advance the weekly checkpoint. It detects a changed or inaccessible link early;
+it cannot prevent future upstream access changes.
+
+This is a code branch update. Pre-push validation passed all 495 tests, Ruff, skill validation,
+the diff whitespace check, and the read-only release audit in a separate worktree containing
+only the intended public files. Earlier live-source observations are recorded in the linked
+source audit; this delivery used offline checks without collecting papers or advancing weekly
+state. Private configuration, caches, and other worktrees are outside this commit. Local
+browser-dependency changes unused by project source also remain local. No new version tag or
+GitHub Release was created.
+
+### 25 October 2026: reconcile complete OpenAlex bibliography batches
+
+Following a review of public paper-search skills' pagination and coverage handling, DOI and
+title batch lookups now check OpenAlex's declared result count. They request later pages only
+when needed, up to three pages per batch. A result set beyond that bound, a short page, or
+repeated records is reported as incomplete source evidence rather than treated as a complete
+set of possible works. Weekly monitoring, on-demand pulls, and historical search share this
+rule; their category, date, work-type, and human-review gates still apply. See the
+[design comparison](references/design-lineage.md#7-2026-10-25-论文检索-skill-代码结构复核)
+and [identity-review policy](references/identity-review-policy.md).
+
+This is a code branch update. All 489 tests, Ruff, and skill validation passed, covering
+pagination, malformed responses, and applicable paths across all three workflows. The read-only
+release check also passed on the clean committed checkout. No private paper sources were fetched
+again, and no version tag or GitHub Release was created.
+
+### 25 October 2026: reorganize the bilingual introduction around user workflows
+
+The introduction now brings together the three workflows, installation steps, copyable prompts,
+and a real report, adds documentation navigation, and moves earlier technical updates to the end
+while preserving their text. Both languages retain the public sample's four confirmed-new works,
+43 matching works, 10 human-review records, and coverage notes. The terminal setup example checks
+for an existing private watchlist before copying the public example.
+
+This is a branch documentation update. Validation covers local links, section navigation,
+Markdown disclosure structure, bilingual content, and preservation of the original sample and
+historical updates. No paper sources were fetched again, and no version tag or GitHub Release was created.
+
+<details>
+<summary>Technical update: retain identity comparisons and review each pair (18 October 2026)</summary>
+
+## Technical update: retain identity comparisons and review each pair (18 October 2026)
+
+When a weekly report, on-demand pull, or historical search encounters a possible
+translation or substantial retitling, its private queue now records the specific
+Crossref or OpenAlex comparison: title, authors, identifiers, date, and comparison
+reason. After checking the two works, `--identity-reviews` accepts an `equivalent`
+or `distinct` decision bound to both records and their current evidence. Changed
+external metadata invalidates the old decision. Identity review settles only this
+pair; publication date, seven-day window, work type, category, and weekly state
+rules still run independently. Offline regression covers queues, follow-up runs,
+and exclusion of older works in all three modes. This is a code branch update,
+without a new version tag or GitHub Release. See the
+[pair-review policy](references/identity-review-policy.md).
+
+</details>
+
+<details>
+<summary>Technical update: publisher-reviewed years restore papers missing feed year hints (18 October 2026)</summary>
+
+## Technical update: publisher-reviewed years restore papers missing feed year hints (18 October 2026)
+
+In a year-bounded historical search, an exact publisher-reviewed bibliography with a
+publication year can now keep a record whose PhilPapers feed lacks a year hint eligible
+for the ordinary type, identity, and year checks. A conference paper without a DOI may
+use its publisher's matching bibliography and year; DOI and citation count remain
+missing unless independently verified. A work-type decision alone does not supply a
+year, and out-of-range years are still excluded. This changes the historical-search
+year gate only; weekly and on-demand reports retain their seven-day and newness rules.
+The private review queue now lists records missing feed year hints for individual
+bibliographic checking. Offline regression covers the year gate, private queue,
+a DOI-less proceedings paper, out-of-range years, and type-only reviews.
+This is a code branch update without a new version tag or
+GitHub Release. See the [search rules](references/paper-search.md).
+
+</details>
+
+<details>
+<summary>Technical update: individual review corrects source labels and truncated bibliographies (17 October 2026)</summary>
+
+## Technical update: individual review corrects source labels and truncated bibliographies (17 October 2026)
+
+The shared work-type review used by weekly reports, on-demand pulls, and historical search
+can now adjudicate records with no type label and correct an article label when the original
+publisher identifies a different work form. Search's private queue includes both unresolved
+types and the source labels and evidence fingerprints of papers shown on the current page;
+an old fingerprint cannot override changed source evidence. Historical search can separately
+read a private publisher-checked bibliography review to recover a full title, actual authors,
+DOI, and publication year when an index truncates its title. Work-form and bibliographic
+decisions remain separate, and year-bounded searches still require a publication year.
+A bibliography lookup failure is now explicitly marked as an incomplete search result.
+Offline regression tests cover incorrect editorial labels, unlabeled papers, shortened
+titles, author corrections, stale fingerprints, and source failure. All 472 tests,
+Ruff, and Skill validation passed. No private weekly report was regenerated and
+no new release was created. See the
+[search rules](references/paper-search.md) and
+[work-type policy](references/work-type-policy.md).
+
+</details>
+
+<details>
+<summary>Technical update: faster batch bibliography handling in all three modes (17 October 2026)</summary>
+
+## Technical update: faster batch bibliography handling in all three modes (17 October 2026)
+
+Historical search, on-demand pulls, and weekly reports now share an index of possible OpenAlex
+matches. The index narrows comparisons; the existing bibliography comparator still decides
+shared DOI, orthographic title, and compatible first-author evidence. A second equivalent work
+keeps the identity unresolved rather than selecting the more cited version. Exact-identifier
+merging in search, publisher-date matching for CNKI issues, CNKI/PhilPapers overlap hints, and
+the first-review time for weekly issue leads also use indexed lookup. Batch title caching and
+failed-work source lookup no longer rescan unrelated records. Category, date, work-form, human
+review, and private-state rules retain their existing thresholds.
+
+With 600 synthetic candidates and 600 similarly titled works by different authors, the local
+identity-matching step shared by weekly and on-demand runs fell from about 4.37 to 0.006 seconds.
+Matching 1,000 query titles to 1,000 returned works for the title cache fell from about 1.49 to
+0.002 seconds. A full offline historical search at the same 600-by-600 scale now takes about
+0.05–0.06 seconds; 600 ambiguous records with one author and highly similar titles remain
+unconfirmed. These measurements exclude remote requests and do not predict live weekly runtime.
+The full test suite, Ruff, skill validation, the read-only release audit, and differential
+comparison checks were run. This is a code branch update without a new version tag or GitHub
+Release. See the [search rules](references/paper-search.md) and
+[monitoring policy](references/monitoring-policy.md) for identity and date thresholds.
+
+This workspace synchronization also includes two implementations previously held only in the
+local checkout. Publisher-date corroboration for bounded CNKI candidates now lives in
+`cnki_dates.py`, shared by weekly reports, on-demand pulls, historical search, and the read-only
+candidate preparation script. Explicit issue months, article dates, conflicts, and evidence URLs
+retain the same rules. `journal-watch import-toc` accepts a bounded complete title-and-author
+list after a reviewer checks a **known official WeChat post** in a browser. The same post URL must
+already identify a reviewed issue, and the importer validates dates, row count, and duplicate
+titles. The official *Modern Philosophy* 2026 issue 5 post explicitly labels September and was
+announced on 9 October; 18 TOC rows were previously imported into a Git-ignored local observation
+store. Their work forms, interest relevance, and article-level CNKI/Wanfang visibility remain
+unconfirmed. The posting day is not treated as an article publication day, and this path does not
+bypass WeChat's browser challenge. After combining the branches, 456 tests and Ruff passed. No
+live collection was repeated and no private monitoring state was rewritten. See the
+[Chinese-source policy](references/chinese-source-expansion.md) and
+[publisher observation protocol](references/publisher-article-observation.md). This synchronization
+does not create a new version tag or GitHub Release.
+
+</details>
+
+<details>
+<summary>View earlier technical updates (20)</summary>
+
+<details>
+<summary>Technical update: document review across all three modes (12 October 2026)</summary>
+
+## Technical update: document review across all three modes (12 October 2026)
+
+Weekly reports, on-demand pulls, and historical search now share the structured work-type
+decision and private document-review rule. Search merges the type evidence for one work before
+resolving a paper-versus-book conflict, and can write a private queue with source labels and an
+evidence fingerprint. After inspecting the specific manuscript or publisher record, a reviewed
+decision can be applied with `--type-reviews`; changed evidence does not inherit an old decision.
+Historical search retains its category and year filters. A work-form decision does not establish
+publication date or bibliographic identity. All 450 tests, Ruff, skill validation, and the
+read-only release audit passed; no live source refresh, version tag, or GitHub Release was made.
+Future evidence-decision changes will be checked across all three modes and merged into `main`
+after applicable validation and PR checks pass. Each mode retains its own time range and state
+rules. See the [work-type policy](references/work-type-policy.md) and
+[contribution guide](CONTRIBUTING.md).
+
+</details>
+
+<details>
+<summary>Technical update: landing-page prose and update archive (12 October 2026)</summary>
+
+## Technical update: landing-page prose and update archive (12 October 2026)
+
+The Chinese and English landing pages now organize the project's purpose, public example,
+features, version, and usage more directly while retaining the source scope and date evidence
+needed to read the report. The latest update is visible; 17 earlier updates can be expanded below.
+We checked the bilingual sample counts, four entries, version, local links, and collapsible
+structure. All 17 historical entries remain intact, and the read-only release audit passed.
+This documentation update has no new version tag or GitHub Release.
+
+</details>
+
+<details>
+<summary>Technical update: full display of four confirmed-new works (10 October 2026)</summary>
+
+## Technical update: full display of four confirmed-new works (10 October 2026)
+
+The landing page now lists all four confirmed-new works with complete titles, authors, work
+forms, publication-date evidence, matching categories, and stable links. It also links to the
+original documents inspected for the three disputed work forms. The English and Chinese landing
+pages and SVG/PNG preview now show the same four works; the preview no longer truncates the first
+title or shows just one confirmed-new entry. The 43 matching works, 10 human-review records,
+and retrospective-source caveat are unchanged. We checked the entries against both report
+languages, rerendered and inspected the preview image, and did not fetch sources again or change
+paper records. This is an unreleased branch presentation update; no tag or GitHub Release was made.
+
+</details>
+
+<details>
+<summary>Technical update: individual work-type conflict review (10 October 2026)</summary>
+
+## Technical update: individual work-type conflict review (10 October 2026)
+
+Internal evidence-pipeline version `0.6.2` no longer lets a catch-all OpenAlex/Crossref `other`
+alone veto a specific paper type from another source. Specific disagreements, such as paper
+versus book, dataset, or conference abstract, produce a complete private review queue. It
+records each source label, date, and evidence fingerprint. The skill now directs Codex to open
+each conflicting work, prioritizing those with evidence inside the seven-day window, inspect
+the document or publisher page, and write an evidence-linked private decision. A decision
+applies only to the matching PhilPapers record, title, and source-evidence fingerprint; changed
+evidence requires renewed review. An on-demand follow-up can repeat the exact initial window,
+while weekly work uses a dry run before commitment. A paper-form decision still has to pass
+the independent date and newness gates.
+
+Both report languages list every unresolved item with source-specific types, and PhilArchive
+OAI type URIs now display safely. A fixed-window rerun after document review raised the public
+sample's confirmed-new count from 1 to 4 and reduced work-type conflicts from 15 to 1. The
+final rerun has 43 matching works and 10 human-review records. The original 9 October snapshot
+is retained separately. The reviewed report is explicitly a 10 October source reread, not an
+exact historical feed reconstruction; its 39 source-change classifications are retrospective
+projections. Inspected documents and decisions stay in a Git-ignored private directory;
+no committed weekly state or private configuration was rewritten. Future
+two-pass reviews save the first category-feed inventory in the private queue and reuse it with
+`--review-queue-input`, avoiding a new RSS fetch with a backdated observation time. See the
+[work-type policy](references/work-type-policy.md). All 447 tests, Ruff, skill validation,
+public-sample consistency checks, and the read-only release audit passed.
+This is an unreleased code and documentation update, with no new
+tag or GitHub Release.
+
+</details>
+
+<details>
+<summary>Technical update: direct official RSS and refreshed public report (9 October 2026)</summary>
+
+<a id="technical-update-2026-10-09-official-rss-link"></a>
+
+## Technical update: direct official RSS and refreshed public report (9 October 2026)
+
+The local command-line HTTP 403 on category pages was identified as a Cloudflare challenge.
+After the user completed ordinary browser verification, all three category pages generated
+official RSS links through their own controls. The optional private-watchlist
+`official_rss_url` validates the host, category identity, and unfiltered parameters before
+reading these links under the existing evidence rules. An isolated seven-day `pull-now`
+completed: the report contains 1 confirmed-new paper, 34 recent source arrivals, and
+45 human-review records. Source coverage, unfinished verification, and upstream limits
+remain in the report's optional technical notes. Formal weekly state was not advanced.
+All 433 tests, Ruff, Skill validation, and the read-only release check passed. See the [complete public report](examples/public-demo-weekly-report.md)
+and [source audit](references/source-catalog.md#2026-10-09-访问复核). This is a branch documentation
+and sample update, not a new version tag or GitHub Release.
+
+</details>
+
+<details>
+<summary>Technical update: public sample refresh status (2026-10-08)</summary>
+
+<a id="technical-update-2026-10-08-public-demo-refresh"></a>
+
+## Technical update: public sample refresh status (2026-10-08)
+
+We retried `pull-now` with the original three public categories and a seven-day window in an isolated configuration. The PhilPapers category page returned HTTP 403, and an independent `pfm feed` check returned the same result. Neither request generated a new report or advanced formal weekly state. The landing page now dates the successful 9 September 2026 snapshot and discloses that this refresh was incomplete, so its historical totals cannot be mistaken for the current window. The original report, preview, and paper records remain unchanged. This is a branch documentation update; it does not create a new version tag or GitHub Release.
+
+</details>
+
+<details>
+<summary>Technical update: v0.4.0 release (2026-10-08)</summary>
+
+<a id="technical-update-2026-10-08-v040-release"></a>
+
+## Technical update: v0.4.0 release (2026-10-08)
+
+This release includes the
+[accepted bounded Chinese-journal leads workflow](references/chinese-journal-stabilization.md),
+shared publisher-date corroboration across the three modes, and corrections to
+weekly source status and deduplication coverage in `v0.4.0`.
+The application metadata and `uv.lock` agree; the internal evidence pipeline
+stays at `0.6.0`. Chinese records remain separately labelled leads. Weekly and
+on-demand reports list them only when a supported publication month overlaps
+the relevant window.
+
+Confirmed newly published Chinese papers, fully automated coverage of all 15
+registered journals, complete database recall, and a fixed indexing delay are
+outside this release scope. Opening a public `v0.3.0` schema-4 state database
+with this schema-6 release first creates an integrity-checked backup; see
+the [upgrade guide](references/installation.en.md#upgrade-checks-for-v040).
+
+The release audit now excludes the `.git` pointer file used by linked worktrees.
+All 422 tests, Ruff, skill validation, the read-only release audit, and locked
+dependency installation passed. The required source-package files and private-path
+exclusions were checked; the wheel installed in a fresh environment and its command
+entrypoints worked. See the [release checks](references/v0.4-release-candidate.md).
+This update corresponds to the `v0.4.0` tag and GitHub Release.
+
+</details>
+
+<details>
+<summary>Technical update: weekly source status and deduplication coverage (2026-10-07)</summary>
+
+<a id="technical-update-2026-10-07-weekly-coverage"></a>
+
+## Technical update: weekly source status and deduplication coverage (2026-10-07)
+
+Weekly reports now distinguish `local_only` reviewed publisher issues from source failures.
+When checked network sources succeed and the local publisher-issue store has no newly reviewed
+issue, the report no longer claims that a source check failed. CNKI and Wanfang coverage now
+states how many eligible issue or article leads were listed previously, reconciling the candidate
+total with missing months, outside-window leads, and the current report. Previously listed leads
+remain deduplicated. Text corrections to an already successful report retain a private original
+and do not rerun its window or advance checkpoints. All 420 tests, Ruff, skill validation, and
+the read-only release audit passed. This is a local code and documentation update, without a push,
+version tag, or GitHub Release.
+
+</details>
+
+<details>
+<summary>Technical update: shared Chinese-journal dates and weekly section order (2026-09-28)</summary>
+
+<a id="technical-update-2026-09-28-weekly-months"></a>
+
+## Technical update: shared Chinese-journal dates and weekly section order (2026-09-28)
+
+Both complete language versions of weekly reports now list Chinese publisher, CNKI, and Wanfang
+leads before PhilPapers papers. The first CNKI baseline also applies the publication-month gate:
+only month-supported issues overlapping the weekly window display article titles. Earlier issues,
+missing months, and conflicting dates remain in coverage counts. Issue numbers, query dates, and
+announcement dates cannot supply a publication month. Announcement-only publisher issues are
+withheld from weekly reports; explicit issue labels and an earlier release day remain separate facts.
+
+When CNKI lacks dates, `scripts/prepare_weekly_cnki.py --config config/watchlist.yaml` produces a
+bounded, read-only candidate list for review against the publisher's same-article or same-issue page.
+Weekly preparation remains the default; `--mode pull-now --days N` and
+`--mode search --year-from YYYY --year-to YYYY` align preparation with the other two modes.
+All three modes share the evidence logic and consistent issue/article fields. Search JSON and Markdown
+show reviewed dates, publisher links, and missing/conflicting months. Historical candidates still
+follow the requested year scope; they are not automatically described as recent papers.
+The private reviewed-bibliography file accepts optional `issue_label_month` and `publication_date`
+fields. Only fully matching publisher bibliographies can supplement dates; catalog records cannot.
+Month filtering precedes article-level Wanfang checks. A previously undated observation can become
+eligible after corroboration, and an older catch-up window cannot consume a future issue early.
+Previously eligible issues remain deduplicated. See the
+[Chinese-source policy](references/chinese-source-expansion.md#43-月份精度与新期次观察).
+
+All 419 tests and Ruff passed, covering first-scan filtering, earlier and undated exclusions,
+bibliographic conflicts, invalid dates, early publication, later corroboration, future-window
+eligibility, both language orders, shared evidence across search and immediate results, year scopes,
+and read-only weekly state. The program consumes manually verified dates; the preparation
+script does not automatically interpret publisher dates, confirm first publication within the week,
+or establish interest-category membership. This is a local code and documentation update, without
+a push, version tag, or GitHub Release.
+
+</details>
+
+<details>
+<summary>Technical update: ninth publisher TOC and stricter arrival evidence (2026-09-28)</summary>
 
 <a id="technical-update-2026-10-14-wechat-candidate-queue"></a>
 
@@ -132,6 +666,11 @@ The P2 issue audit now has separate denominators for complete publisher TOC reco
 
 On 28 September 2026, a new Git-ignored isolated database scanned one issue from each of nine journals: 132 TOC records, no site failures, and no article-database queries in the default cycle. The first bounded check matched one *Confucius Studies* article on the public CNKI surface. An explicit Wanfang Query check in a separate isolated copy compared a second article: CNKI matched and Wanfang did not, each after a complete one-page query. The publisher's space inside that author's Chinese name had caused a false review status; it is now parsed correctly and covered by a regression test. Only two articles from this issue were checked; the other 13 and all articles from the other journals remain unchecked in this round. Wanfang stays off by default. This sample cannot establish database-wide recall, database-wide omission, or a fixed indexing time. All 402 tests, Ruff, Skill validation, and the read-only release audit passed. This is a `main` branch code and documentation update, without a new tag or GitHub Release.
 
+</details>
+
+<details>
+<summary>Technical update: issue-level denominators and an eighth publisher directory (2026-09-27)</summary>
+
 <a id="technical-update-2026-09-27-journal-p2"></a>
 
 ## Technical update: issue-level denominators and an eighth publisher directory (2026-09-27)
@@ -141,6 +680,11 @@ Building on the accepted P0/P1 Chinese-leads workflow, `pfm journal-watch audit`
 An eighth publisher source joins the seven textual TOCs: bounded parsing of the [*Modern Philosophy* directory at Sun Yat-sen University](https://mphilosophy.sysu.edu.cn/cat/124). Its [2026 issue 2 announcement](https://mphilosophy.sysu.edu.cn/article/25746) is dated 29 June, while the attached Chinese TOC PDF explicitly calls it the March issue. The system keeps the issue month and announcement day as two distinct pending evidence links; it does not treat the announcement as first publication of each article. PDF reads are limited to the registered HTTPS host, size and page bounds, content type, file header, and an issue-entry count check. Parsing is in memory; the PDF itself is not stored. Seven other registered publishers still need site-specific manual review.
 
 In a Git-ignored isolated database on 27 September 2026, one complete issue from each of eight journals yielded 117 publisher TOC records. Directory-only scans made no database queries. Eight separate bounded title searches, one per journal, all matched on the public CNKI search surface. The other 109 entries were not checked in that round; Wanfang remained off, and no article-level work-type or interest review was completed. This is not a database-wide recall or arrival-time estimate. All 398 tests, Ruff, Skill validation, and the read-only release audit passed. See the [article observation protocol](references/publisher-article-observation.md) and [stabilization criteria](references/chinese-journal-stabilization.md) for commands, evidence, and use boundaries. This local branch update has not been pushed, tagged, or released.
+
+</details>
+
+<details>
+<summary>Technical update: publisher TOCs and article arrival observations (2026-09-27)</summary>
 
 <a id="technical-update-2026-09-27-official-journals"></a>
 
@@ -157,6 +701,11 @@ The new [Chinese-journal stabilization criteria](references/chinese-journal-stab
 Bounded site-specific collectors now read complete textual tables of contents for seven journals: *Journal of Dialectics of Nature*, *Zhouyi Studies*, *Philosophical Research*, *Philosophical Trends*, *Philosophical Analysis*, *Studies in Dialectics of Nature*, and *Studies in Philosophy of Science and Technology*. `pfm journal-watch run` scans all seven sequentially and only scans publisher directories by default. An explicit positive article-check budget checks the public CNKI Space search surface; the subscribed Wanfang Query endpoint additionally requires `--with-wanfang`. Total and per-site article checks are bounded, and one site failure does not stop the others. Observations remain in a Git-ignored local database. Publisher scans provide leads about new issues; repeat checks of the same article are optional source evaluation. Other users can use search, pull-now, or weekly reports without establishing an observation baseline. A complete search miss followed by an identified hit bounds search visibility; an initial hit and continuing misses are censored observations and do not prove database-wide absence.
 
 The seven latest issues yielded 14, 11, 12, 12, 16, 17, and 18 author-bearing TOC entries, 100 in total. The first round checked five entries from each of the original three journals and one from each of the four added journals: all 19 were visible through public CNKI search, while the earlier explicitly enabled exact-title Wanfang queries matched two and did not match 17. These are bounded observations, not a database-wide miss rate. Repeat checks currently have an initial review point at roughly eight weeks; any Wanfang delay study needs a separate explicit opt-in and scope. The *Philosophical Trends* editorial portal still shows issue 8; the user-supplied WeChat link for issue 9 remains a pending lead because its body could not be read. Eight other catalog entries retain site-specific manual review. All 379 tests, Ruff, and the read-only release check passed; no multi-day arrival interval has yet been measured. See the [observation protocol](references/publisher-article-observation.md). This change was not pushed and did not create a version tag or GitHub Release.
+
+</details>
+
+<details>
+<summary>Technical update: publisher-first Chinese journal issue registry (2026-09-27)</summary>
 
 ## Technical update: publisher-first Chinese journal issue registry (2026-09-27)
 
@@ -189,6 +738,11 @@ journal checks were not run. This is a
 local branch update, with no push, version tag, or GitHub Release. See the
 [source and entry policy](references/chinese-source-expansion.md#24-官方期刊监控库与证据录入).
 
+</details>
+
+<details>
+<summary>Technical update: journal issue-month audit baseline (2026-09-27)</summary>
+
 <a id="technical-update-2026-09-27-audit"></a>
 
 ## Technical update: journal issue-month audit baseline (2026-09-27)
@@ -210,6 +764,11 @@ document the original journal links, access limits, and date semantics. Broad au
 journal-site intake remains deferred. A small trial using a stable issue page with an
 explicit month is the next candidate, followed by repeated observations before expansion.
 This branch-only audit and documentation update has no new tag, GitHub Release, or push.
+
+</details>
+
+<details>
+<summary>Technical update: independent Wanfang discovery with a personal subscription (2026-09-27)</summary>
 
 <a id="technical-update-2026-09-23"></a>
 
@@ -236,6 +795,11 @@ coverage, but none currently demonstrates complete coverage of Chinese philosoph
 without a database-wide agreement. New regressions cover independent discovery, placeholder
 dates, the on-demand window, and weekly record-ID increments. This branch update has no new
 tag or GitHub Release.
+
+</details>
+
+<details>
+<summary>Technical update: CNKI Space leads and Chinese journal issue observations (2026-09-23)</summary>
 
 ## Technical update: CNKI Space leads and Chinese journal issue observations (2026-09-23)
 
@@ -309,6 +873,11 @@ Historical `search` and formal weekly monitoring retain their existing scope.
 Synthetic tests cover overlapping months, missing months, and out-of-window issues.
 No new version tag or GitHub Release was created.
 
+</details>
+
+<details>
+<summary>Technical update: human-review notice in the public example (2026-09-20)</summary>
+
 <a id="technical-update-2026-09-20"></a>
 
 ## Technical update: human-review notice in the public example (2026-09-20)
@@ -318,6 +887,11 @@ README pages and the preview image reflect this change. Review details and techn
 full example are collapsed by default and can be expanded voluntarily; the original paper records
 and verification facts are preserved. This documentation and presentation update includes checks
 of paper content, collapsible sections, and links, plus a rendered-image review.
+
+</details>
+
+<details>
+<summary>Technical update: interest-based paper search and local-time scheduling (2026-09-19)</summary>
 
 <a id="technical-update-2026-09-19"></a>
 
@@ -332,7 +906,8 @@ no separate version tag or GitHub Release has been created for it.
 
 **Without year bounds**, missing feed dates, year hints, or publication dates do not exclude a
 verified paper, and all verified matches are returned by default. Explicit result limits still
-enable pagination. **With year bounds**, records without feed year hints are excluded before
+enable pagination. **With year bounds**, records without feed year hints or an applicable
+publisher-checked publication-year review are excluded before
 bibliographic lookup; the final year filter uses bibliographic publication-date evidence.
 
 Available OpenAlex citation counts sort descending, with missing values labelled and placed last;
@@ -354,6 +929,11 @@ index. See the [search contract](references/paper-search.md) and [changelog](CHA
 Future project updates must also appear in the technical updates on both README pages, while
 preserving earlier entries. This requirement is recorded in the
 [contribution rules](CONTRIBUTING.md#网页技术更新与变更记录).
+
+</details>
+
+<details>
+<summary>Technical update: recoverable OAI caching and stable on-demand pulls</summary>
 
 ## Technical update: recoverable OAI caching and stable on-demand pulls
 
@@ -378,198 +958,6 @@ It uses the same evidence rules as weekly monitoring and never advances weekly n
 history. Stability means bounded requests, recoverable interruption, state isolation, and honest
 coverage reporting; it does not promise a fixed runtime.
 
-## 1. What problem does this solve?
+</details>
 
-Philosophy researchers often have to revisit PhilPapers, journal pages, and bibliographic databases
-to see whether new work has appeared in their fields. This project turns that repetitive work into
-a persistent monitor. The researcher describes an area in ordinary Chinese or English; the Skill
-maps that description to verified PhilPapers taxonomy categories and reports new papers whose
-verified categories intersect the user's confirmed set.
-
-The project does not evaluate argumentative success, rank paper quality, or filter by author
-reputation, journal prestige, citation count, or model score. Its purpose is to reduce missed
-relevant papers, not to decide what the researcher ought to read.
-
-## 2. Features
-
-Stable `v0.3.0` capabilities include:
-
-- mapping natural-language interests to reviewable PhilPapers categories;
-- activating only real categories explicitly confirmed by the user;
-- establishing a historical baseline without flooding the first report with existing records;
-- running weekly windows in the user's timezone and catching up missed windows chronologically;
-- distinguishing formal publication, newly available manuscripts or preprints, source re-entry,
-  and metadata updates;
-- merging the same work across category feeds and suppressing duplicate weekly notifications;
-- reporting title, authors, venue, date evidence, matched categories, sources, and stable links;
-- reporting true zero results and explicit source-coverage failures;
-- pulling a rolling window of 1–31 local days on explicit request;
-- resuming interrupted OAI pagination from a durable checkpoint; and
-- producing Chinese and English versions in every weekly and on-demand Markdown report.
-
-The core rule is:
-
-```text
-(confirmed new within the window OR confirmed recent arrival in the PhilPapers alert stream)
-AND
-(verified paper category IDs intersect the user's confirmed interest category IDs)
-```
-
-PhilPapers category feeds, PhilArchive OAI record changes, Crossref and OpenAlex bibliographic
-evidence, structured work types, and the confirmed category set play distinct roles. An OAI header
-`datestamp` means that the source metadata record was created, modified, or deleted. It is not the
-paper's publication date.
-
-Records lacking both a feed timestamp and a bibliographic year continue through on-demand
-verification only when a successful OAI window supplies positive record-change evidence. A miss is
-not a permanent old-work judgment. OAI stock records that have no feed timestamp, bibliographic
-year, DOI, or explicit manuscript/preprint type enter a private, source-ID-hash-only
-date-evidence-insufficient set. Ordinary pulls disclose its count but spend no per-item lookup
-budget on it and do not include it in the per-run remote-verification deferral count or human
-review. A later signal automatically reactivates the record. This is not an old-work or relevance judgment, and a genuinely new
-manuscript lacking every listed signal may be absent from an ordinary on-demand report. If OAI
-fails, the wider candidate set is restored and the coverage degradation is reported. The project
-does not extend to paywalled or per-record PhilPapers scraping merely to pursue these records.
-
-Before network access, the CLI warns that a first pull may take longer. The default individual
-fallback budget is 300 candidates, intended to finish the non-quarantined candidates in the known
-three-category workload in one run. The 1,000-candidate safety limit still applies; this is not an
-unbounded completion promise for every possible profile. Under those limits the conservative plan
-allows at most 470 OpenAlex and 300 Crossref logical requests before bounded retry attempts, while
-cache hits and batch matches normally reduce the actual total.
-
-### Cache storage advice
-
-An initial OAI cache can grow substantially when an upstream source performs a bulk metadata
-update. On Windows, if another spacious local drive is available, avoid placing
-`storage.state_database` and its adjacent caches on a space-constrained `C:` system drive. Prefer a
-spacious non-system drive. The Skill and CLI issue this advice before `pull-now`; they do not move
-existing private files without authorization.
-
-Inspect the cache without exposing its token:
-
-```powershell
-.\.venv\Scripts\pfm.exe oai-cache status --config config\watchlist.yaml
-```
-
-Remove rebuildable cache material older than an explicit cutoff:
-
-```powershell
-.\.venv\Scripts\pfm.exe oai-cache prune `
-  --config config\watchlist.yaml `
-  --before 2026-09-01T00:00:00Z `
-  --confirm
-```
-
-Pruning does not modify the weekly state database, baseline, checkpoints, or notification history,
-and it is refused while a harvest is active.
-
-## 3. Installation and first use
-
-Requirements are Codex, Git, [`uv`](https://docs.astral.sh/uv/), Python 3.12 or 3.13, and network
-access to the configured scholarly sources. Production unattended validation has been performed on
-Windows. macOS and Linux path semantics are supported, but `v0.3.0` does not claim equivalent
-unattended scheduling validation on those platforms.
-
-Ask Codex's built-in installer to install the repository root as the Skill:
-
-```text
-$skill-installer Install the Skill from
-https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor.
-Use repository path . and installation name philosophy-frontier-monitor.
-```
-
-In the installed directory:
-
-```powershell
-uv sync --python 3.12
-Copy-Item .\config\watchlist.example.yaml .\config\watchlist.yaml
-.\.venv\Scripts\pfm.exe doctor
-```
-
-The executable is `.venv/bin/pfm` on macOS and Linux. Then:
-
-1. Describe the research direction in ordinary language.
-2. Review the proposed verified categories and accept, reject, or defer each one.
-3. Obtain the PhilPapers API ID and API key needed for the full taxonomy, keeping both only in a
-   private Git-ignored local location or process environment.
-4. Establish the historical baseline.
-5. Complete a dry run and a production weekly run before creating a recurring schedule.
-
-The default schedule is Monday at 08:00 in the user's local timezone and can be changed. Never paste
-API keys, passwords, cookies, or recovery codes into a conversation, issue, screenshot, or command
-line argument.
-
-See [Installation and first deployment](references/installation.en.md) and the
-[English user guide](references/usage.en.md). The Chinese installation guide is
-[安装与首次部署](references/installation.md).
-
-## 4. Current version
-
-Latest tagged release: `v0.3.0`; the table also includes the capability added by this `main` branch update.
-
-| Capability | Status |
-|---|---|
-| Natural-language interests to controlled categories | Stable |
-| Scope estimation and user confirmation | Stable |
-| Historical baseline | Stable |
-| Weekly incremental monitoring and factual reporting | Stable |
-| Chronological missed-window catch-up | Stable |
-| SQLite state, deduplication, and transactional checkpoints | Stable |
-| Bounded source retries, telemetry, and run-level circuit breaking | Stable |
-| User-requested `pull-now` | Stable, explicit and read-only |
-| OAI cross-run caching, interruption recovery, and incremental refresh | Stable |
-| Chinese and English weekly/on-demand report output | Stable |
-| Bounded Chinese metadata candidates and reviewed issue leads | Stable, opt-in (`main` branch update) |
-
-**Bounded Chinese-journal leads are a stable opt-in capability added on `main`; the existing `v0.3.0` tag has not been re-released.**
-With `sources.cnki_space` enabled, search, pull-now, and weekly reports can each show bounded Chinese metadata leads and reviewed issue leads under their own time rules; the public example leaves this source disabled. Nine publisher directories can be scanned separately (eight textual TOCs and one PDF); the other six registered journals still require manual review. Automatically collected issue data must pass evidence review before it enters the three modes. Chinese candidates do not enter the verified-paper main section, and this feature does not promise complete Chinese-philosophy coverage, a fixed indexing time, or an interest-paper recall rate. P0/P1 of the bounded leads workflow and P2 issue-level accounting, entry decisions, and source-use limits have passed acceptance. The roughly eight-week repeated-article study remains a separate source-evaluation experiment; users do not need it to use the bounded service. See [Chinese sources and current limits](references/chinese-source-expansion.md).
-
-The OAI cache is a performance and recoverability mechanism, not a substitute for paper-freshness
-evidence. Persistence does not turn a source `datestamp` into a publication date and does not bypass
-interest categories, work identity, supported work type, or window checks.
-
-The OAI candidate approach was inspired by the `list_recent` operation in
-[`sea9401/philosophy-mcp`](https://github.com/sea9401/philosophy-mcp). This project does not copy its
-code or retain a first-page-only implementation. It adds complete token pagination, overlap and
-exact local filtering, deletions, date-semantic separation, deterministic `/rec/` intersection,
-old-work checks, failure fallback, cross-run caching, and interruption recovery. See the Chinese
-[design lineage and implementation differences](references/design-lineage.md) for pinned upstream
-revisions, licensing, and the detailed comparison.
-
-## 5. Security and source boundaries
-
-- Private interests, confirmed categories, credentials, SQLite state, caches, and reports remain
-  local by default and are excluded from the public repository.
-- `config/watchlist.yaml`, `var/`, `reports/`, `.env`, and virtual environments are Git-ignored.
-- The OAI cache stores minimal record evidence and an opaque recovery token, but no titles, authors,
-  abstracts, full text, or complete XML. Status output never reveals the token.
-- API keys are read only from private files or the process environment and must not enter code,
-  reports, logs, fixtures, URLs, or issues.
-- Remote titles, abstracts, XML, JSON, and error pages are untrusted data, never local commands.
-- The project does not download paper full text by default or bypass paywalls, access controls, TLS,
-  or site protections.
-- Crossref and OpenAlex support identity, old-work, and date checks. Absence or temporary failure is
-  not presented as a certain conclusion.
-- The MIT License covers this project's code, not third-party taxonomy data, metadata, abstracts,
-  or papers.
-
-See the Chinese source-of-truth policies for
-[security and privacy](references/security-and-privacy.md),
-[monitoring](references/monitoring-policy.md),
-[date and version semantics](references/date-and-version-semantics.md), and
-[third-party notices](THIRD_PARTY_NOTICES.md).
-
-## 6. Feedback
-
-- Maintainer: **Asahina Mafuyu**
-- Contact: [junxuanxie@stu.xjtu.edu.cn](mailto:junxuanxie@stu.xjtu.edu.cn)
-
-Use [GitHub Issues](https://github.com/AsahinaMafuyu0127/philosophy-frontier-monitor/issues) for
-ordinary installation problems, reproducible bugs, source-compatibility changes, and enhancement
-proposals. Include the version, operating system, command, window length, redacted error summary,
-and count-only `oai-cache status` fields when relevant. Do not attach credentials, private interests,
-the complete watchlist, databases, reports, authenticated URLs, or a resumption token.
-
-Do not disclose a vulnerability that could expose credentials or private research data in a public
-issue. Use GitHub Private Vulnerability Reporting as described in [SECURITY.md](SECURITY.md).
+</details>

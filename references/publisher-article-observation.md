@@ -1,5 +1,18 @@
 # 刊方目录逐篇观察
 
+### 2026-10-09 《现代哲学》公众号目录补入
+
+[《现代哲学》2026 年第 5 期目录原帖](https://mp.weixin.qq.com/s/cOimuAyoAiR-WV87o_I1rw)
+在交互式浏览器可读：显示“现代哲学杂志”账号、10 月 9 日 10:48 公告，封面写
+“总第 208 期／9 月号”。正文列出 18 条有作者的目录记录，末尾有编辑审核信息。
+以这条原帖单独保存已复核期次，`label_month=2026-09`、`announcement_on=2026-10-09`，
+`issue_published_on` 留空。18 条题名、作者经浏览器核对后通过
+`journal-watch import-toc --input <Git 忽略的 JSON> --confirm-evidence` 导入本地观察库；
+`audit` 的刊方完整目录分母为 18，研究论文与兴趣论文分母仍未知，知网和万方尚未对这期
+逐篇核对。导入前必须先以**完全相同的原帖 URL**复核期次，JSON 的期次、月份、公告日、
+目录条数及标题唯一性须通过校验。此路径不调用微信验证接口，也不会自动发现下一期。
+普通 HTTP 客户端访问该链接被重定向至微信验证页，不能把受阻结果写成“无新期”。
+
 目前启用九种经过实采的目录（八种 HTML 文字目录与一种刊方 PDF）：[《自然辩证法通讯》](https://jdn.ucas.ac.cn/home/journal/cataloglist/cid/349)、[《周易研究》](https://zhouyi.sdu.edu.cn/zyyjxk/qkml.htm)、[《孔子研究》](https://www.chinakongzi.org/category/kongziyanjiu_qikan/)、[《哲学研究》](https://zxyj.cbpt.cnki.net/portal/journal/portal/client/paper_list/type_benqi)、[《哲学动态》](https://zxdt.cbpt.cnki.net/portal/journal/portal/client/paper_list/type_benqi)、[《哲学分析》](https://zxfx.cbpt.cnki.net/portal/journal/portal/client/paper_list/type_benqi)、[《自然辩证法研究》](https://zrbz.cbpt.cnki.net/portal/journal/portal/client/paper_list/type_benqi)、[《科学技术哲学研究》](https://kxbz.cbpt.cnki.net/portal/journal/portal/client/paper_list/type_benqi)与[《现代哲学》](https://mphilosophy.sysu.edu.cn/cat/124)。采集器只访问各目录登记的 HTTPS 主机，每站每次各取最新一期；《自然辩证法通讯》最多三页，《周易研究》和《孔子研究》各取索引及一期目录页，五个编辑部门户读取完整目次并最多翻两页。HTML 页面限 750 KB；《现代哲学》最多读取一个 2 MB、三页以内的官方目录 PDF；每期目录记录限 30 条。分页超出上限、正文结构不合预期、重定向或错误页均报错，不能当成零篇或完整目录。五个编辑部门户由 CNKI 托管，属于期刊发布渠道，不构成独立的知网数据库核对。
 
 其余六个入口仍按站点保留状态：[《宗教学研究》](https://daoism.scu.edu.cn/zjxyj/gqml.htm)在官方索引列有 2026 年第 4 期及月份，但[当期逐篇目录](https://daoism.scu.edu.cn/info/1035/2471.htm)仍是图片；[《伦理学研究》正式过刊页](https://llx.hunnu.edu.cn/CN/article/showOldVolumn.do)在搜索索引中可见文字题录和刊出日，但本机直连仍返回 502，无法建立稳定采集；[《中国社会科学》栏目](https://www.cssn.cn/dkzgxp/zgxp_zgshkx/)的主列表与侧栏最新期次不同步；[《中国哲学史》主办单位页](https://phil.ucass.edu.cn/xsyj/qkzy/zgzxs.htm)目前只列到较早的目录；《世界哲学》和《道德与文明》在登记入口没有可核实的当前完整文字目次。这些站点保留人工复核，不把“未自动采集”解释为“没有新刊”。

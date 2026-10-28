@@ -87,6 +87,28 @@ Windows 用户还应检查 `storage.state_database` 的实际位置。OAI 与书
 同一官方 JSON，然后执行 `taxonomy-import` 验证；不得伪装浏览器、复用 Cookie、关闭 TLS 或绕过
 访问控制。
 
+若被拦截的是已确认分类的**网页发现步骤**，但正常浏览器能打开该分类页及其右侧 `RSS feed` 控件，
+可将该控件生成的官方 RSS 链接保存为私人 `config/watchlist.yaml` 中对应分类的
+`sources.philpapers_category_pages[].official_rss_url`。程序会核对 HTTPS 域名、分类 ID、页面
+slug、`new=1` 和未加额外筛选的订阅参数，并接受官方页面已使用的 `sort=cat` 或
+`sort=pubYear` 排序，再直接读取官方 RSS XML。排序会影响有界 feed 返回记录的优先顺序，
+不是论文发表日期证据；历史窗口补跑仅把同一分类 ID 与页面地址对应的私人链接传给该窗口，
+不将链接写入历史画像。未配置此字段时仍按原方式从分类页发现 feed。链接内含不透明 `dg`
+参数，只放在 Git 忽略的私人配置，不粘贴到聊天或公开仓库。
+若浏览器也停在安全验证页，不能据此猜测订阅地址或绕过验证；缺少任何必需分类的 feed 时，完整
+即时拉取仍应停止，不以部分分类结果冒充完整周报。官方订阅链接日后若失效，需重新从可访问的
+官方页面取得并核对。
+
+定时运行前可先执行只读健康检查：
+
+```powershell
+.\.venv\Scripts\pfm.exe doctor --live --source philpapers --feeds-config config\watchlist.yaml
+```
+
+它按当前私人配置逐一读取真实订阅，报告每个分类的序号、状态和条目数，不打印链接或 `dg`；
+失败时返回非零退出码，且不写状态库或推进周报检查点。外部链接或访问策略变化仍可能导致
+后续 403；此时应从可访问的官方分类页重新取得并核对链接，而不是反复补跑。
+
 OpenAlex key 不是建立兴趣画像所必需，但宽范围书目核验可能需要较多 credits。可选 key 同样只能
 从私人文件或当前进程环境读取。
 
@@ -128,3 +150,16 @@ Skill 被调用后，应把其自身 `SKILL.md` 所在目录解析为运行根�
 可用 `pfm oai-cache status --config config/watchlist.yaml` 查看计数与恢复状态。只有明确需要释放旧
 缓存空间时才运行 `pfm oai-cache prune --config config/watchlist.yaml --before <ISO-8601> --confirm`；
 该操作不会修改 `state.sqlite3`、基线、检查点或通知历史。
+
+### 升级至 `v0.4.0` 的核查
+
+公开 `v0.3.0` 的状态库 schema 为 4，`v0.4.0` 使用 schema 6。首次用本版打开较旧状态库时，
+程序先在状态库同级 `backups/` 目录生成并核验 `*-pre-schema6-*.sqlite3` 备份，再增加中文期刊
+观察所需表并更新
+schema 号；不通过重建基线或通知历史来升级。合成的 schema 4、5 样本已验证备份可读，
+原有检查点和通知记录在迁移前后保留。该测试不能代替对具体私人库的升级前备份与核查。
+
+正式升级时，应先备份现有私人配置、状态库和报告，在已知安装目录核对待更新的 Git 差异，
+以 `uv sync --locked` 安装目标版本，然后在隔离副本上检查 schema、备份文件、检查点和
+通知历史。确认后再让正式任务使用新代码；不要为了更正已成功周报的文字而重跑旧窗口。
+中文来源依然需要在私人配置中显式启用，不能因升级应用版本而自动开启。

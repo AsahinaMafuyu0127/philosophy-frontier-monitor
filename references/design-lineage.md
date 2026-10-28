@@ -1,6 +1,6 @@
 # 设计来源、实现差异与独立贡献
 
-最后核验：2026-09-08
+最后核验：2026-10-25（第 7 节为本次新增复核；前六节保留原核验范围）
 
 本文说明本项目在“无 RSS 时间戳／无作品年份”的近期论文发现问题上参考过哪些公开 GitHub 项目，
 哪些思想被采用，哪些实现没有照搬，以及本项目新增了什么。这里的“新增”表示相对于所列项目的
@@ -118,3 +118,21 @@ article、book、bookPart、thesis、workingPaper 和 preprint 使用保守映�
 `philosophy-mcp` 的 TypeScript 或 `philpapers-cli` 的 Go 源码复制、翻译或捆绑进仓库。上游项目的
 名称、固定 commit、相关源文件和许可证只用于可复核的来源说明；本项目 MIT License 不改变上游
 代码、PhilPapers／PhilArchive 元数据或论文内容的权利状态。
+
+## 7. 2026-10-25 论文检索 Skill 代码结构复核
+
+GitHub 星数是发现候选的线索，不是代码正确性的证明。本次以可见的仓库网页为准，核对了
+两个高星项目和一个更专门的论文检索 Skill；网页星数随时间变化：
+
+| 项目与本次可核对材料 | 当日约数 | 可借鉴的代码边界 | 本项目的取舍 |
+|---|---:|---|---|
+| [K-Dense-AI/scientific-agent-skills](https://github.com/K-Dense-AI/scientific-agent-skills) 的 [paper-lookup/SKILL.md](https://github.com/K-Dense-AI/scientific-agent-skills/blob/main/skills/paper-lookup/SKILL.md) | 5.4 万星 | Skill 把来源查询、分页计数核对及不完整状态交给专用脚本；入口文档要求记录查询范围与覆盖限制。本次核对的是该 Skill 的入口说明，未逐行审计它的分页脚本。 | 保留本项目现有来源适配层，在 OpenAlex DOI 与题名共用的适配函数中核对 `meta.count`，异常返回明确失败。 |
+| [microsoft/ResearchStudio](https://github.com/microsoft/ResearchStudio) 的 [paper_search/scripts/search_papers.py](https://github.com/microsoft/ResearchStudio/blob/main/ResearchStudio-Idea/skills/paper_search/scripts/search_papers.py) | 3.4 千星 | 各来源在独立模块中加载，聚合阶段处理来源失败、去重和输出；代码把可选来源的依赖故障限制在该来源。 | 本项目已有 PhilPapers、OpenAlex、Crossref 等适配模块及独立覆盖报告；继续复用这些边界，不引入进程级工作器或以相关性分数替代受控分类。 |
+| [O0000-code/paper-search-pro](https://github.com/O0000-code/paper-search-pro) 的 [SKILL.md](https://github.com/O0000-code/paper-search-pro/blob/main/SKILL.md) | 213 星 | Skill 入口区分确定性检索、去重与后续研究判断；它描述的分类、期刊分区和覆盖估计服务于另一种通用文献综述任务。本次核对的是流程说明，未审计全部辅助脚本。 | 不引入期刊分区、相关性或质量分数，也不把中文题录自动提升为 PhilPapers 的已核验分类论文。 |
+
+由此发现的实际缺口在本项目的 [OpenAlex 适配器](../src/philosophy_frontier_monitor/sources/openalex.py)：
+题名 OR 查询曾在响应总数大于首屏时，只补查首屏没有代表记录的题名；同一题名下被截掉的
+另一条作品可能因此不进入身份比较。DOI 查询也没有核对批量响应总数。修正后共用有界
+分页读取，普通单页保持一次请求；后续页只在 `meta.count` 要求时读取，三页仍不完整则
+作为来源失败，不能声称“未收录”或已完成旧作核对。批量结果仍由本项目原有的身份比较器、
+作品类型、日期与分类门槛判断，未复制上述仓库的代码或评分算法。

@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import yaml
 
 from .sources.cnki_space import CnkiSearchTerm
+from .sources.philpapers_rss import PhilPapersFeedError, direct_feed_request
 
 
 class ConfigError(ValueError):
@@ -54,6 +55,7 @@ class FeedConfig:
     category_id: str
     category_name: str
     url: str
+    official_rss_url: str | None = None
 
     @property
     def feed_key(self) -> str:
@@ -473,13 +475,26 @@ def load_watchlist(path: str | Path) -> WatchlistConfig:
         if category_id in feed_ids:
             raise ConfigError(f"duplicate feed category_id: {category_id}")
         feed_ids.add(category_id)
+        category_url = _require_text(item.get("url"), f"feed[{index}].url")
+        official_rss_url = item.get("official_rss_url")
+        if official_rss_url is not None:
+            official_rss_url = _require_text(
+                official_rss_url, f"feed[{index}].official_rss_url"
+            )
+            try:
+                direct_feed_request(category_url, category_id, official_rss_url)
+            except PhilPapersFeedError as error:
+                raise ConfigError(
+                    f"feed[{index}].official_rss_url: {error}"
+                ) from error
         feeds.append(
             FeedConfig(
                 category_id=category_id,
                 category_name=_require_text(
                     item.get("category_name"), f"feed[{index}].category_name"
                 ),
-                url=_require_text(item.get("url"), f"feed[{index}].url"),
+                url=category_url,
+                official_rss_url=official_rss_url,
             )
         )
 

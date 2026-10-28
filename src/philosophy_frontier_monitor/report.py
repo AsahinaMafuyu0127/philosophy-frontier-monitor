@@ -9,13 +9,16 @@ from html import escape
 from urllib.parse import quote
 
 from .cnki_review import CnkiAssessment, CnkiOverlap
+from .identity import IdentityComparison
 from .models import (
+    DateValue,
     FreshnessStatus,
     InterestProfile,
     MatchDecision,
     MatchRecord,
     TaxonomySnapshot,
     WorkRecord,
+    WorkTypeEvidence,
     WorkTypeStatus,
 )
 from .official_journals import OfficialIssue, render_issue_leads
@@ -38,6 +41,11 @@ class HumanReviewItem:
     author_text: str | None
     stable_url: str | None
     reason_code: str
+    work_type_evidence: tuple[WorkTypeEvidence, ...] = ()
+    evidence_fingerprint: str | None = None
+    publication_date: DateValue | None = None
+    identity_comparisons: tuple[IdentityComparison, ...] = ()
+    identity_fingerprints: tuple[str, ...] = ()
 
 
 UNRESOLVED_REASON_LABELS = {
@@ -103,7 +111,7 @@ def _human_review_lines(items: tuple[HumanReviewItem, ...]) -> list[str]:
     if not items:
         return []
     lines = ["需要人工复核的候选：", ""]
-    for index, item in enumerate(items[:9], start=1):
+    for index, item in enumerate(items, start=1):
         reason = UNRESOLVED_REASON_LABELS.get(item.reason_code, item.reason_code)
         lines.extend(
             [
@@ -113,10 +121,28 @@ def _human_review_lines(items: tuple[HumanReviewItem, ...]) -> list[str]:
                 f"   - 来源链接：{_safe_text(item.stable_url) if item.stable_url else '未记录'}",
             ]
         )
-    if len(items) > 9:
-        lines.append(f"- 另有 {len(items) - 9} 条人工复核候选未在本报告展开。")
+        if item.work_type_evidence:
+            lines.append(f"   - 类型证据：{_human_review_type_evidence(item)}")
+        if item.evidence_fingerprint:
+            lines.append(f"   - 证据指纹：`{item.evidence_fingerprint}`")
+        if item.publication_date:
+            lines.append(f"   - 来源日期：{_human_review_date(item.publication_date)}")
     lines.append("")
     return lines
+
+
+def _human_review_type_evidence(item: HumanReviewItem) -> str:
+    return "; ".join(
+        f"{_safe_text(evidence.source)} "
+        f"{_safe_text(evidence.raw_type)} → "
+        f"{_safe_text(evidence.normalized_type or 'unknown')}"
+        for evidence in item.work_type_evidence
+    )
+
+
+def _human_review_date(value: DateValue) -> str:
+    rendered = value.value.isoformat() if isinstance(value.value, (date, datetime)) else value.value
+    return f"{_safe_text(str(rendered))} ({value.precision.value}; {_safe_text(value.source)})"
 
 
 def _safe_text(value: str) -> str:
@@ -127,6 +153,22 @@ def _safe_text(value: str) -> str:
     for character in ("\\", "`", "*", "_", "[", "]", "#"):
         escaped = escaped.replace(character, f"\\{character}")
     return escaped
+
+
+def _chinese_sources_first(lines: list[str], *, english: bool) -> None:
+    headings = (
+        ("## Publisher issue leads", "## Chinese journal issue observations", "## Wanfang ")
+        if english
+        else ("## 期刊官方发布渠道", "## 中文期刊新期次观察", "## 万方中文期刊")
+    )
+    start = next((i for i, line in enumerate(lines) if line.startswith(headings)), None)
+    if start is None:
+        return
+    match_heading = "## Matching papers" if english else "## 匹配论文"
+    insert_at = next(i for i, line in enumerate(lines) if line.startswith(match_heading))
+    block = lines[start:]
+    del lines[start:]
+    lines[insert_at:insert_at] = block
 
 
 def _cnki_issue_lines(
@@ -165,15 +207,18 @@ def _cnki_issue_lines(
         )
     elif english:
         lines.append(
-            "These are CNKI Space metadata observations, separate from verified new papers. "
-            "An issue number is not a month or a paper's first publication date."
+            "Only issues with a supported publication month overlapping the weekly window "
+            "are listed. Missing or conflicting dates and earlier issues are withheld. "
+            "Publisher issue/article pages supplement missing CNKI dates; an issue number "
+            "or observation date is not publication evidence."
         )
         if baseline:
             lines.append("This is the first bounded scan, so these issues form a baseline.")
     else:
         lines.append(
-            "以下是知网空间题录所显示的期次线索，与上方已核验新论文分列。期号不是月份，"
-            "本次检出不证明逐篇论文在本周首次发表。"
+            "仅列出版月份有证据、且月份与本周窗口相交的期次论文线索。知网缺月时，"
+            "按同刊、同年、同期的刊方期次或逐篇页面补证；缺月、日期冲突及窗外期次不列题名。"
+            "期号、检索日和首次观察日不能充当出版时间；月份精度不证明逐篇本周首次发表。"
         )
         if baseline:
             lines.append("这是该来源的首次有限检索；所列期次作为基线观察，不声称本周才上线。")
@@ -189,9 +234,10 @@ def _cnki_issue_lines(
             )
         else:
             empty_message = (
-                "No issue was observed in the configured query scope."
+                "No month-supported new issue can be listed for this weekly window; "
+                "this does not establish that no relevant paper exists."
                 if english
-                else "本次配置的检索范围内没有可列出的新期次。"
+                else "本次没有日期证据充分、可列入本周窗口的新期次；不能据此断言没有相关论文。"
             )
         lines.extend([empty_message, ""])
         return lines
@@ -217,6 +263,12 @@ def _cnki_issue_lines(
             f"({'observed' if english else '观察于'} "
             f"`{issue.observed_at.isoformat()}`)"
         )
+        if issue.date_evidence_urls:
+            source_label = "publisher date evidence" if english else "刊方日期证据"
+            sources = "; ".join(f"[{source_label}]({url})" for url in issue.date_evidence_urls)
+            day = issue.publication_date or ("not stated" if english else "未明示日级日期")
+            day_label = "publication date" if english else "刊方标示出版日期"
+            lines.append(f"  - {sources}；{day_label}：{day}")
         for record in issue.records[:3]:
             lines.append(f"  - [{_safe_text(record.title)}]({record.url})")
             assessment = reviewed.get(record.url)
@@ -426,6 +478,11 @@ def _work_type_evidence_text(work: WorkRecord) -> str:
                 if item.normalized_type and item.normalized_type != item.raw_type
                 else ""
             )
+            + (
+                f"（核查来源：{_safe_text(item.source_record_id)}）"
+                if item.method == "document-inspection" and item.source_record_id
+                else ""
+            )
             for item in work.work_type_evidence
         )
     if work.work_type_status is WorkTypeStatus.DEFAULTED:
@@ -440,6 +497,11 @@ def _work_type_evidence_text_en(work: WorkRecord) -> str:
             + (
                 f" -> {_safe_text(item.normalized_type)}"
                 if item.normalized_type and item.normalized_type != item.raw_type
+                else ""
+            )
+            + (
+                f" (inspected source: {_safe_text(item.source_record_id)})"
+                if item.method == "document-inspection" and item.source_record_id
                 else ""
             )
             for item in work.work_type_evidence
@@ -643,7 +705,7 @@ def render_weekly_report(
 
     if not notifying:
         successful = any(item.status == "success" for item in coverage)
-        failed = any(item.status != "success" for item in coverage)
+        failed = any(item.status not in {"success", "local_only"} for item in coverage)
         if successful and not failed:
             lines.extend(
                 [
@@ -735,6 +797,8 @@ def render_weekly_report(
                 on_demand_window=cnki_on_demand_window,
             )
         )
+    if not cnki_on_demand_window:
+        _chinese_sources_first(lines, english=False)
     lines.extend(["## 数据源覆盖", ""])
     if not coverage:
         lines.extend(["- 未提供来源运行记录；不能断言本次监测覆盖完整。", ""])
@@ -880,7 +944,7 @@ def _render_weekly_report_en(
 
     if not notifying:
         successful = any(item.status == "success" for item in coverage)
-        failed = any(item.status != "success" for item in coverage)
+        failed = any(item.status not in {"success", "local_only"} for item in coverage)
         if successful and not failed:
             lines.extend(
                 [
@@ -974,6 +1038,8 @@ def _render_weekly_report_en(
                 on_demand_window=cnki_on_demand_window,
             )
         )
+    if not cnki_on_demand_window:
+        _chinese_sources_first(lines, english=True)
     lines.extend(["## Source coverage", ""])
     if not coverage:
         lines.extend(
@@ -1033,7 +1099,7 @@ def _render_weekly_report_en(
             lines.extend(["Reasons:", "", *reason_lines, ""])
         if human_review_items:
             lines.extend(["Candidates requiring human review:", ""])
-            for index, item in enumerate(human_review_items[:9], start=1):
+            for index, item in enumerate(human_review_items, start=1):
                 reason = UNRESOLVED_REASON_LABELS_EN.get(item.reason_code, item.reason_code)
                 lines.extend(
                     [
@@ -1045,11 +1111,12 @@ def _render_weekly_report_en(
                         + (_safe_text(item.stable_url) if item.stable_url else "Not recorded"),
                     ]
                 )
-            if len(human_review_items) > 9:
-                lines.append(
-                    f"- {len(human_review_items) - 9} additional human-review candidates are not "
-                    "expanded in this report."
-                )
+                if item.work_type_evidence:
+                    lines.append(f"   - Work-type evidence: {_human_review_type_evidence(item)}")
+                if item.evidence_fingerprint:
+                    lines.append(f"   - Evidence fingerprint: `{item.evidence_fingerprint}`")
+                if item.publication_date:
+                    lines.append(f"   - Source date: {_human_review_date(item.publication_date)}")
             lines.append("")
 
     lines.extend(
@@ -1399,7 +1466,7 @@ def _render_on_demand_report_en(
             workload_lines.extend(["Reasons:", "", *reason_lines, ""])
         if human_review_items:
             workload_lines.extend(["Candidates requiring human review:", ""])
-            for index, item in enumerate(human_review_items[:9], start=1):
+            for index, item in enumerate(human_review_items, start=1):
                 reason = UNRESOLVED_REASON_LABELS_EN.get(item.reason_code, item.reason_code)
                 workload_lines.extend(
                     [
@@ -1411,11 +1478,18 @@ def _render_on_demand_report_en(
                         + (_safe_text(item.stable_url) if item.stable_url else "Not recorded"),
                     ]
                 )
-            if len(human_review_items) > 9:
-                workload_lines.append(
-                    f"- {len(human_review_items) - 9} additional human-review candidates are not "
-                    "expanded in this report."
-                )
+                if item.work_type_evidence:
+                    workload_lines.append(
+                        f"   - Work-type evidence: {_human_review_type_evidence(item)}"
+                    )
+                if item.evidence_fingerprint:
+                    workload_lines.append(
+                        f"   - Evidence fingerprint: `{item.evidence_fingerprint}`"
+                    )
+                if item.publication_date:
+                    workload_lines.append(
+                        f"   - Source date: {_human_review_date(item.publication_date)}"
+                    )
             workload_lines.append("")
         lines[method_index:method_index] = workload_lines
     if undated_quarantine_count:

@@ -13,6 +13,9 @@ from datetime import UTC, datetime
 
 import httpx
 
+from .bibliographic_index import OpenAlexIdentityIndex
+from .bibliographic_reviews import ReviewedBibliography
+from .cnki_dates import enrich_cnki_scan_with_dates
 from .cnki_review import (
     BibliographicPeer,
     CnkiAssessment,
@@ -20,7 +23,18 @@ from .cnki_review import (
     assess_cnki_overlaps,
 )
 from .config import WatchlistConfig
-from .identity import IdentityMatchLevel, IdentityReviewRequired, compare_bibliographic_identity
+from .identity import (
+    IdentityComparison,
+    IdentityMatchLevel,
+    IdentityReviewRequired,
+    authors_equivalent,
+    compare_bibliographic_identity,
+)
+from .identity_reviews import (
+    ReviewedIdentity,
+    identity_evidence_fingerprint,
+    resolve_identity_review,
+)
 from .models import DateValue, WorkTypeEvidence
 from .pipeline import (
     EXPLICIT_UNSUPPORTED_TITLE_HINTS,
@@ -55,6 +69,11 @@ from .sources.wanfang import (
     scan_wanfang_discovery,
 )
 from .taxonomy import expand_selected_categories
+from .work_type_reviews import (
+    ReviewedWorkType,
+    apply_work_type_review,
+    work_type_evidence_fingerprint,
+)
 from .work_types import (
     SUPPORTED_CANONICAL_WORK_TYPES,
     WorkTypeSignal,
@@ -115,15 +134,23 @@ class PaperSearchItem:
     citation_count: int | None
     citation_source: str | None
     citation_retrieved_at: datetime | None
+    source_titles: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class UnconfirmedSearchRecord:
-    """Existing source evidence for optional user review, never a retry queue."""
+    """Existing source evidence; type conflicts can enter private document review."""
 
     title: str
     source_urls: tuple[str, ...]
     reason: str
+    work_type_evidence: tuple[WorkTypeEvidence, ...] = ()
+    evidence_fingerprint: str | None = None
+    review_record_url: str | None = None
+    review_title: str | None = None
+    review_author: str | None = None
+    identity_comparisons: tuple[IdentityComparison, ...] = ()
+    identity_fingerprints: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +171,7 @@ class PaperSearchResult:
     limitations: tuple[str, ...]
     source_failures: tuple[str, ...]
     unconfirmed_records: tuple[UnconfirmedSearchRecord, ...] = ()
+    year_review_candidates: tuple[UnconfirmedSearchRecord, ...] = ()
     coverage: str = "current_category_feed_inventory"
     state_mutated: bool = False
     cnki_candidates: tuple[CnkiRecord, ...] = ()
@@ -167,6 +195,24 @@ def _identity(candidate: MergedCandidate, work: OpenAlexWork | CrossrefWork) -> 
     ).level
 
 
+class _OpenAlexIdentityIndex:
+    """Apply historical-search equivalence rules to possible OpenAlex works."""
+
+    def __init__(self, works: tuple[OpenAlexWork, ...]) -> None:
+        self.index = OpenAlexIdentityIndex(works)
+
+    def equivalent(self, candidate: MergedCandidate, *, limit: int = 2) -> list[OpenAlexWork]:
+        """Return enough matches to distinguish zero, one, and ambiguous."""
+        display = split_display_bibliography(candidate.display_title)
+        matches = []
+        for work in self.index.possible(display.title, display.author_text, candidate.doi_hints):
+            if _identity(candidate, work) is IdentityMatchLevel.EQUIVALENT:
+                matches.append(work)
+                if len(matches) == limit:
+                    break
+        return matches
+
+
 def _signals(candidate: MergedCandidate) -> tuple[WorkTypeSignal, ...]:
     display = split_display_bibliography(candidate.display_title)
     explicit = tuple(
@@ -178,7 +224,7 @@ def _signals(candidate: MergedCandidate) -> tuple[WorkTypeSignal, ...]:
     )
     return explicit + tuple(
         WorkTypeSignal(
-            "philpapers-rss-description", kind, candidate.source_id, "explicit-bibliographic-label"
+            "philpapers-rss-description", kind, candidate.source_id, "explicit-feed-label"
         )
         for kind in candidate.work_type_hints
     )
@@ -206,8 +252,6 @@ def _make_item(
             record_id = metadata.openalex_id if isinstance(metadata, OpenAlexWork) else metadata.doi
             signals += (WorkTypeSignal(source, metadata.work_type, record_id),)
     resolved = resolve_work_type(signals, default_type="unknown")
-    if not resolved.usable or resolved.work_type == "unknown":
-        return None, "type_unverified"
     display = split_display_bibliography(candidate.display_title)
     year = _year(work.publication_date) if work else None
     year_source = work.publication_date.source if work and year is not None else None
@@ -234,22 +278,34 @@ def _make_item(
         citation_retrieved_at=(work.retrieved_at or queried_at)
         if isinstance(work, OpenAlexWork) and count is not None
         else None,
-    ), None
+        source_titles=((candidate.stable_url, display.title),),
+    ), "type_unverified" if not resolved.usable or resolved.work_type == "unknown" else None
 
 
 def _merge_items(items: list[PaperSearchItem], stats: Counter) -> list[PaperSearchItem]:
     """Union proven identifiers before evaluating all-tag and exclusion filters."""
-    groups: list[PaperSearchItem] = []
-    for item in items:
-        matches = [
-            index
-            for index, previous in enumerate(groups)
-            if (item.doi and item.doi == previous.doi)
-            or (item.openalex_id and item.openalex_id == previous.openalex_id)
-            or set(item.source_urls).intersection(previous.source_urls)
-        ]
-        for index in reversed(matches):
+    groups: dict[int, PaperSearchItem] = {}
+    identifier_groups: dict[tuple[str, str], set[int]] = {}
+
+    def identifiers(item: PaperSearchItem):
+        if item.doi:
+            yield "doi", item.doi
+        if item.openalex_id:
+            yield "openalex", item.openalex_id
+        for url in item.source_urls:
+            yield "url", url
+
+    for group_id, item in enumerate(items):
+        matches = set().union(*(identifier_groups.get(key, ()) for key in identifiers(item)))
+        # IDs increase with insertion order. Reverse order matches the original
+        # pop-from-list behavior when one item joins several existing groups.
+        for index in sorted(matches, reverse=True):
             previous = groups.pop(index)
+            for key in identifiers(previous):
+                members = identifier_groups[key]
+                members.discard(index)
+                if not members:
+                    del identifier_groups[key]
             resolution = resolve_work_type_evidence(
                 previous.type_evidence + item.type_evidence, default_type="unknown"
             )
@@ -263,6 +319,7 @@ def _merge_items(items: list[PaperSearchItem], stats: Counter) -> list[PaperSear
                 doi=item.doi or previous.doi,
                 openalex_id=item.openalex_id or previous.openalex_id,
                 source_urls=tuple(sorted(set(item.source_urls + previous.source_urls))),
+                source_titles=tuple(sorted(set(item.source_titles + previous.source_titles))),
                 category_ids=tuple(sorted(set(item.category_ids + previous.category_ids))),
                 work_type=resolution.work_type,
                 type_evidence=resolution.evidence,
@@ -275,8 +332,10 @@ def _merge_items(items: list[PaperSearchItem], stats: Counter) -> list[PaperSear
                 else None,
             )
             stats["duplicate_records_merged"] += 1
-        groups.append(item)
-    return groups
+        groups[group_id] = item
+        for key in identifiers(item):
+            identifier_groups.setdefault(key, set()).add(group_id)
+    return list(groups.values())
 
 
 def run_paper_search(
@@ -293,6 +352,9 @@ def run_paper_search(
     cnki_loader: Callable[..., CnkiScan] = scan_cnki_space,
     wanfang_loader: Callable[..., WanfangScan] = scan_wanfang_cnki,
     wanfang_discovery_loader: Callable[..., WanfangDiscoveryScan] = scan_wanfang_discovery,
+    type_reviews: dict[str, ReviewedWorkType] | None = None,
+    bibliographic_reviews: dict[str, ReviewedBibliography] | None = None,
+    identity_reviews: dict[tuple[str, str, str], ReviewedIdentity] | None = None,
 ) -> PaperSearchResult:
     """Search configured interests; dependencies may be injected for offline tests."""
     options = options or SearchOptions()
@@ -348,12 +410,54 @@ def run_paper_search(
             ),
         }
     )
-    # Only a year-bounded search excludes missing feed year hints. An undated
-    # record remains eligible for a tag-only search, subject to paper evidence.
+    # Resolve exact, publisher-checked corrections before the year-hint gate.
+    # A type review supplies form only; it cannot supply a missing year.
+    applicable_bibliographies: dict[str, ReviewedBibliography] = {}
+    for candidate in candidates:
+        review = (bibliographic_reviews or {}).get(candidate.stable_url)
+        if review is None:
+            continue
+        display = split_display_bibliography(candidate.display_title)
+        if review.applies_to(
+            record_url=candidate.stable_url,
+            title=display.title,
+            author=display.author_text,
+            doi_hints=candidate.doi_hints,
+            feed_year_hints=candidate.feed_year_hints,
+        ):
+            applicable_bibliographies[candidate.stable_url] = review
+    year_review_candidates: list[UnconfirmedSearchRecord] = []
     if options.filters_years:
-        stats["no_feed_year_hint"] = sum(not c.feed_year_hints for c in candidates)
-        candidates = [c for c in candidates if c.feed_year_hints]
+        for candidate in candidates:
+            review = applicable_bibliographies.get(candidate.stable_url)
+            if candidate.feed_year_hints or (review and review.publication_year is not None):
+                continue
+            display = split_display_bibliography(candidate.display_title)
+            year_review_candidates.append(
+                UnconfirmedSearchRecord(
+                    display.title,
+                    (candidate.stable_url,),
+                    "year_review_pending",
+                    review_record_url=candidate.stable_url,
+                    review_title=display.title,
+                    review_author=display.author_text,
+                )
+            )
+        stats["no_feed_year_hint"] = len(year_review_candidates)
+        candidates = [
+            c
+            for c in candidates
+            if c.feed_year_hints
+            or (
+                (review := applicable_bibliographies.get(c.stable_url)) is not None
+                and review.publication_year is not None
+            )
+        ]
     candidates = [c for c in candidates if not _reject_explicit(c, stats)]
+    active_urls = {c.stable_url for c in candidates}
+    applicable_bibliographies = {
+        url: review for url, review in applicable_bibliographies.items() if url in active_urls
+    }
     if len(candidates) > options.max_candidates:
         raise PipelineError(
             f"search has {len(candidates)} candidates, exceeding max_candidates="
@@ -364,12 +468,28 @@ def run_paper_search(
     items: list[PaperSearchItem] = []
     unconfirmed: list[UnconfirmedSearchRecord] = []
 
-    def record_unconfirmed(candidate: MergedCandidate, reason: str) -> None:
+    def record_unconfirmed(
+        candidate: MergedCandidate,
+        reason: str,
+        comparisons: tuple[IdentityComparison, ...] = (),
+    ) -> None:
+        display = split_display_bibliography(candidate.display_title)
         unconfirmed.append(
             UnconfirmedSearchRecord(
-                split_display_bibliography(candidate.display_title).title,
+                display.title,
                 (candidate.stable_url,),
                 reason,
+                review_record_url=candidate.stable_url,
+                review_title=display.title,
+                review_author=display.author_text,
+                identity_comparisons=comparisons,
+                identity_fingerprints=tuple(
+                    identity_evidence_fingerprint(
+                        candidate.stable_url, display.title, display.author_text, comparison,
+                        source_doi_hints=candidate.doi_hints,
+                    )
+                    for comparison in comparisons
+                ),
             )
         )
 
@@ -378,7 +498,12 @@ def run_paper_search(
     with httpx.Client(
         headers={"User-Agent": DEFAULT_USER_AGENT}, follow_redirects=True, timeout=30
     ) as client:
-        dois = tuple(sorted({d for c in candidates for d in c.doi_hints}))
+        dois = tuple(
+            sorted(
+                {d for c in candidates for d in c.doi_hints}
+                | {review.doi for review in applicable_bibliographies.values() if review.doi}
+            )
+        )
         for offset in range(0, len(dois), MAX_DOI_BATCH_SIZE):
             try:
                 found = doi_lookup(
@@ -394,14 +519,13 @@ def run_paper_search(
                 progress("doi_batch", min(offset + MAX_DOI_BATCH_SIZE, len(dois)), len(dois))
             if openalex_blocked:
                 break
+        doi_index = _OpenAlexIdentityIndex(tuple(openalex.values()))
         titles = tuple(
             sorted(
                 {
                     split_display_bibliography(c.display_title).title
                     for c in candidates
-                    if not any(
-                        _identity(c, w) is IdentityMatchLevel.EQUIVALENT for w in openalex.values()
-                    )
+                    if not doi_index.equivalent(c, limit=1)
                 }
             )
         )
@@ -423,27 +547,126 @@ def run_paper_search(
                     )
                 if openalex_blocked:
                     break
+        all_works_index = _OpenAlexIdentityIndex(tuple(openalex.values()))
+        reviewed_doi_index: dict[str, list[OpenAlexWork]] = {}
+        if applicable_bibliographies:
+            reviewed_dois = {
+                review.doi for review in applicable_bibliographies.values() if review.doi
+            }
+            for value in openalex.values():
+                if value.doi in reviewed_dois:
+                    reviewed_doi_index.setdefault(value.doi, []).append(value)
         for index, candidate in enumerate(candidates, 1):
-            equivalent = [
-                w
-                for w in openalex.values()
-                if _identity(candidate, w) is IdentityMatchLevel.EQUIVALENT
-            ]
+            review = applicable_bibliographies.get(candidate.stable_url)
+            equivalent = all_works_index.equivalent(candidate)
+            display = split_display_bibliography(candidate.display_title)
+            pending_comparisons: list[IdentityComparison] = []
+            for possible in all_works_index.index.possible(
+                display.title, display.author_text, candidate.doi_hints
+            ):
+                if (
+                    review is not None
+                    and review.doi == possible.doi
+                    and authors_equivalent(review.verified_authors[0], possible.authors)
+                    is not False
+                    and (
+                        review.publication_year is None
+                        or _year(possible.publication_date) in {None, review.publication_year}
+                    )
+                ):
+                    continue
+                if _identity(candidate, possible) is not IdentityMatchLevel.REVIEW_REQUIRED:
+                    continue
+                decision = compare_bibliographic_identity(
+                    display.title,
+                    display.author_text,
+                    possible.title,
+                    possible.authors,
+                    shared_identifier=possible.doi is not None
+                    and possible.doi in candidate.doi_hints,
+                )
+                comparison = IdentityComparison(
+                    source="OpenAlex",
+                    record_id=possible.openalex_id,
+                    stable_url=possible.stable_url,
+                    title=possible.title,
+                    authors=possible.authors,
+                    doi=possible.doi,
+                    publication_date=(
+                        str(possible.publication_date.value) if possible.publication_date else None
+                    ),
+                    reason=decision.reason,
+                    evidence=decision.evidence,
+                )
+                fingerprint = identity_evidence_fingerprint(
+                    candidate.stable_url, display.title, display.author_text, comparison,
+                    source_doi_hints=candidate.doi_hints,
+                )
+                pair_review = (identity_reviews or {}).get(
+                    (candidate.stable_url.rstrip("/"), comparison.source, comparison.record_id)
+                )
+                if pair_review is None or pair_review.evidence_fingerprint != fingerprint:
+                    pending_comparisons.append(comparison)
+                elif pair_review.decision == "equivalent":
+                    equivalent.append(possible)
+            if pending_comparisons:
+                stats["identity_unverified"] += 1
+                record_unconfirmed(candidate, "identity_unverified", tuple(pending_comparisons))
+                continue
             work: OpenAlexWork | CrossrefWork | None = None
-            if len(equivalent) > 1 or len(candidate.doi_hints) > 1:
+            reviewed_doi_works = reviewed_doi_index.get(review.doi, ()) if review else ()
+            reviewed_matches = (
+                [
+                    value
+                    for value in reviewed_doi_works
+                    if authors_equivalent(review.verified_authors[0], value.authors) is not False
+                    and (
+                        review.publication_year is None
+                        or _year(value.publication_date) in {None, review.publication_year}
+                    )
+                ]
+                if review
+                else []
+            )
+            if (
+                len(candidate.doi_hints) > 1
+                or len(reviewed_matches) > 1
+                or (reviewed_doi_works and not reviewed_matches)
+            ):
                 stats["identity_unverified"] += 1
                 record_unconfirmed(candidate, "identity_unverified")
                 continue
-            if len(equivalent) == 1:
+            if reviewed_matches:
+                work = reviewed_matches[0]
+            elif review and review.doi is None and len(equivalent) == 1:
+                possible = equivalent[0]
+                if authors_equivalent(review.verified_authors[0], possible.authors) is False or (
+                    review.publication_year is not None
+                    and _year(possible.publication_date) not in {None, review.publication_year}
+                ):
+                    stats["identity_unverified"] += 1
+                    record_unconfirmed(candidate, "identity_unverified")
+                    continue
+                work = possible
+            elif len(equivalent) > 1 or (
+                review and any(value.doi and value.doi != review.doi for value in equivalent)
+            ):
+                stats["identity_unverified"] += 1
+                record_unconfirmed(candidate, "identity_unverified")
+                continue
+            elif len(equivalent) == 1 and review is None:
                 work = equivalent[0]
             supplementary = None
             # Metadata is needed to establish paper form; missing citation
             # counts alone never trigger extra individual requests.
-            native, _ = _make_item(candidate, work, now)
-            if native is None or (
-                options.filters_years
-                and native.publication_year is None
-                and is_supported_work_type(native.work_type)
+            native, native_reason = _make_item(candidate, work, now)
+            if review is None and (
+                native_reason
+                or (
+                    options.filters_years
+                    and native.publication_year is None
+                    and is_supported_work_type(native.work_type)
+                )
             ):
                 if crossref_blocked or stats["fallback_requests"] >= options.max_fallbacks:
                     stats["fallback_not_reached"] += 1
@@ -468,19 +691,45 @@ def run_paper_search(
                             work = fallback
                         else:
                             supplementary = fallback
-                    except IdentityReviewRequired:
-                        stats["identity_unverified"] += 1
-                        record_unconfirmed(candidate, "identity_unverified")
-                        continue
+                    except IdentityReviewRequired as error:
+                        resolved, pending = resolve_identity_review(
+                            error,
+                            record_url=candidate.stable_url,
+                            title=display.title,
+                            author=display.author_text,
+                            reviews=identity_reviews,
+                            source_doi_hints=candidate.doi_hints,
+                        )
+                        if pending or not error.comparisons:
+                            stats["identity_unverified"] += 1
+                            record_unconfirmed(candidate, "identity_unverified", pending)
+                            continue
+                        fallback = resolved if isinstance(resolved, CrossrefWork) else None
+                        if fallback is not None and (
+                            _identity(candidate, fallback) is IdentityMatchLevel.DISTINCT
+                            or (work is not None and work.doi and fallback.doi != work.doi)
+                        ):
+                            stats["identity_unverified"] += 1
+                            record_unconfirmed(candidate, "identity_unverified")
+                            continue
+                        if work is None:
+                            work = fallback
+                        else:
+                            supplementary = fallback
                     except CrossrefError as error:
                         failures.add("Crossref: paper metadata lookup failed")
                         crossref_blocked = _bibliographic_error_opens_circuit(error)
-            item, reason = _make_item(candidate, work, now, supplementary)
-            if item is not None:
-                items.append(item)
-            elif reason:
-                stats[reason] += 1
-                record_unconfirmed(candidate, reason)
+            item, _ = _make_item(candidate, work, now, supplementary)
+            if review is not None:
+                item = replace(
+                    item,
+                    title=review.verified_title,
+                    authors=review.verified_authors,
+                    doi=review.doi or item.doi,
+                    publication_year=review.publication_year,
+                    year_source="publisher-document-review" if review.publication_year else None,
+                )
+            items.append(item)
             if progress:
                 progress("candidates", index, len(candidates))
     if progress:
@@ -496,6 +745,22 @@ def run_paper_search(
         if not (all(matches) if options.match == "all" else any(matches)):
             stats["filtered_out"] += 1
             continue
+        resolution = resolve_work_type_evidence(item.type_evidence, default_type="unknown")
+        if type_reviews:
+            applicable = [
+                (url, title, type_reviews[url])
+                for url, title in item.source_titles
+                if url in type_reviews
+                and type_reviews[url].applies_to(
+                    record_url=url, title=title, evidence=resolution.evidence
+                )
+            ]
+            if len({review.work_type for _, _, review in applicable}) == 1:
+                url, title, review = applicable[0]
+                resolution = apply_work_type_review(resolution, review, record_url=url, title=title)
+                item = replace(
+                    item, work_type=resolution.work_type, type_evidence=resolution.evidence
+                )
         if not is_supported_work_type(item.work_type):
             stats[
                 "type_unverified"
@@ -503,8 +768,17 @@ def run_paper_search(
                 else "unsupported_type"
             ] += 1
             if item.work_type in {"unknown", "conflict"}:
+                review_url, review_title = item.source_titles[0]
                 unconfirmed.append(
-                    UnconfirmedSearchRecord(item.title, item.source_urls, "type_unverified")
+                    UnconfirmedSearchRecord(
+                        item.title,
+                        item.source_urls,
+                        "type_unverified",
+                        item.type_evidence,
+                        work_type_evidence_fingerprint(item.type_evidence),
+                        review_url,
+                        review_title,
+                    )
                 )
             continue
         if options.work_types and item.work_type not in options.work_types:
@@ -564,6 +838,7 @@ def run_paper_search(
         except Exception as error:  # Optional source failure is disclosed.
             cnki_coverage = f"CNKI Space 检索失败：{type(error).__name__}。"
         else:
+            cnki_scan = enrich_cnki_scan_with_dates(config, cnki_scan)
             cnki_candidates = tuple(
                 record
                 for record in cnki_scan.records
@@ -584,6 +859,19 @@ def run_paper_search(
                 f"知网空间 {cnki_scan.status}：完成 {cnki_scan.result_pages}/"
                 f"{cnki_scan.requested_pages} 页；截断 {len(cnki_scan.incomplete_queries)} 项；"
                 f"失败 {len(cnki_scan.failures)} 项。仅为候选题录，未确认全库覆盖。"
+            )
+            stats["cnki_date_month_unknown"] = sum(
+                record.label_month is None for record in cnki_candidates
+            )
+            stats["cnki_date_conflicts"] = sum(record.date_conflict for record in cnki_candidates)
+            stats["cnki_publisher_date_supported"] = sum(
+                bool(record.date_evidence_urls) and not record.date_conflict
+                for record in cnki_candidates
+            )
+            cnki_coverage += (
+                f" 日期证据：刊方支持 {stats['cnki_publisher_date_supported']} 条；"
+                f"月份未核实 {stats['cnki_date_month_unknown']} 条；"
+                f"日期冲突 {stats['cnki_date_conflicts']} 条。"
             )
             # Keep structured review details aligned with the locally filtered
             # candidates shown to the user; the source scan itself is unchanged.
@@ -672,14 +960,15 @@ def run_paper_search(
         wanfang_scan=wanfang_scan,
         wanfang_discovery=wanfang_discovery,
         unconfirmed_records=tuple(unconfirmed),
+        year_review_candidates=tuple(year_review_candidates),
         limitations=(
             "范围是已配置 PhilPapers 分类 feed 本次返回的记录，不保证覆盖完整历史索引。",
             "标签交集及排除仅依据所读取 feed 的成员关系，不能证明一篇论文的完整分类集合。",
             "引用量来自 OpenAlex；已知值降序，缺失置后。同值按年份降序、题名和来源链接排列。",
             "只纳入有论文类型证据的记录；未知或冲突类型不默认视为论文。",
             (
-                "本次限制年份：没有 feed 年份提示的记录直接排除，不进入补查或自行核对材料；"
-                "年份提示不代替正式发表日期。"
+                "本次限制年份：缺少 feed 年份提示且没有适用的刊方年份复核的记录在书目"
+                "查询前排除；私人队列可供逐篇补证。年份提示不代替正式发表日期。"
                 if options.filters_years
                 else "本次不限制年份：符合标签且已确认论文类型与身份的记录均可纳入，"
                 "不因缺少 feed 日期、年份提示或正式发表年份而排除。"
