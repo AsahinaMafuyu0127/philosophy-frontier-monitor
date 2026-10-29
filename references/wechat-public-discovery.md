@@ -32,7 +32,7 @@ pfm journal-watch wechat-review --journal ID --year 2026 --issue 5 `
   --evidence-url URL --announcement-on 2026-10-09 --confirm-evidence
 ```
 
-`wechat-review` 必须引用队列内候选；对 `candidate` 身份，还要显式提供 `--confirm-account-identity`。`--confirm-evidence` 是会话核验的人工声明，命令本身不能证明原帖已读。原帖日期只记作公告日。只有原帖明确标出月份才传 `--label-month`；不可按期号推算。逐篇题名须逐项阅读，未读目录不能形成逐篇分母。已复核期次才可被周报、即时拉取和检索当作刊方期次证据。
+`wechat-review` 必须引用队列内候选；对 `candidate` 身份，还要显式提供 `--confirm-account-identity`。`--confirm-evidence` 是会话核验的人工声明，命令本身不能证明原帖已读。原帖日期只记作公告日。只有原帖明确标出月份才传 `--label-month`；不可按期号推算。逐篇题名须逐项阅读，未读目录不能形成逐篇分母。已复核期次可按首次本地核实时间进入周报与即时拉取的刊方期次栏，历史检索按年份读取；公告日和刊期月份照原证据显示，不据此认定逐篇论文于本窗口发表。
 
 ## 无人值守边界
 

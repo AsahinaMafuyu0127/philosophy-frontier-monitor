@@ -113,6 +113,8 @@ def test_local_only_official_source_does_not_make_successful_sources_fail(taxono
     assert "本周在已成功检查的数据源中" in report
     assert "No work passed both the new-paper and category gates" in report
     assert "由于至少一个来源未成功检查" not in report
+    assert "本周首次核实的期次（0）" in report
+    assert "这不表示期刊没有新期" in report
 
 
 def test_official_issue_evidence_precedes_cnki_leads_in_both_languages(taxonomy):
@@ -138,6 +140,8 @@ def test_official_issue_evidence_precedes_cnki_leads_in_both_languages(taxonomy)
         cnki_issues=(),
     )
     assert "期次标示月份：2026-09" in report
+    assert "本周首次核实的期次（1）" in report
+    assert "本栏按本地首次核实时间入窗" in report
     assert "issue date: not stated" in report
     assert report.index("## 期刊官方发布渠道") < report.index("## 中文期刊新期次观察")
     assert report.index("## Publisher issue leads") < report.index(
@@ -158,6 +162,7 @@ def test_official_issue_evidence_precedes_cnki_leads_in_both_languages(taxonomy)
         official_issues=(official,),
     )
     assert on_demand.count("https://jdn.ucas.ac.cn/home/column/lists/cid/349") == 2
+    assert "本窗口首次核实的期次（1）" in on_demand
 
 
 def test_on_demand_empty_chinese_window_does_not_expand_to_year(taxonomy):

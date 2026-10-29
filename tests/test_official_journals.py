@@ -22,7 +22,7 @@ from philosophy_frontier_monitor.official_journals import (
     review_observed_issue,
     wechat_discovery_plan,
 )
-from philosophy_frontier_monitor.pipeline import _official_issues_for_window
+from philosophy_frontier_monitor.pipeline import _official_issues_first_reviewed_in_window
 from philosophy_frontier_monitor.sources.cnki_space import CnkiIssue
 
 
@@ -267,28 +267,26 @@ def test_weekly_uses_first_review_date_and_does_not_repeat_monthly_issue(tmp_pat
         storage=SimpleNamespace(state_database=tmp_path / "state.sqlite3"),
         timezone=ZoneInfo("Asia/Shanghai"),
     )
-    first_week = _official_issues_for_window(
+    first_week = _official_issues_first_reviewed_in_window(
         config,
         datetime(2026, 9, 21, tzinfo=UTC),
         datetime(2026, 9, 28, tzinfo=UTC),
-        first_observed_only=True,
     )
-    later_week = _official_issues_for_window(
+    later_week = _official_issues_first_reviewed_in_window(
         config,
         datetime(2026, 9, 28, tzinfo=UTC),
         datetime(2026, 10, 5, tzinfo=UTC),
-        first_observed_only=True,
     )
     assert len(first_week) == 1
     assert later_week == ()
 
 
-@pytest.mark.parametrize("dates,eligible", [
-    ({"announcement_on": "2026-09-25"}, False),
-    ({"issue_published_on": "2026-09-15"}, True),
-    ({"label_month": "2026-08", "announcement_on": "2026-09-25"}, False),
+@pytest.mark.parametrize("dates", [
+    {"announcement_on": "2026-09-25"},
+    {"issue_published_on": "2026-09-15"},
+    {"label_month": "2026-08", "announcement_on": "2026-09-25"},
 ])
-def test_weekly_publisher_month_gate_does_not_use_announcement(tmp_path, dates, eligible):
+def test_first_reviewed_issue_is_visible_without_publication_month_gate(tmp_path, dates):
     observed = new_observation(
         "ziran-bianzhengfa-tongxun", 2026, "9",
         "https://jdn.ucas.ac.cn/home/column/lists/cid/349", "journal-site",
@@ -300,8 +298,36 @@ def test_weekly_publisher_month_gate_does_not_use_announcement(tmp_path, dates, 
         storage=SimpleNamespace(state_database=tmp_path / "state.sqlite3"),
         timezone=ZoneInfo("Asia/Shanghai"),
     )
-    selected = _official_issues_for_window(
+    selected = _official_issues_first_reviewed_in_window(
         config, datetime(2026, 9, 21, tzinfo=UTC), datetime(2026, 9, 28, tzinfo=UTC),
-        first_observed_only=True, publication_month_only=True,
     )
-    assert bool(selected) == eligible
+    assert len(selected) == 1
+    assert selected[0].announcement_on == dates.get("announcement_on")
+    assert _official_issues_first_reviewed_in_window(
+        config, datetime(2026, 9, 28, tzinfo=UTC), datetime(2026, 10, 5, tzinfo=UTC),
+    ) == ()
+
+
+def test_september_wechat_issue_first_reviewed_in_october_keeps_its_dates(tmp_path):
+    issue = replace(
+        new_observation(
+            "xiandai-zhexue", 2026, "5",
+            "https://mp.weixin.qq.com/s/synthetic-issue-five", "official-wechat",
+            label_month="2026-09", announcement_on="2026-10-09", status="reviewed",
+        ),
+        reviewed_at="2026-10-10T12:00:00+08:00",
+    )
+    record_issue(tmp_path / "official-journals.sqlite3", issue)
+    config = SimpleNamespace(
+        storage=SimpleNamespace(state_database=tmp_path / "state.sqlite3"),
+        timezone=ZoneInfo("Asia/Shanghai"),
+    )
+    selected = _official_issues_first_reviewed_in_window(
+        config, datetime(2026, 10, 5, tzinfo=UTC), datetime(2026, 10, 12, tzinfo=UTC)
+    )
+    assert len(selected) == 1
+    assert selected[0].label_month == "2026-09"
+    assert selected[0].announcement_on == "2026-10-09"
+    assert _official_issues_first_reviewed_in_window(
+        config, datetime(2026, 9, 28, tzinfo=UTC), datetime(2026, 10, 5, tzinfo=UTC)
+    ) == ()

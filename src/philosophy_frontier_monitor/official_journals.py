@@ -12,6 +12,7 @@ from contextlib import closing
 from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlsplit
 
 import yaml
@@ -319,11 +320,37 @@ def distinct_issue_leads(issues: tuple[OfficialIssue, ...]) -> tuple[OfficialIss
     return tuple(selected)
 
 
-def render_issue_leads(issues: tuple[OfficialIssue, ...], *, english: bool = False) -> str:
+def render_issue_leads(
+    issues: tuple[OfficialIssue, ...], *, english: bool = False,
+    context: Literal["weekly", "on_demand", "historical"] = "historical",
+) -> str:
+    headings = {
+        "weekly": (
+            f"## 期刊官方发布渠道：本周首次核实的期次（{len(issues)}）",
+            f"## Publisher issue leads first reviewed this week ({len(issues)})",
+        ),
+        "on_demand": (
+            f"## 期刊官方发布渠道：本窗口首次核实的期次（{len(issues)}）",
+            f"## Publisher issue leads first reviewed in this window ({len(issues)})",
+        ),
+        "historical": (
+            f"## 期刊官方发布渠道：已复核期次（{len(issues)}）",
+            f"## Reviewed publisher issue leads ({len(issues)})",
+        ),
+    }
     lines = [
-        "## Publisher issue leads" if english else "## 期刊官方发布渠道：新期次线索",
+        headings[context][int(english)],
         "",
     ]
+    if context != "historical":
+        lines.append(
+            "These issues entered this window by first local review, not by issue month "
+            "or article publication date. A stated announcement date may be earlier."
+            if english else
+            "本栏按本地首次核实时间入窗，不按刊期月份或逐篇发表日入窗；"
+            "原帖公告日可能早于本窗口。"
+        )
+        lines.append("")
     lines.append(
         "These reviewed issue leads keep announcement dates, issue label months, and issue "
         "publication dates separate. An issue does not establish that individual articles "
@@ -334,12 +361,19 @@ def render_issue_leads(issues: tuple[OfficialIssue, ...], *, english: bool = Fal
     )
     lines.append("")
     if not issues:
-        lines.append(
-            "There is no reviewed publisher issue evidence in the local store for this window. "
-            "This does not establish that no new issue exists."
-            if english
-            else "本地尚无本窗口内已复核的官方期次证据；这不表示期刊没有新期。"
-        )
+        if context == "historical":
+            lines.append(
+                "No reviewed publisher issue is stored locally for these years. "
+                "This does not establish that no issue exists."
+                if english else "本地没有该年份范围内的已复核刊方期次；这不表示期刊没有出刊。"
+            )
+        else:
+            lines.append(
+                "No publisher issue was first reviewed locally in this window. "
+                "This does not establish that no new issue exists."
+                if english
+                else "本窗口没有本地首次核实的官方期次；这不表示期刊没有新期。"
+            )
     for issue in issues:
         if english:
             lines.append(

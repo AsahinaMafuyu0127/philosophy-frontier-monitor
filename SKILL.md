@@ -131,8 +131,11 @@ same URL and date evidence. It saves local publisher leads and a complete-TOC
 audit denominator, but does not classify paper type, interest, institutional
 affiliation, or first publication day. This is a browser-assisted path for a
 known official post, not an unattended feed of an account's future posts.
-Weekly reports mention an issue only in the window of its first review; a
-month label alone must not repeat the same issue in every week of that month.
+Weekly reports and on-demand pulls show reviewed publisher issues in the window
+of their first local review, even when the labelled issue month is earlier or
+unknown. Label this as first reviewed locally, never as issued or published in
+that window; retain the announcement date and issue month separately. A month
+label alone must not repeat the same issue in every week of that month.
 Treat an official WeChat posting date as an announcement date, not a journal
 publication date, and never infer a month from monthly frequency plus issue number.
 CNKI Space and Wanfang remain supplementary discovery and bibliography checks.
@@ -141,9 +144,11 @@ private watchlist enables `sources.cnki_space`, `search`, `pull-now`, and
 `weekly-run` perform bounded CNKI Space metadata discovery using the public
 search method documented by the third-party cnki-search MCP. Its candidates and
 issue observations remain separate from verified PhilPapers matches. For both
-`weekly-run` and `pull-now`, show Chinese journal leads only when a reviewed
-publisher issue/article page or the database source supports a publication month
-overlapping the respective window. This also applies to the first weekly baseline.
+`weekly-run` and `pull-now`, show CNKI article/issue metadata candidates only when a
+reviewed publisher issue/article page or the database source supports a publication
+month overlapping the respective window. This also applies to the first weekly
+baseline. The separate publisher issue observation section follows first local
+review time and does not claim article publication in the window.
 Disclose blocked or truncated searches, and do not present this limited source
 as the complete CNKI KNS collection. Withhold
 year-only or issue-number-only leads from that section, disclose their count,

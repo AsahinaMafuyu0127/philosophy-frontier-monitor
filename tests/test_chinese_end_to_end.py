@@ -99,7 +99,7 @@ def test_fresh_profile_search_pull_weekly_and_reviewed_issue_journey(
     )
     assert search.total_matches == 0
     assert "合成中文论文8" in search_text
-    assert "期刊官方发布渠道：新期次线索" in search_text
+    assert "期刊官方发布渠道：已复核期次" in search_text
 
     pull = run_on_demand(
         config, now=now, lookback_days=30, feed_loader=feed_loader,
@@ -107,7 +107,7 @@ def test_fresh_profile_search_pull_weekly_and_reviewed_issue_journey(
         allow_development_fixture=True,
     )
     assert "合成中文论文8" in pull.report_markdown
-    assert "期刊官方发布渠道：新期次线索" in pull.report_markdown
+    assert "期刊官方发布渠道：本窗口首次核实的期次" in pull.report_markdown
     assert pull.stats["cnki_recent_issue_candidates"] == 1
 
     monkeypatch.setattr(pipeline, "require_production_taxonomy", lambda _snapshot: None)
@@ -148,7 +148,7 @@ def test_fresh_profile_search_pull_weekly_and_reviewed_issue_journey(
 
     assert "作为基线观察" in week_one.report_markdown
     assert "合成中文论文8" in week_one.report_markdown
-    assert "期刊官方发布渠道：新期次线索" in week_one.report_markdown
+    assert "期刊官方发布渠道：本周首次核实的期次" in week_one.report_markdown
     assert "合成中文论文9" in week_two.report_markdown
     assert "合成中文论文8" not in week_two.report_markdown
     assert "中文期刊新期次观察（0）" not in week_two.report_markdown
