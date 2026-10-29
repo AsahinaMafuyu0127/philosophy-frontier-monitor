@@ -774,8 +774,12 @@ def render_weekly_report(
     else:
         lines.extend(["本次没有符合条件的来源记录近期变化。", ""])
 
-    if official_issues:
-        lines.extend([render_issue_leads(official_issues).rstrip(), ""])
+    if official_issues or any(
+        item.source == "official-journals" and item.status == "local_only"
+        for item in coverage
+    ):
+        context = "on_demand" if cnki_on_demand_window else "weekly"
+        lines.extend([render_issue_leads(official_issues, context=context).rstrip(), ""])
     if cnki_issues is not None:
         lines.extend(
             _cnki_issue_lines(
@@ -1015,8 +1019,14 @@ def _render_weekly_report_en(
     else:
         lines.extend(["No matching source record changed recently.", ""])
 
-    if official_issues:
-        lines.extend([render_issue_leads(official_issues, english=True).rstrip(), ""])
+    if official_issues or any(
+        item.source == "official-journals" and item.status == "local_only"
+        for item in coverage
+    ):
+        context = "on_demand" if cnki_on_demand_window else "weekly"
+        lines.extend([
+            render_issue_leads(official_issues, english=True, context=context).rstrip(), ""
+        ])
     if cnki_issues is not None:
         lines.extend(
             _cnki_issue_lines(

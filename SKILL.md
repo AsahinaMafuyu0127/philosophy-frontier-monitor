@@ -46,7 +46,27 @@ For Chinese-journal source expansion, read
 [chinese-source-expansion.md](references/chinese-source-expansion.md). When the
 question concerns a journal in [official-journals.yaml](config/official-journals.yaml),
 start with its editorial or publisher channel and a verified official announcement
-for issue and date evidence. `pfm journal-watch catalog` lists the monitored
+for issue and date evidence. A verified journal account's original WeChat post is
+publisher-origin issue evidence; use journal-specific timing comparisons to decide
+which channel to check first, while continuing the publisher-site scan. Do not infer
+universal WeChat priority from one journal or treat a search snippet or verification
+page as an inspected post. See the [same-issue timing comparison](references/chinese-journal-wechat-timing.md).
+For `search`, `pull-now`, or a weekly report invoked **through this Skill**, read
+[wechat-public-discovery.md](references/wechat-public-discovery.md) and run
+`pfm journal-watch wechat-discovery-plan`, `wechat-discover`, and
+`wechat-candidates` before the requested mode. The discovery command reads at most
+one registered publisher HTTPS page per journal and local day, adding direct
+WeChat links to a Git-ignored candidate queue. For relevant journals, search
+public pages in the session for posts the publisher page did not link, queue an
+exact post with `wechat-add-candidate` and its source URL, then inspect the
+original post in the browser. Use `wechat-review` only after checking account
+identity, full visible text, issue and stated date; an account marked `candidate`
+also needs `--confirm-account-identity`. Blocked and incorrect links retain their
+queue status. Do not ask the user for a post URL as a prerequisite. Then run the
+requested mode. If discovery or full-text review is blocked, continue and report
+the coverage gap. A local scheduled CLI run may discover publisher-page links,
+but cannot perform browser-assisted original-post review.
+`pfm journal-watch catalog` lists the monitored
 channels; `pfm journal-watch list` shows locally recorded issue evidence.
 The bounded Chinese metadata and reviewed-issue leads workflow is a stable,
 explicitly enabled capability in search, pull-now, and weekly-run. It does not
@@ -63,6 +83,9 @@ date alone remains pending until this review. Preserve the first observation;
 later scans cannot downgrade it. If a different official page supplies the
 date, record that page as separate evidence instead of attributing it to the
 directory URL.
+`journal-watch observe --status reviewed` also requires `--confirm-evidence` after
+opening that exact original source. The flag records a human attestation; it cannot
+automatically verify a WeChat account or full text.
 `pfm journal-watch summary`
 reports source-specific first hits and censored non-hits from the ignored local
 store. Nine automated channels are a verified subset of the catalog; one
@@ -108,8 +131,11 @@ same URL and date evidence. It saves local publisher leads and a complete-TOC
 audit denominator, but does not classify paper type, interest, institutional
 affiliation, or first publication day. This is a browser-assisted path for a
 known official post, not an unattended feed of an account's future posts.
-Weekly reports mention an issue only in the window of its first review; a
-month label alone must not repeat the same issue in every week of that month.
+Weekly reports and on-demand pulls show reviewed publisher issues in the window
+of their first local review, even when the labelled issue month is earlier or
+unknown. Label this as first reviewed locally, never as issued or published in
+that window; retain the announcement date and issue month separately. A month
+label alone must not repeat the same issue in every week of that month.
 Treat an official WeChat posting date as an announcement date, not a journal
 publication date, and never infer a month from monthly frequency plus issue number.
 CNKI Space and Wanfang remain supplementary discovery and bibliography checks.
@@ -118,9 +144,11 @@ private watchlist enables `sources.cnki_space`, `search`, `pull-now`, and
 `weekly-run` perform bounded CNKI Space metadata discovery using the public
 search method documented by the third-party cnki-search MCP. Its candidates and
 issue observations remain separate from verified PhilPapers matches. For both
-`weekly-run` and `pull-now`, show Chinese journal leads only when a reviewed
-publisher issue/article page or the database source supports a publication month
-overlapping the respective window. This also applies to the first weekly baseline.
+`weekly-run` and `pull-now`, show CNKI article/issue metadata candidates only when a
+reviewed publisher issue/article page or the database source supports a publication
+month overlapping the respective window. This also applies to the first weekly
+baseline. The separate publisher issue observation section follows first local
+review time and does not claim article publication in the window.
 Disclose blocked or truncated searches, and do not present this limited source
 as the complete CNKI KNS collection. Withhold
 year-only or issue-number-only leads from that section, disclose their count,

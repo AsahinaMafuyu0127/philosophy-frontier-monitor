@@ -46,9 +46,11 @@ from .official_journals import (
     catalog_as_dicts,
     distinct_issue_leads,
     list_issues,
+    load_catalog,
     new_observation,
     record_issue,
     review_observed_issue,
+    wechat_discovery_plan,
 )
 from .pipeline import (
     CatchUpError,
@@ -74,6 +76,12 @@ from .sources.philpapers_taxonomy import (
 from .state import StateStore
 from .taxonomy import expand_selected_categories, load_taxonomy, require_production_taxonomy
 from .taxonomy_audit import audit_taxonomy_change
+from .wechat_discovery import (
+    add_candidate,
+    discover_publisher_links,
+    list_candidates,
+    mark_candidate,
+)
 from .work_type_reviews import load_work_type_reviews, work_type_evidence_fingerprint
 from .work_types import SUPPORTED_CANONICAL_WORK_TYPES
 
@@ -1059,6 +1067,86 @@ def _write_search_review_queue(path: Path, result: PaperSearchResult) -> None:
 def _journal_watch(args: argparse.Namespace) -> int:
     catalog_path = Path(args.catalog)
     db_path = Path(args.db)
+    if args.action == "wechat-discovery-plan":
+        _emit({
+            "ok": True, "operation": "journal-watch",
+            "wechat_discovery_plan": wechat_discovery_plan(catalog_path),
+            "network_queries": 0,
+            "evidence_status": "unverified_until_original_post_review",
+        })
+        return 0
+    if args.action == "wechat-discover":
+        scans = discover_publisher_links(
+            db_path, catalog_path=catalog_path, journal_id=args.journal,
+        )
+        _emit({
+            "ok": True, "operation": "journal-watch", "scans": scans,
+            "candidates": list_candidates(db_path, args.journal),
+            "evidence_status": "unverified_until_original_post_review",
+        })
+        return 0
+    if args.action == "wechat-candidates":
+        _emit({
+            "ok": True, "operation": "journal-watch",
+            "candidates": list_candidates(db_path, args.journal), "network_queries": 0,
+        })
+        return 0
+    if args.action == "wechat-add-candidate":
+        if not all((args.journal, args.evidence_url, args.source_url)):
+            raise ValueError("wechat-add-candidate requires journal, evidence URL and source URL")
+        candidate = add_candidate(
+            db_path, args.journal, args.evidence_url, args.source_url,
+            catalog_path=catalog_path,
+        )
+        _emit({"ok": True, "operation": "journal-watch", "candidate": candidate})
+        return 0
+    if args.action in {"wechat-block", "wechat-dismiss"}:
+        if not args.journal or not args.evidence_url:
+            raise ValueError(f"{args.action} requires --journal and --evidence-url")
+        candidate = mark_candidate(
+            db_path, args.journal, args.evidence_url,
+            status="blocked" if args.action == "wechat-block" else "dismissed",
+            note=args.reason,
+        )
+        _emit({"ok": True, "operation": "journal-watch", "candidate": candidate})
+        return 0
+    if args.action == "wechat-review":
+        if not all((args.journal, args.year, args.issue, args.evidence_url)):
+            raise ValueError("wechat-review requires journal, year, issue and candidate URL")
+        if not args.confirm_evidence:
+            raise ValueError(
+                "wechat-review requires --confirm-evidence after reading the original post"
+            )
+        journal = next(
+            (item for item in load_catalog(catalog_path) if item.id == args.journal), None,
+        )
+        if journal is None or journal.wechat_account is None:
+            raise ValueError("journal has no registered WeChat account")
+        if journal.wechat_identity_status == "candidate" and not args.confirm_account_identity:
+            raise ValueError("candidate account requires --confirm-account-identity")
+        candidate = next((
+            item for item in list_candidates(db_path, args.journal)
+            if item["post_url"] == args.evidence_url
+        ), None)
+        if candidate is None or candidate["status"] not in {"pending", "blocked"}:
+            raise ValueError("wechat-review requires an existing pending or blocked candidate")
+        issue = new_observation(
+            args.journal, args.year, args.issue, args.evidence_url, "official-wechat",
+            label_month=args.label_month, issue_published_on=args.issue_published_on,
+            announcement_on=args.announcement_on, status="reviewed",
+            catalog_path=catalog_path,
+        )
+        record_issue(db_path, issue, catalog_path=catalog_path)
+        reviewed = mark_candidate(
+            db_path, args.journal, args.evidence_url, status="reviewed",
+            note=args.reason or "original post and account identity inspected in session",
+            confirmed=True,
+        )
+        _emit({
+            "ok": True, "operation": "journal-watch", "issue": asdict(issue),
+            "candidate": reviewed,
+        })
+        return 0
     if args.action == "catalog":
         journals = catalog_as_dicts(catalog_path)
         for journal in journals:
@@ -1092,6 +1180,12 @@ def _journal_watch(args: argparse.Namespace) -> int:
             raise ValueError("review requires journal, year, issue and exact evidence URL")
         if not args.confirm_evidence:
             raise ValueError("review requires --confirm-evidence after inspecting the source")
+        journal = next(
+            (item for item in load_catalog(catalog_path) if item.id == args.journal), None,
+        )
+        if (journal is not None and journal.wechat_identity_status == "candidate"
+                and not args.confirm_account_identity):
+            raise ValueError("candidate account requires --confirm-account-identity")
         reviewed = review_observed_issue(
             db_path,
             args.journal,
@@ -1213,6 +1307,17 @@ def _journal_watch(args: argparse.Namespace) -> int:
         return 0
     if not all((args.journal, args.year, args.issue, args.evidence_url, args.evidence_kind)):
         raise ValueError("observe requires journal, year, issue, evidence URL and evidence kind")
+    if args.status == "reviewed" and not args.confirm_evidence:
+        raise ValueError(
+            "reviewed observation requires --confirm-evidence after inspecting the source"
+        )
+    if args.status == "reviewed" and args.evidence_kind == "official-wechat":
+        journal = next(
+            (item for item in load_catalog(catalog_path) if item.id == args.journal), None,
+        )
+        if (journal is not None and journal.wechat_identity_status == "candidate"
+                and not args.confirm_account_identity):
+            raise ValueError("candidate account requires --confirm-account-identity")
     issue = new_observation(
         args.journal,
         args.year,
@@ -1352,6 +1457,13 @@ def build_parser() -> argparse.ArgumentParser:
         "action",
         choices=(
             "catalog",
+            "wechat-discovery-plan",
+            "wechat-discover",
+            "wechat-candidates",
+            "wechat-add-candidate",
+            "wechat-block",
+            "wechat-dismiss",
+            "wechat-review",
             "list",
             "pending",
             "review",
@@ -1380,6 +1492,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     journal_watch.add_argument("--articles", action="store_true")
     journal_watch.add_argument("--evidence-url")
+    journal_watch.add_argument("--source-url")
     journal_watch.add_argument(
         "--evidence-kind", choices=("journal-site", "publisher-site", "official-wechat")
     )
@@ -1388,6 +1501,8 @@ def build_parser() -> argparse.ArgumentParser:
     journal_watch.add_argument("--announcement-on")
     journal_watch.add_argument("--status", choices=("pending", "reviewed"), default="pending")
     journal_watch.add_argument("--confirm-evidence", action="store_true")
+    journal_watch.add_argument("--confirm-account-identity", action="store_true")
+    journal_watch.add_argument("--reason")
     journal_watch.add_argument("--max-pages", type=int, default=3)
     journal_watch.add_argument("--max-checks", type=int, default=5)
     journal_watch.add_argument("--min-interval-hours", type=int, default=24)

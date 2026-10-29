@@ -253,6 +253,33 @@ data through GitHub Private Vulnerability Reporting as described in [SECURITY.md
 
 ## Technical update
 
+### 29 October 2026: public WeChat leads and the reporting time for publisher issues
+
+An official WeChat post can support a publisher issue once its account, complete body,
+issue number, and dates have been reviewed. Bounded discovery now checks registered public
+HTTPS entry pages for eight priority journals and saves direct post links to a local candidate
+queue. In a browsable Codex session, an exact original post can also be found and reviewed
+before it becomes publisher evidence. Pages without a direct link, browser challenges, and
+unconfirmed account identities remain pending leads. This does not provide unattended access
+to every new post from an account. A [same-issue comparison](references/chinese-journal-wechat-timing.md)
+of five issues across three journals supports journal-specific discovery order, but cannot
+establish that WeChat is always the first channel for Chinese journals.
+
+Weekly and on-demand reports now select publisher issues by **first local review time** and
+label them as first reviewed in the respective window. Historical search lists reviewed
+issues by the selected years. A September-labelled issue first reviewed in October can
+therefore appear in October's publisher issue section while retaining its label month,
+announcement date, and review time. CNKI article leads still require publication-month
+evidence overlapping the report window. Neither an announcement nor a review time proves
+that an individual article was first published that week or belongs among confirmed
+matching papers. See the [Chinese-source policy](references/chinese-source-expansion.md)
+and [public WeChat discovery workflow](references/wechat-public-discovery.md).
+
+This is a code and documentation update, without a new version tag or GitHub Release.
+The changelog records the offline regression, Ruff, skill-validation, and read-only release
+check results. No private paper sources were collected again and no weekly state was advanced
+for this delivery.
+
 ### 29 October 2026: accept current PhilPapers RSS ordering and repair catch-up access
 
 PhilPapers category pages can now generate an official subscription link with `sort=pubYear`.
@@ -414,6 +441,47 @@ live collection was repeated and no private monitoring state was rewritten. See 
 [Chinese-source policy](references/chinese-source-expansion.md) and
 [publisher observation protocol](references/publisher-article-observation.md). This synchronization
 does not create a new version tag or GitHub Release.
+
+</details>
+
+<details>
+<summary>Technical update: publisher-link discovery and a WeChat candidate queue (2026-10-14)</summary>
+
+<a id="technical-update-2026-10-14-wechat-candidate-queue"></a>
+
+## Technical update: publisher-link discovery and a WeChat candidate queue (2026-10-14)
+
+The catalog now records sourced WeChat account leads for eight journals: *Philosophical Research*, *Philosophical Trends*, *World Philosophy*, *History of Chinese Philosophy*, *Modern Philosophy*, *Studies of Zhouyi*, *Confucius Studies*, and *Social Sciences in China*. The dedicated *World Philosophy* account and the editorial account mapped to *History of Chinese Philosophy* remain candidate mappings; neither gains publisher-evidence status automatically.
+
+`pfm journal-watch wechat-discover` reads at most one registered publisher HTTPS page per journal per local day and saves direct WeChat post links in a Git-ignored candidate queue. An exact post found through public searching in a session can also be queued with its discovery source. Only after opening the original post and checking the account, complete visible text, issue, and explicit date may `wechat-review --confirm-evidence` record a reviewed issue. Blocked and wrong-journal links keep their queue status. The Skill handles this queue before a weekly report, on-demand pull, or search; users need not provide each post URL. See the [procedure and limits](references/wechat-public-discovery.md).
+
+An isolated live trial read all eight registered entry points: five succeeded with no direct links, the *History of Chinese Philosophy* page yielded three older-issue candidates, the *World Philosophy* entry had a transport failure, and the *Social Sciences in China* page returned 403. None of the candidates became reviewed evidence automatically. Publisher pages without outbound WeChat links cannot reveal all new account posts, and an unattended task cannot replace original-post review in a session. The full suite passed 411 tests, along with Ruff and Skill validation. This is a branch update, with no new version tag or GitHub Release.
+
+</details>
+
+<details>
+<summary>Technical update: finding official WeChat posts without user-supplied links (2026-10-14)</summary>
+
+<a id="technical-update-2026-10-14-wechat-discovery"></a>
+
+## Technical update: finding official WeChat posts without user-supplied links (2026-10-14)
+
+The catalog now records verified account names and reference posts for *Modern Philosophy* and *Philosophical Trends*. `pfm journal-watch wechat-discovery-plan` emits a bounded local search plan without network requests. When `search`, `pull-now`, or a weekly report is requested through the Skill, Codex first looks for public original posts for these journals. An exact URL becomes reviewed publisher evidence for those modes only after the account, issue, post date, and body have been inspected. Users need not provide each post link. See the [public-discovery procedure](references/wechat-public-discovery.md).
+
+This step needs working web search and interactive access to original posts; the local `pfm` commands and Windows scheduled job do not gain a WeChat publication-list API. In a one-off access check, a public WeChat album displayed titles and links, while an ordinary HTTP request for one original post reached a verification page. Search snippets, challenges, and unreadable bodies remain unverified. This update adds discovery seeds and review instructions for two journals, without enabling automated WeChat crawling or Wanfang, changing private observations or formal reports, or creating a release tag. All 404 tests, Ruff, Skill validation, and the command-line plan output passed.
+
+</details>
+
+<details>
+<summary>Technical update: same-issue comparison of Chinese journals' WeChat and website directories (2026-10-14)</summary>
+
+<a id="technical-update-2026-10-14-wechat-evidence"></a>
+
+## Technical update: same-issue comparison of Chinese journals' WeChat and website directories (2026-10-14)
+
+A [five-issue comparison](references/chinese-journal-wechat-timing.md) covers *Modern Philosophy*, *Philosophical Trends*, and *Zhouyi Studies*. Three issues show earlier timing evidence for an official WeChat post; for *Zhouyi Studies* issue 3, the displayed dates differ by six calendar days. Two further issues have the same date on both channels, with no website time of day to establish an order. The sites' first-accessible times remain partly unknown. This accessible-source sample cannot show that WeChat is always first across Chinese journals or estimate a general lead time.
+
+The evidence policy now treats a verified journal account's original post, an editorial or publisher website, and a formal journal portal as publisher-origin issue evidence. The discovery order may favor WeChat for a journal with supporting same-issue observations, while website TOCs remain under parallel review. Search snippets and verification pages remain unreviewed leads. Manual `journal-watch observe --status reviewed` now requires `--confirm-evidence`, matching the existing review gate; the flag attests human source inspection and does not automatically read WeChat content. A post date remains an announcement date, separate from the issue-label month and each article's first-publication date. The evidence status of *Philosophical Trends* issue 9 has been updated after inspection of its original post. All 403 tests, Ruff, and Skill validation passed. The read-only `release-check` passed public-file and secret checks but did not recognize the isolated worktree's root Git marker, so its full release gate did not pass. This branch adds no automatic WeChat collection, leaves Wanfang off by default, and does not change formal weekly-report state or private observation records. No version tag or GitHub Release was created.
 
 </details>
 

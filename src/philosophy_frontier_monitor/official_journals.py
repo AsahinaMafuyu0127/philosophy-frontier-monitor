@@ -12,6 +12,7 @@ from contextlib import closing
 from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlsplit
 
 import yaml
@@ -32,6 +33,10 @@ class OfficialJournal:
     frequency: str | None = None
     schedule: str | None = None
     frequency_evidence_url: str | None = None
+    wechat_account: str | None = None
+    wechat_seed_url: str | None = None
+    wechat_identity_url: str | None = None
+    wechat_identity_status: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +90,26 @@ def load_catalog(path: Path = CATALOG_PATH) -> tuple[OfficialJournal, ...]:
                 journal.frequency_evidence_url is not None
                 and not _https_url(journal.frequency_evidence_url)
             )
+            or ((journal.wechat_account is None) != (journal.wechat_identity_url is None))
+            or (journal.wechat_account is not None and not journal.wechat_account.strip())
+            or (journal.wechat_account is None and journal.wechat_identity_status is not None)
+            or (journal.wechat_account is not None and journal.wechat_identity_status not in {
+                "verified", "candidate",
+            })
+            or (
+                journal.wechat_identity_url is not None
+                and not _https_url(journal.wechat_identity_url)
+            )
+            or (journal.wechat_seed_url is not None and journal.wechat_account is None)
+            or (
+                journal.wechat_seed_url is not None
+                and (
+                    not _https_url(journal.wechat_seed_url)
+                    or urlsplit(journal.wechat_seed_url).hostname != "mp.weixin.qq.com"
+                    or not urlsplit(journal.wechat_seed_url).path.startswith("/s/")
+                    or len(urlsplit(journal.wechat_seed_url).path) <= 3
+                )
+            )
         ):
             raise ValueError(f"invalid official-journal entry: {journal.id}")
         seen.add(journal.id)
@@ -94,6 +119,25 @@ def load_catalog(path: Path = CATALOG_PATH) -> tuple[OfficialJournal, ...]:
 
 def catalog_as_dicts(path: Path = CATALOG_PATH) -> list[dict[str, str | None]]:
     return [asdict(journal) for journal in load_catalog(path)]
+
+
+def wechat_discovery_plan(path: Path = CATALOG_PATH) -> list[dict[str, str | None]]:
+    """Return sourced account leads and search phrases, without network I/O."""
+    return [
+        {
+            "journal_id": journal.id,
+            "title": journal.title,
+            "account": journal.wechat_account,
+            "identity_url": journal.wechat_identity_url,
+            "identity_status": journal.wechat_identity_status,
+            "verified_post": journal.wechat_seed_url,
+            "publisher_discovery_url": journal.official_url,
+            "search_phrase": f'"{journal.wechat_account}" "{journal.title}" 目录',
+            "status": "discovery_only",
+        }
+        for journal in load_catalog(path)
+        if journal.wechat_account and journal.wechat_identity_url
+    ]
 
 
 def _valid_date(value: str | None) -> bool:
@@ -276,11 +320,37 @@ def distinct_issue_leads(issues: tuple[OfficialIssue, ...]) -> tuple[OfficialIss
     return tuple(selected)
 
 
-def render_issue_leads(issues: tuple[OfficialIssue, ...], *, english: bool = False) -> str:
+def render_issue_leads(
+    issues: tuple[OfficialIssue, ...], *, english: bool = False,
+    context: Literal["weekly", "on_demand", "historical"] = "historical",
+) -> str:
+    headings = {
+        "weekly": (
+            f"## 期刊官方发布渠道：本周首次核实的期次（{len(issues)}）",
+            f"## Publisher issue leads first reviewed this week ({len(issues)})",
+        ),
+        "on_demand": (
+            f"## 期刊官方发布渠道：本窗口首次核实的期次（{len(issues)}）",
+            f"## Publisher issue leads first reviewed in this window ({len(issues)})",
+        ),
+        "historical": (
+            f"## 期刊官方发布渠道：已复核期次（{len(issues)}）",
+            f"## Reviewed publisher issue leads ({len(issues)})",
+        ),
+    }
     lines = [
-        "## Publisher issue leads" if english else "## 期刊官方发布渠道：新期次线索",
+        headings[context][int(english)],
         "",
     ]
+    if context != "historical":
+        lines.append(
+            "These issues entered this window by first local review, not by issue month "
+            "or article publication date. A stated announcement date may be earlier."
+            if english else
+            "本栏按本地首次核实时间入窗，不按刊期月份或逐篇发表日入窗；"
+            "原帖公告日可能早于本窗口。"
+        )
+        lines.append("")
     lines.append(
         "These reviewed issue leads keep announcement dates, issue label months, and issue "
         "publication dates separate. An issue does not establish that individual articles "
@@ -291,12 +361,19 @@ def render_issue_leads(issues: tuple[OfficialIssue, ...], *, english: bool = Fal
     )
     lines.append("")
     if not issues:
-        lines.append(
-            "There is no reviewed publisher issue evidence in the local store for this window. "
-            "This does not establish that no new issue exists."
-            if english
-            else "本地尚无本窗口内已复核的官方期次证据；这不表示期刊没有新期。"
-        )
+        if context == "historical":
+            lines.append(
+                "No reviewed publisher issue is stored locally for these years. "
+                "This does not establish that no issue exists."
+                if english else "本地没有该年份范围内的已复核刊方期次；这不表示期刊没有出刊。"
+            )
+        else:
+            lines.append(
+                "No publisher issue was first reviewed locally in this window. "
+                "This does not establish that no new issue exists."
+                if english
+                else "本窗口没有本地首次核实的官方期次；这不表示期刊没有新期。"
+            )
     for issue in issues:
         if english:
             lines.append(

@@ -71,7 +71,7 @@ from .models import (
     WorkTypeStatus,
 )
 from .normalize import normalize_doi, normalize_title
-from .official_journals import distinct_issue_leads, issues_in_window, list_issues
+from .official_journals import list_issues
 from .report import (
     HUMAN_REVIEW_REASON_CODES,
     HumanReviewItem,
@@ -2224,47 +2224,32 @@ def _cnki_issues_in_window(
     return tuple(selected), missing_month, outside_window
 
 
-def _official_issues_for_window(
+def _official_issues_first_reviewed_in_window(
     config: WatchlistConfig,
     window_start: datetime,
     window_end: datetime,
-    *,
-    first_observed_only: bool = False,
-    publication_month_only: bool = False,
 ):
+    """Report a reviewed publisher issue once, in its first local review window.
+
+    Review time is an observation event, never a claim about publication time.
+    Issue months remain separate evidence for article/date filtering elsewhere.
+    """
     db_path = config.storage.state_database.parent / "official-journals.sqlite3"
-    local_start = window_start.astimezone(config.timezone).date()
-    local_last = (window_end.astimezone(config.timezone) - timedelta(microseconds=1)).date()
     all_reviewed = list_issues(db_path, reviewed_only=True)
-    if publication_month_only:
-        candidates = tuple(
-            issue
-            for issue in all_reviewed
-            if (value := issue.label_month or issue.issue_published_on) is not None
-            and (local_start.year, local_start.month)
-            <= (int(value[:4]), int(value[5:7]))
-            <= (local_last.year, local_last.month)
-        )
-    else:
-        candidates = issues_in_window(all_reviewed, local_start, local_last)
-    if not first_observed_only:
-        return distinct_issue_leads(candidates)
     first_review_by_issue = {}
     for issue in all_reviewed:
         key = issue.journal_id, issue.year, issue.issue
         reviewed_at = datetime.fromisoformat(issue.reviewed_at or issue.observed_at)
         previous = first_review_by_issue.get(key)
-        if previous is None or reviewed_at < previous:
-            first_review_by_issue[key] = reviewed_at
-    return distinct_issue_leads(
-        tuple(
-            issue
-            for issue in candidates
-            if window_start
-            <= first_review_by_issue[(issue.journal_id, issue.year, issue.issue)]
-            < window_end
-        )
-    )
+        if previous is None or reviewed_at < previous[0]:
+            first_review_by_issue[key] = reviewed_at, issue
+    selected = [
+        (reviewed_at, issue)
+        for reviewed_at, issue in first_review_by_issue.values()
+        if window_start <= reviewed_at < window_end
+    ]
+    selected.sort(key=lambda item: (item[0], item[1].journal_id), reverse=True)
+    return tuple(issue for _, issue in selected)
 
 
 def _wanfang_records_in_window(
@@ -3135,7 +3120,9 @@ def run_on_demand(
         for source, detail in sorted(bibliographic_source_failures.items())
     )
     try:
-        official_issues = _official_issues_for_window(config, window_start, window_end)
+        official_issues = _official_issues_first_reviewed_in_window(
+            config, window_start, window_end
+        )
     except (OSError, ValueError, sqlite3.DatabaseError):
         official_issues = ()
         coverage += (
@@ -3156,11 +3143,11 @@ def run_on_demand(
                 status="local_only",
                 checked_at=requested_at,
                 detail=(
-                    f"读取本地已复核期次 {len(official_issues)} 条；"
+                    f"读取本窗口首次核实的本地期次 {len(official_issues)} 条；"
                     "本次未逐站巡查期刊官网或公众号。"
                 ),
                 detail_en=(
-                    f"Read {len(official_issues)} reviewed local issue leads; "
+                    f"Read {len(official_issues)} issue leads first reviewed in this window; "
                     "journal sites and official WeChat were not checked live."
                 ),
             ),
@@ -3766,12 +3753,8 @@ def run_weekly(
         for source, detail in sorted(bibliographic_source_failures.items())
     )
     try:
-        official_issues = _official_issues_for_window(
-            config,
-            window_start,
-            window_end,
-            first_observed_only=True,
-            publication_month_only=True,
+        official_issues = _official_issues_first_reviewed_in_window(
+            config, window_start, window_end
         )
     except (OSError, ValueError, sqlite3.DatabaseError):
         official_issues = ()

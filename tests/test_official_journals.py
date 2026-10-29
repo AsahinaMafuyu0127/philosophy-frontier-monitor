@@ -20,8 +20,9 @@ from philosophy_frontier_monitor.official_journals import (
     new_observation,
     record_issue,
     review_observed_issue,
+    wechat_discovery_plan,
 )
-from philosophy_frontier_monitor.pipeline import _official_issues_for_window
+from philosophy_frontier_monitor.pipeline import _official_issues_first_reviewed_in_window
 from philosophy_frontier_monitor.sources.cnki_space import CnkiIssue
 
 
@@ -31,6 +32,31 @@ def test_curated_catalog_has_verifiable_primary_channels() -> None:
     assert len(catalog) >= 12
     assert {"哲学研究", "哲学动态", "世界哲学"} <= titles
     assert all(journal.official_url.startswith("https://") for journal in catalog)
+
+
+def test_wechat_discovery_plan_has_sourced_accounts_and_no_network(capsys) -> None:
+    plan = wechat_discovery_plan()
+    assert {item["journal_id"] for item in plan} == {
+        "xiandai-zhexue", "zhexue-dongtai", "zhexue-yanjiu",
+        "shijie-zhexue", "zhouyi-yanjiu", "kongzi-yanjiu",
+        "zhongguo-shehui-kexue", "zhongguo-zhexueshi",
+    }
+    assert all(item["identity_url"].startswith("https://") for item in plan)
+    assert all(
+        not item["verified_post"]
+        or item["verified_post"].startswith("https://mp.weixin.qq.com/s/")
+        for item in plan
+    )
+    assert next(item for item in plan if item["journal_id"] == "shijie-zhexue")[
+        "identity_status"
+    ] == "candidate"
+    assert all(item["status"] == "discovery_only" for item in plan)
+    args = cli.build_parser().parse_args(["journal-watch", "wechat-discovery-plan"])
+    assert args.handler(args) == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["network_queries"] == 0
+    assert output["evidence_status"] == "unverified_until_original_post_review"
+    assert output["wechat_discovery_plan"] == plan
 
 
 def test_catalog_reports_automatic_and_manual_toc_channels(capsys) -> None:
@@ -186,6 +212,27 @@ def test_journal_watch_pending_and_review_cli(tmp_path: Path, capsys) -> None:
     assert list_issues(db)[0].label_month == "2026-08"
 
 
+def test_reviewed_observe_requires_explicit_source_confirmation(tmp_path: Path, capsys) -> None:
+    db = tmp_path / "issues.sqlite3"
+    parser = cli.build_parser()
+    base = [
+        "journal-watch", "observe", "--db", str(db),
+        "--journal", "zhexue-dongtai", "--year", "2026", "--issue", "9",
+        "--evidence-url", "https://mp.weixin.qq.com/s/eeYI8s6Y_f9J3zbJ73XgSg",
+        "--evidence-kind", "official-wechat", "--announcement-on", "2026-09-27",
+        "--status", "reviewed",
+    ]
+    args = parser.parse_args(base)
+    with pytest.raises(ValueError, match="confirm-evidence"):
+        args.handler(args)
+    assert not db.exists()
+
+    confirmed = parser.parse_args([*base, "--confirm-evidence"])
+    assert confirmed.handler(confirmed) == 0
+    assert '"status": "reviewed"' in capsys.readouterr().out
+    assert list_issues(db)[0].announcement_on == "2026-09-27"
+
+
 def test_weekly_uses_first_review_date_and_does_not_repeat_monthly_issue(tmp_path: Path) -> None:
     db = tmp_path / "official-journals.sqlite3"
     pending = new_observation(
@@ -220,28 +267,26 @@ def test_weekly_uses_first_review_date_and_does_not_repeat_monthly_issue(tmp_pat
         storage=SimpleNamespace(state_database=tmp_path / "state.sqlite3"),
         timezone=ZoneInfo("Asia/Shanghai"),
     )
-    first_week = _official_issues_for_window(
+    first_week = _official_issues_first_reviewed_in_window(
         config,
         datetime(2026, 9, 21, tzinfo=UTC),
         datetime(2026, 9, 28, tzinfo=UTC),
-        first_observed_only=True,
     )
-    later_week = _official_issues_for_window(
+    later_week = _official_issues_first_reviewed_in_window(
         config,
         datetime(2026, 9, 28, tzinfo=UTC),
         datetime(2026, 10, 5, tzinfo=UTC),
-        first_observed_only=True,
     )
     assert len(first_week) == 1
     assert later_week == ()
 
 
-@pytest.mark.parametrize("dates,eligible", [
-    ({"announcement_on": "2026-09-25"}, False),
-    ({"issue_published_on": "2026-09-15"}, True),
-    ({"label_month": "2026-08", "announcement_on": "2026-09-25"}, False),
+@pytest.mark.parametrize("dates", [
+    {"announcement_on": "2026-09-25"},
+    {"issue_published_on": "2026-09-15"},
+    {"label_month": "2026-08", "announcement_on": "2026-09-25"},
 ])
-def test_weekly_publisher_month_gate_does_not_use_announcement(tmp_path, dates, eligible):
+def test_first_reviewed_issue_is_visible_without_publication_month_gate(tmp_path, dates):
     observed = new_observation(
         "ziran-bianzhengfa-tongxun", 2026, "9",
         "https://jdn.ucas.ac.cn/home/column/lists/cid/349", "journal-site",
@@ -253,8 +298,36 @@ def test_weekly_publisher_month_gate_does_not_use_announcement(tmp_path, dates, 
         storage=SimpleNamespace(state_database=tmp_path / "state.sqlite3"),
         timezone=ZoneInfo("Asia/Shanghai"),
     )
-    selected = _official_issues_for_window(
+    selected = _official_issues_first_reviewed_in_window(
         config, datetime(2026, 9, 21, tzinfo=UTC), datetime(2026, 9, 28, tzinfo=UTC),
-        first_observed_only=True, publication_month_only=True,
     )
-    assert bool(selected) == eligible
+    assert len(selected) == 1
+    assert selected[0].announcement_on == dates.get("announcement_on")
+    assert _official_issues_first_reviewed_in_window(
+        config, datetime(2026, 9, 28, tzinfo=UTC), datetime(2026, 10, 5, tzinfo=UTC),
+    ) == ()
+
+
+def test_september_wechat_issue_first_reviewed_in_october_keeps_its_dates(tmp_path):
+    issue = replace(
+        new_observation(
+            "xiandai-zhexue", 2026, "5",
+            "https://mp.weixin.qq.com/s/synthetic-issue-five", "official-wechat",
+            label_month="2026-09", announcement_on="2026-10-09", status="reviewed",
+        ),
+        reviewed_at="2026-10-10T12:00:00+08:00",
+    )
+    record_issue(tmp_path / "official-journals.sqlite3", issue)
+    config = SimpleNamespace(
+        storage=SimpleNamespace(state_database=tmp_path / "state.sqlite3"),
+        timezone=ZoneInfo("Asia/Shanghai"),
+    )
+    selected = _official_issues_first_reviewed_in_window(
+        config, datetime(2026, 10, 5, tzinfo=UTC), datetime(2026, 10, 12, tzinfo=UTC)
+    )
+    assert len(selected) == 1
+    assert selected[0].label_month == "2026-09"
+    assert selected[0].announcement_on == "2026-10-09"
+    assert _official_issues_first_reviewed_in_window(
+        config, datetime(2026, 9, 28, tzinfo=UTC), datetime(2026, 10, 5, tzinfo=UTC)
+    ) == ()
