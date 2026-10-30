@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -24,6 +24,7 @@ from philosophy_frontier_monitor.wechat_discovery import (
 
 POST = "https://mp.weixin.qq.com/s/cOimuAyoAiR-WV87o_I1rw"
 BEIJING = ZoneInfo("Asia/Shanghai")
+NEW_YORK = ZoneInfo("America/New_York")
 
 
 def test_only_direct_wechat_posts_are_normalized() -> None:
@@ -58,7 +59,8 @@ def test_bounded_publisher_scan_persists_candidates_once_per_local_day(tmp_path:
             lambda _: pytest.fail("a parallel same-day call must not request the page")
         )) as other_client:
             duplicate = discover_publisher_links(
-                db, journal_id="xiandai-zhexue", client=other_client, observed_at=now,
+                db, journal_id="xiandai-zhexue", client=other_client,
+                observed_at=now, user_timezone=BEIJING,
             )
         assert duplicate[0]["prior_status"] == "attempted"
         return httpx.Response(
@@ -68,13 +70,15 @@ def test_bounded_publisher_scan_persists_candidates_once_per_local_day(tmp_path:
 
     with httpx.Client(transport=httpx.MockTransport(respond)) as client:
         result = discover_publisher_links(
-            db, journal_id="xiandai-zhexue", client=client, observed_at=now,
+            db, journal_id="xiandai-zhexue", client=client,
+            observed_at=now, user_timezone=BEIJING,
         )
         assert result == [{
             "journal": "xiandai-zhexue", "status": "ok", "links_found": 1, "error": None,
         }]
         repeated = discover_publisher_links(
-            db, journal_id="xiandai-zhexue", client=client, observed_at=now,
+            db, journal_id="xiandai-zhexue", client=client,
+            observed_at=now, user_timezone=BEIJING,
         )[0]
         assert repeated["status"] == "already_scanned"
         assert repeated["prior_status"] == "ok"
@@ -99,10 +103,12 @@ def test_interrupted_request_keeps_daily_reservation(tmp_path: Path) -> None:
     with httpx.Client(transport=httpx.MockTransport(interrupted)) as client:
         with pytest.raises(RuntimeError, match="simulated process interruption"):
             discover_publisher_links(
-                db, journal_id="xiandai-zhexue", client=client, observed_at=now,
+                db, journal_id="xiandai-zhexue", client=client,
+                observed_at=now, user_timezone=BEIJING,
             )
         repeated = discover_publisher_links(
-            db, journal_id="xiandai-zhexue", client=client, observed_at=now,
+            db, journal_id="xiandai-zhexue", client=client,
+            observed_at=now, user_timezone=BEIJING,
         )[0]
     assert calls == 1
     assert repeated["status"] == "already_scanned"
@@ -114,7 +120,8 @@ def test_interrupted_request_keeps_daily_reservation(tmp_path: Path) -> None:
         200, headers={"content-type": "text/html; charset=utf-8"}, text="<p>No links</p>",
     ))) as client:
         resumed = discover_publisher_links(
-            db, journal_id="xiandai-zhexue", client=client, observed_at=tomorrow,
+            db, journal_id="xiandai-zhexue", client=client,
+            observed_at=tomorrow, user_timezone=BEIJING,
         )[0]
     assert resumed["status"] == "ok"
 
@@ -138,7 +145,8 @@ def test_changed_publisher_url_does_not_reset_journal_daily_allowance(tmp_path: 
         lambda _: pytest.fail("a changed URL must not get a second same-day request")
     )) as client:
         repeated = discover_publisher_links(
-            db, journal_id="xiandai-zhexue", client=client, observed_at=now,
+            db, journal_id="xiandai-zhexue", client=client,
+            observed_at=now, user_timezone=BEIJING,
         )[0]
     assert repeated["status"] == "already_scanned"
     assert repeated["prior_status"] == "failed"
@@ -161,10 +169,147 @@ def test_failed_page_is_recorded_without_a_candidate(
         result = discover_publisher_links(
             db, journal_id="xiandai-zhexue", client=client,
             observed_at=datetime(2026, 10, 14, tzinfo=BEIJING),
+            user_timezone=BEIJING,
         )
     assert result[0]["status"] == "failed"
     assert result[0]["error"] == expected
     assert list_candidates(db) == []
+
+
+def test_scan_day_follows_each_users_zone_for_the_same_instant(tmp_path: Path) -> None:
+    instant = datetime(2026, 10, 14, 0, 30, tzinfo=BEIJING)
+    for zone, expected_date in ((BEIJING, "2026-10-14"), (NEW_YORK, "2026-10-13")):
+        db = tmp_path / f"{zone.key}.sqlite3"
+        with httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(
+            200, headers={"content-type": "text/html"}, text="<p>No links</p>",
+        ))) as client:
+            result = discover_publisher_links(
+                db, journal_id="xiandai-zhexue", client=client,
+                observed_at=instant, user_timezone=zone,
+            )
+        assert result[0]["status"] == "ok"
+        with sqlite3.connect(db) as saved:
+            assert saved.execute(
+                "SELECT local_date FROM wechat_link_scans"
+            ).fetchone()[0] == expected_date
+
+
+def test_legacy_beijing_day_is_reinterpreted_without_repeating_or_losing_a_day(
+    tmp_path: Path,
+) -> None:
+    db = tmp_path / "issues.sqlite3"
+    old_instant = datetime(2026, 10, 14, 0, 30, tzinfo=BEIJING)
+    with sqlite3.connect(db) as saved:
+        saved.execute(
+            "CREATE TABLE wechat_link_scans ("
+            "journal_id TEXT NOT NULL, local_date TEXT NOT NULL, source_url TEXT NOT NULL, "
+            "observed_at TEXT NOT NULL, status TEXT NOT NULL, links_found INTEGER NOT NULL, "
+            "error TEXT, PRIMARY KEY (journal_id, local_date, source_url))"
+        )
+        saved.execute(
+            "INSERT INTO wechat_link_scans VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("xiandai-zhexue", "2026-10-14", "https://previous.example/",
+             old_instant.isoformat(), "failed", 0, "publisher_discovery_http_403"),
+        )
+    with httpx.Client(transport=httpx.MockTransport(
+        lambda _: pytest.fail("the earlier scan falls on the same New York day")
+    )) as client:
+        repeated = discover_publisher_links(
+            db, journal_id="xiandai-zhexue", client=client,
+            observed_at=datetime(2026, 10, 14, 1, tzinfo=BEIJING),
+            user_timezone=NEW_YORK,
+        )[0]
+    assert repeated["status"] == "already_scanned"
+    assert repeated["prior_status"] == "failed"
+    assert repeated["error"] == "publisher_discovery_http_403"
+
+    with httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(
+        200, headers={"content-type": "text/html"}, text="<p>No links</p>",
+    ))) as client:
+        next_day = discover_publisher_links(
+            db, journal_id="xiandai-zhexue", client=client,
+            observed_at=datetime(2026, 10, 14, 23, tzinfo=BEIJING),
+            user_timezone=NEW_YORK,
+        )[0]
+    assert next_day["status"] == "ok"
+    with sqlite3.connect(db) as saved:
+        rows = saved.execute(
+            "SELECT scan_id, local_date, status FROM wechat_link_scans ORDER BY scan_id"
+        ).fetchall()
+    assert [(row[1], row[2]) for row in rows] == [
+        ("2026-10-14", "failed"), ("2026-10-14", "ok"),
+    ]
+
+
+def test_dst_transition_does_not_reset_users_daily_allowance(tmp_path: Path) -> None:
+    db = tmp_path / "issues.sqlite3"
+    calls = 0
+
+    def respond(_: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, headers={"content-type": "text/html"}, text="<p>None</p>")
+
+    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+        first = discover_publisher_links(
+            db, journal_id="xiandai-zhexue", client=client,
+            observed_at=datetime(2026, 3, 8, 6, 30, tzinfo=UTC),
+            user_timezone=NEW_YORK,
+        )[0]
+        second = discover_publisher_links(
+            db, journal_id="xiandai-zhexue", client=client,
+            observed_at=datetime(2026, 3, 8, 7, 30, tzinfo=UTC),
+            user_timezone=NEW_YORK,
+        )[0]
+    assert first["status"] == "ok"
+    assert second["status"] == "already_scanned"
+    assert calls == 1
+
+
+def test_cli_prefers_explicit_zone_then_configured_zone_then_os_local(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys,
+) -> None:
+    config_path = Path(__file__).parent / "fixtures" / "watchlist_minimal.yaml"
+    selected: list[ZoneInfo | None] = []
+
+    def discover(*args, **kwargs) -> list[dict]:
+        selected.append(kwargs["user_timezone"])
+        return []
+
+    monkeypatch.setattr(cli, "discover_publisher_links", discover)
+    monkeypatch.setattr(cli, "list_candidates", lambda *args: [])
+    parser = cli.build_parser()
+    base = ["journal-watch", "wechat-discover", "--config", str(config_path)]
+    for extra in ([], ["--timezone", "America/New_York"]):
+        args = parser.parse_args([*base, *extra])
+        assert args.handler(args) == 0
+        assert json.loads(capsys.readouterr().out)["timezone"] == (
+            "America/New_York" if extra else "Asia/Shanghai"
+        )
+    missing = parser.parse_args([
+        "journal-watch", "wechat-discover", "--config", str(tmp_path / "missing.yaml"),
+    ])
+    assert missing.handler(missing) == 0
+    assert json.loads(capsys.readouterr().out)["timezone"] == "system-local"
+    assert selected == [BEIJING, NEW_YORK, None]
+    invalid = parser.parse_args([*base, "--timezone", "Invalid/Zone"])
+    with pytest.raises(ValueError, match="unknown timezone"):
+        invalid.handler(invalid)
+    assert selected == [BEIJING, NEW_YORK, None]
+
+
+def test_naive_observation_is_rejected_before_a_request(tmp_path: Path) -> None:
+    with (
+        httpx.Client(transport=httpx.MockTransport(
+            lambda _: pytest.fail("naive time must be rejected before a request")
+        )) as client,
+        pytest.raises(ValueError, match="timezone"),
+    ):
+        discover_publisher_links(
+            tmp_path / "issues.sqlite3", journal_id="xiandai-zhexue",
+            client=client, observed_at=datetime(2026, 10, 14, 8),
+            user_timezone=NEW_YORK,
+        )
 
 
 def test_wechat_review_needs_candidate_and_original_post_attestation(

@@ -12,6 +12,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
 
@@ -1065,6 +1066,18 @@ def _write_search_review_queue(path: Path, result: PaperSearchResult) -> None:
     temporary.replace(path)
 
 
+def _wechat_user_timezone(args: argparse.Namespace) -> ZoneInfo | None:
+    """An explicit user zone wins, then the watchlist, then the OS local zone."""
+    if args.timezone is not None:
+        try:
+            return ZoneInfo(args.timezone)
+        except ZoneInfoNotFoundError as error:
+            raise ValueError(f"unknown timezone: {args.timezone}") from error
+    if Path(args.config).is_file():
+        return load_watchlist(args.config).timezone
+    return None
+
+
 def _journal_watch(args: argparse.Namespace) -> int:
     catalog_path = Path(args.catalog)
     db_path = Path(args.db)
@@ -1077,11 +1090,14 @@ def _journal_watch(args: argparse.Namespace) -> int:
         })
         return 0
     if args.action == "wechat-discover":
+        user_timezone = _wechat_user_timezone(args)
         scans = discover_publisher_links(
             db_path, catalog_path=catalog_path, journal_id=args.journal,
+            user_timezone=user_timezone,
         )
         _emit({
             "ok": True, "operation": "journal-watch", "scans": scans,
+            "timezone": user_timezone.key if user_timezone is not None else "system-local",
             "candidates": list_candidates(db_path, args.journal),
             "evidence_status": "unverified_until_original_post_review",
         })
@@ -1510,6 +1526,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     journal_watch.add_argument("--key-file")
     journal_watch.add_argument("--config", default="config/watchlist.yaml")
+    journal_watch.add_argument(
+        "--timezone", help="user IANA timezone for WeChat discovery (overrides watchlist)",
+    )
     journal_watch.set_defaults(handler=_journal_watch)
 
     doctor = subparsers.add_parser("doctor", help="validate the local project and optional feed")

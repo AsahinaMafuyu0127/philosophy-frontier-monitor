@@ -54,8 +54,12 @@ page as an inspected post. See the [same-issue timing comparison](references/chi
 For `search`, `pull-now`, or a weekly report invoked **through this Skill**, read
 [wechat-public-discovery.md](references/wechat-public-discovery.md) and run
 `pfm journal-watch wechat-discovery-plan`, `wechat-discover`, and
-`wechat-candidates` before the requested mode. The discovery command reserves a
-journal's Asia/Shanghai daily scan in the Git-ignored database before requesting
+`wechat-candidates` before the requested mode. Pass an explicitly selected user
+timezone to `wechat-discover --timezone IANA_ZONE`; otherwise, if the session
+supplies the user's current timezone, pass that. If neither is available, use
+the user's configured watchlist timezone, then the local OS timezone. The
+discovery command reserves a journal's user-local daily scan in the Git-ignored
+database before requesting
 its one registered publisher HTTPS page; an interrupted or concurrent call
 cannot trigger another request that day. It adds direct WeChat links to a
 candidate queue. For relevant journals, search public pages in the session for
