@@ -185,56 +185,61 @@ def _validate_issue(issue: OfficialIssue, catalog: tuple[OfficialJournal, ...]) 
         raise ValueError("reviewed issue needs explicit date or month evidence")
 
 
+def _write_issue(db: sqlite3.Connection, issue: OfficialIssue) -> None:
+    """Write a validated issue in the caller's transaction."""
+    db.execute(
+        """CREATE TABLE IF NOT EXISTS official_issues (
+            journal_id TEXT NOT NULL, year INTEGER NOT NULL, issue TEXT NOT NULL,
+            title TEXT NOT NULL, evidence_url TEXT NOT NULL, evidence_kind TEXT NOT NULL,
+            label_month TEXT, issue_published_on TEXT, announcement_on TEXT,
+            observed_at TEXT NOT NULL, status TEXT NOT NULL, reviewed_at TEXT,
+            PRIMARY KEY (journal_id, year, issue, evidence_url)
+        )"""
+    )
+    columns = {row[1] for row in db.execute("PRAGMA table_info(official_issues)")}
+    if "reviewed_at" not in columns:
+        db.execute("ALTER TABLE official_issues ADD COLUMN reviewed_at TEXT")
+        db.execute("UPDATE official_issues SET reviewed_at=observed_at WHERE status='reviewed'")
+    db.execute(
+        """INSERT INTO official_issues VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(journal_id, year, issue, evidence_url) DO UPDATE SET
+            label_month=CASE WHEN official_issues.status='reviewed'
+                AND excluded.status='pending' THEN official_issues.label_month
+                ELSE excluded.label_month END,
+            issue_published_on=CASE WHEN official_issues.status='reviewed'
+                AND excluded.status='pending' THEN official_issues.issue_published_on
+                ELSE excluded.issue_published_on END,
+            announcement_on=CASE WHEN official_issues.status='reviewed'
+                AND excluded.status='pending' THEN official_issues.announcement_on
+                ELSE excluded.announcement_on END,
+            status=CASE WHEN official_issues.status='reviewed'
+                THEN official_issues.status ELSE excluded.status END,
+            reviewed_at=CASE
+                WHEN official_issues.status='reviewed'
+                THEN official_issues.reviewed_at
+                ELSE excluded.reviewed_at END""",
+        (
+            issue.journal_id,
+            issue.year,
+            issue.issue,
+            issue.title,
+            issue.evidence_url,
+            issue.evidence_kind,
+            issue.label_month,
+            issue.issue_published_on,
+            issue.announcement_on,
+            issue.observed_at,
+            issue.status,
+            issue.reviewed_at,
+        ),
+    )
+
+
 def record_issue(db_path: Path, issue: OfficialIssue, *, catalog_path: Path = CATALOG_PATH) -> None:
     _validate_issue(issue, load_catalog(catalog_path))
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with closing(sqlite3.connect(db_path)) as db, db:
-        db.execute(
-            """CREATE TABLE IF NOT EXISTS official_issues (
-                journal_id TEXT NOT NULL, year INTEGER NOT NULL, issue TEXT NOT NULL,
-                title TEXT NOT NULL, evidence_url TEXT NOT NULL, evidence_kind TEXT NOT NULL,
-                label_month TEXT, issue_published_on TEXT, announcement_on TEXT,
-                observed_at TEXT NOT NULL, status TEXT NOT NULL, reviewed_at TEXT,
-                PRIMARY KEY (journal_id, year, issue, evidence_url)
-            )"""
-        )
-        columns = {row[1] for row in db.execute("PRAGMA table_info(official_issues)")}
-        if "reviewed_at" not in columns:
-            db.execute("ALTER TABLE official_issues ADD COLUMN reviewed_at TEXT")
-            db.execute("UPDATE official_issues SET reviewed_at=observed_at WHERE status='reviewed'")
-        db.execute(
-            """INSERT INTO official_issues VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(journal_id, year, issue, evidence_url) DO UPDATE SET
-                label_month=CASE WHEN official_issues.status='reviewed'
-                    AND excluded.status='pending' THEN official_issues.label_month
-                    ELSE excluded.label_month END,
-                issue_published_on=CASE WHEN official_issues.status='reviewed'
-                    AND excluded.status='pending' THEN official_issues.issue_published_on
-                    ELSE excluded.issue_published_on END,
-                announcement_on=CASE WHEN official_issues.status='reviewed'
-                    AND excluded.status='pending' THEN official_issues.announcement_on
-                    ELSE excluded.announcement_on END,
-                status=CASE WHEN official_issues.status='reviewed'
-                    THEN official_issues.status ELSE excluded.status END,
-                reviewed_at=CASE
-                    WHEN official_issues.status='reviewed'
-                    THEN official_issues.reviewed_at
-                    ELSE excluded.reviewed_at END""",
-            (
-                issue.journal_id,
-                issue.year,
-                issue.issue,
-                issue.title,
-                issue.evidence_url,
-                issue.evidence_kind,
-                issue.label_month,
-                issue.issue_published_on,
-                issue.announcement_on,
-                issue.observed_at,
-                issue.status,
-                issue.reviewed_at,
-            ),
-        )
+        _write_issue(db, issue)
 
 
 def list_issues(db_path: Path, *, reviewed_only: bool = False) -> tuple[OfficialIssue, ...]:

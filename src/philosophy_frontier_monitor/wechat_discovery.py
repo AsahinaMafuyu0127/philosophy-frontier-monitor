@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from contextlib import closing
 from datetime import datetime
 from html import unescape
 from html.parser import HTMLParser
@@ -13,7 +14,14 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from .official_journals import CATALOG_PATH, DEFAULT_DB_PATH, load_catalog
+from .official_journals import (
+    CATALOG_PATH,
+    DEFAULT_DB_PATH,
+    OfficialIssue,
+    _validate_issue,
+    _write_issue,
+    load_catalog,
+)
 
 MAX_PAGE_BYTES = 750_000
 MAX_LINKS_PER_PAGE = 20
@@ -139,6 +147,29 @@ def _connect(db_path: Path) -> sqlite3.Connection:
     return db
 
 
+def _reserve_scan(
+    db: sqlite3.Connection, journal_id: str, local_date: str,
+    source_url: str, timestamp: str,
+) -> sqlite3.Row | None:
+    """Claim the journal's local-day page allowance before any HTTP request."""
+    with db:
+        db.execute("BEGIN IMMEDIATE")
+        prior = db.execute(
+            "SELECT status, links_found, error FROM wechat_link_scans "
+            "WHERE journal_id=? AND local_date=? "
+            "ORDER BY observed_at, source_url LIMIT 1",
+            (journal_id, local_date),
+        ).fetchone()
+        if prior is None:
+            db.execute(
+                "INSERT INTO wechat_link_scans "
+                "(journal_id, local_date, source_url, observed_at, status, links_found, error) "
+                "VALUES (?, ?, ?, ?, 'attempted', 0, NULL)",
+                (journal_id, local_date, source_url, timestamp),
+            )
+    return prior
+
+
 def list_candidates(
     db_path: Path = DEFAULT_DB_PATH, journal_id: str | None = None,
 ) -> list[dict]:
@@ -203,27 +234,27 @@ def discover_publisher_links(
         item for item in catalog
         if item.wechat_account and (journal_id is None or item.id == journal_id)
     ]
-    now = (observed_at or datetime.now(BEIJING)).astimezone(BEIJING)
-    timestamp = now.isoformat(timespec="seconds")
-    local_date = now.date().isoformat()
     active = client or httpx.Client(timeout=20, follow_redirects=False)
     results: list[dict] = []
     try:
-        with _connect(db_path) as db:
+        with closing(_connect(db_path)) as db:
             for journal in journals:
                 source_url = journal.official_url
-                prior = db.execute(
-                    "SELECT status, links_found, error FROM wechat_link_scans "
-                    "WHERE journal_id=? AND local_date=? AND source_url=?",
-                    (journal.id, local_date, source_url),
-                ).fetchone()
-                if prior:
+                now = (observed_at or datetime.now(BEIJING)).astimezone(BEIJING)
+                timestamp = now.isoformat(timespec="seconds")
+                local_date = now.date().isoformat()
+                prior = _reserve_scan(db, journal.id, local_date, source_url, timestamp)
+                if prior is not None:
                     results.append({"journal": journal.id, "status": "already_scanned",
+                                    "prior_status": prior["status"],
                                     "links_found": prior["links_found"], "error": prior["error"]})
                     continue
                 status, links, error = "ok", [], None
                 try:
                     links = extract_post_links(_fetch_page(active, source_url))
+                except ValueError as exc:
+                    status, error = "failed", str(exc)
+                with db:
                     for post_url, label in links:
                         db.execute("""INSERT INTO wechat_link_candidates
                             (journal_id, post_url, source_url, link_text, first_seen_at,
@@ -232,20 +263,49 @@ def discover_publisher_links(
                             last_seen_at=excluded.last_seen_at""",
                             (journal.id, post_url, source_url, label, timestamp, timestamp),
                         )
-                except ValueError as exc:
-                    status, error = "failed", str(exc)
-                db.execute("""INSERT INTO wechat_link_scans
-                    (journal_id, local_date, source_url, observed_at, status, links_found, error)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (journal.id, local_date, source_url, timestamp, status, len(links), error),
-                )
-                db.commit()
+                    db.execute(
+                        "UPDATE wechat_link_scans SET status=?, links_found=?, error=? "
+                        "WHERE journal_id=? AND local_date=? AND source_url=?",
+                        (status, len(links), error, journal.id, local_date, source_url),
+                    )
                 results.append({"journal": journal.id, "status": status,
                                 "links_found": len(links), "error": error})
     finally:
         if client is None:
             active.close()
     return results
+
+
+def review_candidate_issue(
+    db_path: Path, issue: OfficialIssue, *, note: str | None = None,
+    confirmed: bool = False, catalog_path: Path = CATALOG_PATH,
+) -> dict:
+    """Promote a confirmed original post and its queue row in one transaction."""
+    if not confirmed:
+        raise ValueError("reviewed candidate requires original-post confirmation")
+    if issue.evidence_kind != "official-wechat" or issue.status != "reviewed":
+        raise ValueError("candidate review requires a reviewed official WeChat issue")
+    _validate_issue(issue, load_catalog(catalog_path))
+    with closing(_connect(db_path)) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        candidate = db.execute(
+            "SELECT status FROM wechat_link_candidates WHERE journal_id=? AND post_url=?",
+            (issue.journal_id, issue.evidence_url),
+        ).fetchone()
+        if candidate is None or candidate["status"] not in {"pending", "blocked"}:
+            raise ValueError("wechat-review requires an existing pending or blocked candidate")
+        _write_issue(db, issue)
+        db.execute(
+            "UPDATE wechat_link_candidates SET status='reviewed', review_note=? "
+            "WHERE journal_id=? AND post_url=?",
+            (note or "original post and account identity inspected in session",
+             issue.journal_id, issue.evidence_url),
+        )
+        reviewed = db.execute(
+            "SELECT * FROM wechat_link_candidates WHERE journal_id=? AND post_url=?",
+            (issue.journal_id, issue.evidence_url),
+        ).fetchone()
+    return dict(reviewed)
 
 
 def mark_candidate(

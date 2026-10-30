@@ -81,6 +81,7 @@ from .wechat_discovery import (
     discover_publisher_links,
     list_candidates,
     mark_candidate,
+    review_candidate_issue,
 )
 from .work_type_reviews import load_work_type_reviews, work_type_evidence_fingerprint
 from .work_types import SUPPORTED_CANONICAL_WORK_TYPES
@@ -1124,23 +1125,17 @@ def _journal_watch(args: argparse.Namespace) -> int:
             raise ValueError("journal has no registered WeChat account")
         if journal.wechat_identity_status == "candidate" and not args.confirm_account_identity:
             raise ValueError("candidate account requires --confirm-account-identity")
-        candidate = next((
-            item for item in list_candidates(db_path, args.journal)
-            if item["post_url"] == args.evidence_url
-        ), None)
-        if candidate is None or candidate["status"] not in {"pending", "blocked"}:
-            raise ValueError("wechat-review requires an existing pending or blocked candidate")
         issue = new_observation(
             args.journal, args.year, args.issue, args.evidence_url, "official-wechat",
             label_month=args.label_month, issue_published_on=args.issue_published_on,
             announcement_on=args.announcement_on, status="reviewed",
             catalog_path=catalog_path,
         )
-        record_issue(db_path, issue, catalog_path=catalog_path)
-        reviewed = mark_candidate(
-            db_path, args.journal, args.evidence_url, status="reviewed",
+        reviewed = review_candidate_issue(
+            db_path, issue,
             note=args.reason or "original post and account identity inspected in session",
             confirmed=True,
+            catalog_path=catalog_path,
         )
         _emit({
             "ok": True, "operation": "journal-watch", "issue": asdict(issue),

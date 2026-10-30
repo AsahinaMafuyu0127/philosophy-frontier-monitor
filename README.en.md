@@ -253,6 +253,25 @@ data through GitHub Private Vulnerability Reporting as described in [SECURITY.md
 
 ## Technical update
 
+### 30 October 2026: durable daily WeChat discovery limits and consistent review records
+
+The public publisher-page scan now records each journal's allowance for the
+Asia/Shanghai date before making its request. Concurrent calls, an interrupted
+process, or a changed publisher-page URL cannot issue a second request for that
+journal on the same day. Repeated calls retain the earlier `attempted`, `ok`, or
+`failed` status; scanning can resume on the next local day. Confirming an
+original WeChat post commits the reviewed issue and its candidate-queue status
+in one transaction, so a failed write leaves neither side partly confirmed.
+
+Account identity, the complete original post, issue number, and stated dates
+still require inspection in a browsable session. The local scan cannot read
+every new post from a WeChat account. No live journal scan, article-level CNKI
+query, or official weekly-report state change was performed for this update.
+See the [public WeChat discovery workflow](references/wechat-public-discovery.md)
+for the procedure and limits. This is a code and documentation update. All 121
+direct and adjacent tests, all 508 offline tests, Ruff, skill validation, and
+the read-only release audit passed. No version tag or GitHub Release was created.
+
 ### 29 October 2026: public WeChat leads and the reporting time for publisher issues
 
 An official WeChat post can support a publisher issue once its account, complete body,

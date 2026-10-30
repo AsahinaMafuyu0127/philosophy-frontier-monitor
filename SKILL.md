@@ -54,14 +54,17 @@ page as an inspected post. See the [same-issue timing comparison](references/chi
 For `search`, `pull-now`, or a weekly report invoked **through this Skill**, read
 [wechat-public-discovery.md](references/wechat-public-discovery.md) and run
 `pfm journal-watch wechat-discovery-plan`, `wechat-discover`, and
-`wechat-candidates` before the requested mode. The discovery command reads at most
-one registered publisher HTTPS page per journal and local day, adding direct
-WeChat links to a Git-ignored candidate queue. For relevant journals, search
-public pages in the session for posts the publisher page did not link, queue an
+`wechat-candidates` before the requested mode. The discovery command reserves a
+journal's Asia/Shanghai daily scan in the Git-ignored database before requesting
+its one registered publisher HTTPS page; an interrupted or concurrent call
+cannot trigger another request that day. It adds direct WeChat links to a
+candidate queue. For relevant journals, search public pages in the session for
+posts the publisher page did not link, queue an
 exact post with `wechat-add-candidate` and its source URL, then inspect the
 original post in the browser. Use `wechat-review` only after checking account
 identity, full visible text, issue and stated date; an account marked `candidate`
-also needs `--confirm-account-identity`. Blocked and incorrect links retain their
+also needs `--confirm-account-identity`. Confirmed issue evidence and queue status
+are written in one transaction. Blocked and incorrect links retain their
 queue status. Do not ask the user for a post URL as a prerequisite. Then run the
 requested mode. If discovery or full-text review is blocked, continue and report
 the coverage gap. A local scheduled CLI run may discover publisher-page links,
