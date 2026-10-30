@@ -12,7 +12,7 @@ pfm journal-watch wechat-discover
 pfm journal-watch wechat-candidates
 ```
 
-`wechat-discover` 对目录内每刊**已登记的刊方 HTTPS 页面**每天至多读取一次。每个响应限 20 秒、750 KB、HTML、20 条公众号文章链接，不跨站跳转；重复调用会返回 `already_scanned`。错误独立保存在 Git 忽略的本地 SQLite 库中。它只从刊方页面抽取直达 `mp.weixin.qq.com/s/...` 的链接，不请求微信原帖，不把候选自动写成官方期次。`wechat-candidates --journal ID` 可筛选队列。页面没有外链或只用二维码时，零候选只表示这个页面未给出可抽取链接。
+`wechat-discover` 对目录内每刊**已登记的刊方 HTTPS 页面**，按 Asia/Shanghai 日期每天至多读取一次。发起网络请求前，程序先在 Git 忽略的本地 SQLite 库中为该刊当天登记 `attempted`；并发调用、进程中断或当天刊方入口 URL 变化都不能再次消耗该刊当天额度。正常完成后登记 `ok` 或 `failed`；重复调用返回 `already_scanned`，其中 `prior_status` 保留原状态，`attempted` 也可能意味着前一次请求中断，下一当地日期仍可重新扫描。每个响应限 20 秒、750 KB、HTML、20 条公众号文章链接，不跨站跳转。它只从刊方页面抽取直达 `mp.weixin.qq.com/s/...` 的链接，不请求微信原帖，不把候选自动写成官方期次。`wechat-candidates --journal ID` 可筛选队列。页面没有外链或只用二维码时，零候选只表示这个页面未给出可抽取链接。
 
 对于未覆盖的刊物，Codex 可在同一会话中用公开网页搜索或交互式浏览器，按账号名称、刊名、年份、期号和“目录”寻找确切原帖。检索时每刊保持有界，记下 URL、来源页面和失败状态。搜索结果不能直接标为 reviewed；只有登记刊方页面抽到的链接自动进入队列。会话检索获得的确切原帖可用 `pfm journal-watch wechat-add-candidate --journal ID --evidence-url URL --source-url HTTPS_SOURCE` 入队；队列明确保留发现来源，不能把搜索摘要伪装为刊方外链。
 
@@ -32,7 +32,7 @@ pfm journal-watch wechat-review --journal ID --year 2026 --issue 5 `
   --evidence-url URL --announcement-on 2026-10-09 --confirm-evidence
 ```
 
-`wechat-review` 必须引用队列内候选；对 `candidate` 身份，还要显式提供 `--confirm-account-identity`。`--confirm-evidence` 是会话核验的人工声明，命令本身不能证明原帖已读。原帖日期只记作公告日。只有原帖明确标出月份才传 `--label-month`；不可按期号推算。逐篇题名须逐项阅读，未读目录不能形成逐篇分母。已复核期次可按首次本地核实时间进入周报与即时拉取的刊方期次栏，历史检索按年份读取；公告日和刊期月份照原证据显示，不据此认定逐篇论文于本窗口发表。
+`wechat-review` 必须引用队列内候选；对 `candidate` 身份，还要显式提供 `--confirm-account-identity`。确认时，已复核期次与候选的 `reviewed` 状态在同一数据库事务中写入；任一步失败都不会留下只更新一侧的记录。`--confirm-evidence` 是会话核验的人工声明，命令本身不能证明原帖已读。原帖日期只记作公告日。只有原帖明确标出月份才传 `--label-month`；不可按期号推算。逐篇题名须逐项阅读，未读目录不能形成逐篇分母。已复核期次可按首次本地核实时间进入周报与即时拉取的刊方期次栏，历史检索按年份读取；公告日和刊期月份照原证据显示，不据此认定逐篇论文于本窗口发表。
 
 ## 无人值守边界
 
