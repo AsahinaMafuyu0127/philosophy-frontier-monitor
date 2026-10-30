@@ -12,7 +12,9 @@ pfm journal-watch wechat-discover
 pfm journal-watch wechat-candidates
 ```
 
-`wechat-discover` 对目录内每刊**已登记的刊方 HTTPS 页面**，按 Asia/Shanghai 日期每天至多读取一次。发起网络请求前，程序先在 Git 忽略的本地 SQLite 库中为该刊当天登记 `attempted`；并发调用、进程中断或当天刊方入口 URL 变化都不能再次消耗该刊当天额度。正常完成后登记 `ok` 或 `failed`；重复调用返回 `already_scanned`，其中 `prior_status` 保留原状态，`attempted` 也可能意味着前一次请求中断，下一当地日期仍可重新扫描。每个响应限 20 秒、750 KB、HTML、20 条公众号文章链接，不跨站跳转。它只从刊方页面抽取直达 `mp.weixin.qq.com/s/...` 的链接，不请求微信原帖，不把候选自动写成官方期次。`wechat-candidates --journal ID` 可筛选队列。页面没有外链或只用二维码时，零候选只表示这个页面未给出可抽取链接。
+`wechat-discover` 对目录内每刊**已登记的刊方 HTTPS 页面**，按用户当地日期每天至多读取一次。时区优先取命令中的 `--timezone`（IANA 标识），其次取 `--config` 指向的私人 watchlist 时区；配置文件不存在时取运行用户本机时区。北京用户使用的 IANA 标识是 `Asia/Shanghai`，它不是所有用户的默认时区。若命令运行在远端主机或容器，须显式传入用户时区或提供已设定该时区的 watchlist，不能把远端系统时区当作用户所在地。例如 `pfm journal-watch wechat-discover --timezone America/New_York`。
+
+发起网络请求前，程序先在 Git 忽略的本地 SQLite 库中为该刊当天登记 `attempted`；并发调用、进程中断或当天刊方入口 URL 变化都不能再次消耗该刊当天额度。正常完成后登记 `ok` 或 `failed`；重复调用返回 `already_scanned`，其中 `prior_status` 保留原状态，`attempted` 也可能意味着前一次请求中断。旧版按北京日期保存的记录会按其实际请求时间换算至当前用户时区，避免切换时区后重复扫描或错过新的当地日期。每个响应限 20 秒、750 KB、HTML、20 条公众号文章链接，不跨站跳转。它只从刊方页面抽取直达 `mp.weixin.qq.com/s/...` 的链接，不请求微信原帖，不把候选自动写成官方期次。`wechat-candidates --journal ID` 可筛选队列。页面没有外链或只用二维码时，零候选只表示这个页面未给出可抽取链接。
 
 对于未覆盖的刊物，Codex 可在同一会话中用公开网页搜索或交互式浏览器，按账号名称、刊名、年份、期号和“目录”寻找确切原帖。检索时每刊保持有界，记下 URL、来源页面和失败状态。搜索结果不能直接标为 reviewed；只有登记刊方页面抽到的链接自动进入队列。会话检索获得的确切原帖可用 `pfm journal-watch wechat-add-candidate --journal ID --evidence-url URL --source-url HTTPS_SOURCE` 入队；队列明确保留发现来源，不能把搜索摘要伪装为刊方外链。
 

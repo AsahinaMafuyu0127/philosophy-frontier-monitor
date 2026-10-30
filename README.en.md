@@ -253,10 +253,32 @@ data through GitHub Private Vulnerability Reporting as described in [SECURITY.md
 
 ## Technical update
 
+### 30 October 2026: WeChat discovery allowances use the user's local day
+
+The one-page-per-journal daily allowance for public publisher-page discovery
+now follows the user's timezone. `journal-watch wechat-discover` uses an explicit
+IANA `--timezone` first, then the private watchlist's timezone, then the
+executing user's OS timezone if no watchlist exists. `Asia/Shanghai` identifies
+Beijing time for users there; it is not a universal default. The Skill passes
+the current user's timezone when the session supplies it. Command output shows
+the selected zone, using `system-local` for the OS fallback. Earlier scan records
+are converted from their actual request instants to the selected local day,
+preventing both duplicate requests and an incorrectly blocked new day after
+a timezone change. New observation timestamps are stored in UTC. Remote
+or container runs need an explicit user timezone or a correctly configured
+watchlist. See the [procedure and limits](references/wechat-public-discovery.md).
+
+This update changes local scanning limits and documentation only. It performed
+no live journal scan, article-level CNKI query, or official weekly-report state
+change; original WeChat posts still require in-session review. It is a code
+and documentation update. All 15 direct tests, 59 direct and adjacent tests,
+513 offline tests, Ruff, skill validation, and the read-only release audit
+passed. No version tag or GitHub Release was created.
+
 ### 30 October 2026: durable daily WeChat discovery limits and consistent review records
 
-The public publisher-page scan now records each journal's allowance for the
-Asia/Shanghai date before making its request. Concurrent calls, an interrupted
+The public publisher-page scan records each journal's daily allowance before
+making its request. Concurrent calls, an interrupted
 process, or a changed publisher-page URL cannot issue a second request for that
 journal on the same day. Repeated calls retain the earlier `attempted`, `ok`, or
 `failed` status; scanning can resume on the next local day. Confirming an
