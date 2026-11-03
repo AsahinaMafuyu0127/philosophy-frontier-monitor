@@ -253,6 +253,30 @@ data through GitHub Private Vulnerability Reporting as described in [SECURITY.md
 
 ## Technical update
 
+### 3 November 2026: a daily worklist for public WeChat candidates
+
+Publisher-page discovery now returns the candidates actually added by that
+invocation, per-journal insertion counts, and queue state totals. Rediscovered
+links are not counted as new. `journal-watch wechat-candidates` defaults to
+pending and blocked posts, with 20 rows per page, journal and status filters,
+and pagination. Longstanding blocks and legacy blocks with unknown start dates
+are highlighted first. Candidates retain their first discovery source, link
+text, observation times, and handling reasons; reviewed and dismissed posts
+remain available through an explicit status filter.
+
+New original-post reviews must record the displayed account name, announcement
+date, and a complete-TOC attestation. These details and the review time are
+committed with the issue evidence and queue status. Missing details in older
+records remain unknown. Queue order and insertion counts do not establish an
+article's publication. Reading the worklist makes no network requests, while
+original posts still require actual in-session inspection. See the
+[daily commands and review requirements](references/wechat-public-discovery.md).
+
+All 75 direct and adjacent tests, 529 offline tests, Ruff, skill validation,
+and the read-only release audit passed. This code and documentation update
+performed no live journal or CNKI scan and advanced no official weekly-report
+state. No version tag or GitHub Release was created.
+
 ### 30 October 2026: WeChat discovery allowances use the user's local day
 
 The one-page-per-journal daily allowance for public publisher-page discovery

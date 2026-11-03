@@ -79,9 +79,11 @@ from .taxonomy import expand_selected_categories, load_taxonomy, require_product
 from .taxonomy_audit import audit_taxonomy_change
 from .wechat_discovery import (
     add_candidate,
+    candidate_queue,
+    candidate_summary,
     discover_publisher_links,
-    list_candidates,
     mark_candidate,
+    normalize_post_url,
     review_candidate_issue,
 )
 from .work_type_reviews import load_work_type_reviews, work_type_evidence_fingerprint
@@ -1095,17 +1097,26 @@ def _journal_watch(args: argparse.Namespace) -> int:
             db_path, catalog_path=catalog_path, journal_id=args.journal,
             user_timezone=user_timezone,
         )
+        new_candidates = [candidate for scan in scans for candidate in scan["new_candidates"]]
         _emit({
-            "ok": True, "operation": "journal-watch", "scans": scans,
+            "ok": True, "operation": "journal-watch",
+            "scans": [
+                {**{key: value for key, value in scan.items() if key != "new_candidates"},
+                 "new_candidates_count": len(scan["new_candidates"])}
+                for scan in scans
+            ],
             "timezone": user_timezone.key if user_timezone is not None else "system-local",
-            "candidates": list_candidates(db_path, args.journal),
+            "new_candidates": new_candidates, "new_candidates_count": len(new_candidates),
+            "candidate_summary": candidate_summary(db_path, args.journal),
             "evidence_status": "unverified_until_original_post_review",
         })
         return 0
     if args.action == "wechat-candidates":
         _emit({
             "ok": True, "operation": "journal-watch",
-            "candidates": list_candidates(db_path, args.journal), "network_queries": 0,
+            **candidate_queue(db_path, args.journal, queue_status=args.queue_status,
+                              limit=args.limit, offset=args.offset),
+            "network_queries": 0,
         })
         return 0
     if args.action == "wechat-add-candidate":
@@ -1141,8 +1152,11 @@ def _journal_watch(args: argparse.Namespace) -> int:
             raise ValueError("journal has no registered WeChat account")
         if journal.wechat_identity_status == "candidate" and not args.confirm_account_identity:
             raise ValueError("candidate account requires --confirm-account-identity")
+        evidence_url = normalize_post_url(args.evidence_url)
+        if evidence_url is None:
+            raise ValueError("invalid WeChat post URL")
         issue = new_observation(
-            args.journal, args.year, args.issue, args.evidence_url, "official-wechat",
+            args.journal, args.year, args.issue, evidence_url, "official-wechat",
             label_month=args.label_month, issue_published_on=args.issue_published_on,
             announcement_on=args.announcement_on, status="reviewed",
             catalog_path=catalog_path,
@@ -1152,6 +1166,7 @@ def _journal_watch(args: argparse.Namespace) -> int:
             note=args.reason or "original post and account identity inspected in session",
             confirmed=True,
             catalog_path=catalog_path,
+            account_display_name=args.account_name, toc_complete=args.toc_complete,
         )
         _emit({
             "ok": True, "operation": "journal-watch", "issue": asdict(issue),
@@ -1504,6 +1519,21 @@ def build_parser() -> argparse.ArgumentParser:
     journal_watch.add_argument("--articles", action="store_true")
     journal_watch.add_argument("--evidence-url")
     journal_watch.add_argument("--source-url")
+    journal_watch.add_argument(
+        "--queue-status", choices=("active", "all", "pending", "blocked", "reviewed", "dismissed"),
+        default="active", help="WeChat worklist filter; active includes pending and blocked",
+    )
+    journal_watch.add_argument(
+        "--limit", type=int, default=20, help="WeChat worklist page size (1..100)",
+    )
+    journal_watch.add_argument("--offset", type=int, default=0, help="WeChat worklist page offset")
+    journal_watch.add_argument(
+        "--account-name", help="account display name read on the original post",
+    )
+    journal_watch.add_argument(
+        "--toc-complete", action="store_true",
+        help="attest that the complete original TOC was read",
+    )
     journal_watch.add_argument(
         "--evidence-kind", choices=("journal-site", "publisher-site", "official-wechat")
     )

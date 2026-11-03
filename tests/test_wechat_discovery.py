@@ -73,21 +73,24 @@ def test_bounded_publisher_scan_persists_candidates_once_per_local_day(tmp_path:
             db, journal_id="xiandai-zhexue", client=client,
             observed_at=now, user_timezone=BEIJING,
         )
-        assert result == [{
-            "journal": "xiandai-zhexue", "status": "ok", "links_found": 1, "error": None,
-        }]
+        assert result[0]["status"] == "ok"
+        assert result[0]["links_found"] == 1
+        assert result[0]["new_candidates"][0]["post_url"] == POST
         repeated = discover_publisher_links(
             db, journal_id="xiandai-zhexue", client=client,
             observed_at=now, user_timezone=BEIJING,
         )[0]
         assert repeated["status"] == "already_scanned"
         assert repeated["prior_status"] == "ok"
+        assert repeated["new_candidates"] == []
     assert calls == 1
     candidate = list_candidates(db)[0]
     assert candidate["post_url"] == POST
     assert candidate["status"] == "pending"
     assert list_issues(db) == ()
-    assert mark_candidate(db, "xiandai-zhexue", POST, status="blocked")["status"] == "blocked"
+    assert mark_candidate(
+        db, "xiandai-zhexue", POST, status="blocked", note="original post challenge page",
+    )["status"] == "blocked"
 
 
 def test_interrupted_request_keeps_daily_reservation(tmp_path: Path) -> None:
@@ -277,7 +280,7 @@ def test_cli_prefers_explicit_zone_then_configured_zone_then_os_local(
         return []
 
     monkeypatch.setattr(cli, "discover_publisher_links", discover)
-    monkeypatch.setattr(cli, "list_candidates", lambda *args: [])
+    monkeypatch.setattr(cli, "candidate_summary", lambda *args: {})
     parser = cli.build_parser()
     base = ["journal-watch", "wechat-discover", "--config", str(config_path)]
     for extra in ([], ["--timezone", "America/New_York"]):
@@ -328,6 +331,7 @@ def test_wechat_review_needs_candidate_and_original_post_attestation(
         "journal-watch", "wechat-review", "--db", str(db),
         "--journal", "xiandai-zhexue", "--year", "2026", "--issue", "5",
         "--evidence-url", POST, "--announcement-on", "2026-10-09",
+        "--account-name", "现代哲学杂志", "--toc-complete",
     ]
     with pytest.raises(ValueError, match="confirm-evidence"):
         parser.parse_args(base).handler(parser.parse_args(base))
@@ -336,6 +340,10 @@ def test_wechat_review_needs_candidate_and_original_post_attestation(
     assert args.handler(args) == 0
     output = json.loads(capsys.readouterr().out)
     assert output["candidate"]["status"] == "reviewed"
+    assert output["candidate"]["reviewed_account_name"] == "现代哲学杂志"
+    assert output["candidate"]["reviewed_announcement_on"] == "2026-10-09"
+    assert output["candidate"]["reviewed_toc_complete"] is True
+    assert output["candidate"]["reviewed_at"].endswith("+00:00")
     assert output["issue"]["evidence_kind"] == "official-wechat"
     assert list_issues(db, reviewed_only=True)[0].announcement_on == "2026-10-09"
 
@@ -352,11 +360,14 @@ def test_wechat_review_rolls_back_issue_if_queue_update_fails(tmp_path: Path) ->
         "journal-watch", "wechat-review", "--db", str(db),
         "--journal", "xiandai-zhexue", "--year", "2026", "--issue", "5",
         "--evidence-url", POST, "--announcement-on", "2026-10-09", "--confirm-evidence",
+        "--account-name", "现代哲学杂志", "--toc-complete",
     ])
     with pytest.raises(sqlite3.IntegrityError, match="review_update_blocked"):
         args.handler(args)
     assert list_issues(db, reviewed_only=True) == ()
     assert list_candidates(db)[0]["status"] == "pending"
+    assert list_candidates(db)[0]["reviewed_at"] is None
+    assert list_candidates(db)[0]["reviewed_account_name"] is None
 
 
 def test_session_candidate_keeps_source_and_candidate_account_needs_extra_review(
@@ -379,3 +390,9 @@ def test_session_candidate_keeps_source_and_candidate_account_needs_extra_review
     with pytest.raises(ValueError, match="confirm-account-identity"):
         args.handler(args)
     assert list_issues(db) == ()
+    confirmed = parser.parse_args([
+        *base, "--confirm-account-identity", "--account-name", "世界哲学",
+        "--toc-complete",
+    ])
+    assert confirmed.handler(confirmed) == 0
+    assert list_issues(db, reviewed_only=True)[0].journal_id == "shijie-zhexue"
