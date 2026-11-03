@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from contextlib import closing
-from datetime import UTC, datetime, tzinfo
+from datetime import UTC, datetime, timedelta, tzinfo
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
@@ -24,6 +24,8 @@ from .official_journals import (
 
 MAX_PAGE_BYTES = 750_000
 MAX_LINKS_PER_PAGE = 20
+CANDIDATE_STATES = ("pending", "blocked", "dismissed", "reviewed")
+LONG_BLOCKED_DAYS = 7
 POST_ID = re.compile(r"/s/[A-Za-z0-9_-]{8,}\Z")
 RAW_POST = re.compile(r"https://mp\.weixin\.qq\.com/s(?:/[A-Za-z0-9_-]+|\?[^\s\"'<>]+)")
 
@@ -170,6 +172,16 @@ def _connect(db_path: Path) -> sqlite3.Connection:
             link_text TEXT NOT NULL, first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending', review_note TEXT,
             PRIMARY KEY (journal_id, post_url))""")
+        candidate_columns = {
+            row["name"] for row in db.execute("PRAGMA table_info(wechat_link_candidates)")
+        }
+        for column, kind in (
+            ("blocked_since", "TEXT"), ("last_checked_at", "TEXT"),
+            ("reviewed_at", "TEXT"), ("reviewed_account_name", "TEXT"),
+            ("reviewed_announcement_on", "TEXT"), ("reviewed_toc_complete", "INTEGER"),
+        ):
+            if column not in candidate_columns:
+                db.execute(f"ALTER TABLE wechat_link_candidates ADD COLUMN {column} {kind}")
     return db
 
 
@@ -209,17 +221,129 @@ def _reserve_scan(
     return prior, scan_id
 
 
+def _candidate_dict(row: sqlite3.Row) -> dict:
+    candidate = dict(row)
+    if candidate["reviewed_toc_complete"] is not None:
+        candidate["reviewed_toc_complete"] = bool(candidate["reviewed_toc_complete"])
+    return candidate
+
+
 def list_candidates(
     db_path: Path = DEFAULT_DB_PATH, journal_id: str | None = None,
 ) -> list[dict]:
     if not db_path.is_file():
         return []
-    with _connect(db_path) as db:
+    with closing(_connect(db_path)) as db:
         rows = db.execute(
             "SELECT * FROM wechat_link_candidates WHERE (? IS NULL OR journal_id=?) "
             "ORDER BY first_seen_at DESC, journal_id, post_url", (journal_id, journal_id),
         ).fetchall()
-    return [dict(row) for row in rows]
+    return [_candidate_dict(row) for row in rows]
+
+
+def _queue_summary(db: sqlite3.Connection, journal_id: str | None, cutoff: str) -> dict:
+    summary = dict.fromkeys(CANDIDATE_STATES, 0)
+    for row in db.execute(
+        "SELECT status, COUNT(*) AS count FROM wechat_link_candidates "
+        "WHERE (:journal IS NULL OR journal_id=:journal) GROUP BY status",
+        {"journal": journal_id},
+    ):
+        summary[row["status"]] = row["count"]
+    summary["total"] = sum(summary.values())
+    blocked = db.execute(
+        "SELECT COUNT(CASE WHEN julianday(blocked_since)<=julianday(:cutoff) THEN 1 END), "
+        "COUNT(CASE WHEN blocked_since IS NULL THEN 1 END) FROM wechat_link_candidates "
+        "WHERE status='blocked' AND (:journal IS NULL OR journal_id=:journal)",
+        {"journal": journal_id, "cutoff": cutoff},
+    ).fetchone()
+    summary["long_blocked"], summary["blocked_age_unknown"] = blocked
+    return summary
+
+
+def candidate_summary(
+    db_path: Path = DEFAULT_DB_PATH, journal_id: str | None = None,
+    *, observed_at: datetime | None = None,
+) -> dict:
+    """Count queue states without returning the historical candidate list."""
+    cutoff = (_user_local_time(observed_at, UTC) - timedelta(days=LONG_BLOCKED_DAYS)).isoformat()
+    if not db_path.is_file():
+        return {**dict.fromkeys(CANDIDATE_STATES, 0), "total": 0,
+                "long_blocked": 0, "blocked_age_unknown": 0}
+    with closing(_connect(db_path)) as db, db:
+        db.execute("BEGIN")
+        return _queue_summary(db, journal_id, cutoff)
+
+
+def candidate_queue(
+    db_path: Path = DEFAULT_DB_PATH, journal_id: str | None = None, *,
+    queue_status: str = "active", limit: int = 20, offset: int = 0,
+    observed_at: datetime | None = None,
+) -> dict:
+    """A bounded worklist: overdue/undated blocks, pending posts, then other blocks."""
+    if queue_status not in {"active", "all", *CANDIDATE_STATES}:
+        raise ValueError("unknown candidate queue status")
+    if not 1 <= limit <= 100 or offset < 0:
+        raise ValueError("candidate queue requires limit 1..100 and nonnegative offset")
+    cutoff = (_user_local_time(observed_at, UTC) - timedelta(days=LONG_BLOCKED_DAYS)).isoformat()
+    result = {
+        "queue_status": queue_status, "limit": limit, "offset": offset,
+        "long_blocked_days": LONG_BLOCKED_DAYS, "matched_count": 0, "has_more": False,
+        "candidates": [],
+    }
+    if not db_path.is_file():
+        result["summary"] = candidate_summary(db_path, journal_id, observed_at=observed_at)
+        return result
+    where = (
+        "(:journal IS NULL OR journal_id=:journal) AND "
+        "(:status='all' OR status=:status OR "
+        "(:status='active' AND status IN ('pending','blocked')))"
+    )
+    params = {"journal": journal_id, "status": queue_status, "cutoff": cutoff,
+              "limit": limit, "offset": offset}
+    with closing(_connect(db_path)) as db, db:
+        db.execute("BEGIN")
+        result["summary"] = _queue_summary(db, journal_id, cutoff)
+        result["matched_count"] = db.execute(
+            f"SELECT COUNT(*) FROM wechat_link_candidates WHERE {where}", params,
+        ).fetchone()[0]
+        rows = db.execute(
+            f"SELECT *, CASE WHEN status='blocked' AND blocked_since IS NULL "
+            "THEN 'blocked_age_unknown' WHEN status='blocked' AND "
+            "julianday(blocked_since)<=julianday(:cutoff) THEN 'long_blocked' "
+            "ELSE status END AS attention_reason "
+            f"FROM wechat_link_candidates WHERE {where} ORDER BY "
+            "CASE WHEN status='blocked' AND (blocked_since IS NULL OR "
+            "julianday(blocked_since)<=julianday(:cutoff)) THEN 0 "
+            "WHEN status='pending' THEN 1 WHEN status='blocked' THEN 2 ELSE 3 END, "
+            "CASE WHEN status='pending' THEN julianday(first_seen_at) END DESC, "
+            "CASE WHEN status='blocked' THEN julianday(COALESCE(blocked_since,first_seen_at)) END, "
+            "journal_id, post_url LIMIT :limit OFFSET :offset", params,
+        ).fetchall()
+        result["candidates"] = [_candidate_dict(row) for row in rows]
+    result["has_more"] = offset + len(rows) < result["matched_count"]
+    return result
+
+
+def _store_candidate(
+    db: sqlite3.Connection, journal_id: str, post_url: str, source_url: str,
+    label: str, timestamp: str,
+) -> tuple[dict, bool]:
+    """Keep the first discovery source and identify inserts within the write transaction."""
+    created = db.execute("""INSERT INTO wechat_link_candidates
+        (journal_id, post_url, source_url, link_text, first_seen_at, last_seen_at, status)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending') ON CONFLICT(journal_id, post_url) DO NOTHING""",
+        (journal_id, post_url, source_url, label[:160], timestamp, timestamp),
+    ).rowcount == 1
+    if not created:
+        db.execute(
+            "UPDATE wechat_link_candidates SET last_seen_at=? WHERE journal_id=? AND post_url=?",
+            (timestamp, journal_id, post_url),
+        )
+    row = db.execute(
+        "SELECT * FROM wechat_link_candidates WHERE journal_id=? AND post_url=?",
+        (journal_id, post_url),
+    ).fetchone()
+    return _candidate_dict(row), created
 
 
 def add_candidate(
@@ -244,20 +368,9 @@ def add_candidate(
     ):
         raise ValueError("journal has no registered WeChat account")
     timestamp = datetime.now(UTC).isoformat(timespec="seconds")
-    with _connect(db_path) as db:
-        db.execute("""INSERT INTO wechat_link_candidates
-            (journal_id, post_url, source_url, link_text, first_seen_at,
-             last_seen_at, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')
-            ON CONFLICT(journal_id, post_url) DO UPDATE SET
-            last_seen_at=excluded.last_seen_at""",
-            (journal_id, normalized, source_url, label[:160], timestamp, timestamp),
-        )
-        db.commit()
-        row = db.execute(
-            "SELECT * FROM wechat_link_candidates WHERE journal_id=? AND post_url=?",
-            (journal_id, normalized),
-        ).fetchone()
-    return dict(row)
+    with closing(_connect(db_path)) as db, db:
+        row, created = _store_candidate(db, journal_id, normalized, source_url, label, timestamp)
+    return {**row, "newly_added": created}
 
 
 def discover_publisher_links(
@@ -288,29 +401,30 @@ def discover_publisher_links(
                 if prior is not None:
                     results.append({"journal": journal.id, "status": "already_scanned",
                                     "prior_status": prior["status"],
-                                    "links_found": prior["links_found"], "error": prior["error"]})
+                                    "links_found": prior["links_found"], "error": prior["error"],
+                                    "new_candidates": []})
                     continue
                 status, links, error = "ok", [], None
                 try:
                     links = extract_post_links(_fetch_page(active, source_url))
                 except ValueError as exc:
                     status, error = "failed", str(exc)
+                new_candidates = []
                 with db:
                     for post_url, label in links:
-                        db.execute("""INSERT INTO wechat_link_candidates
-                            (journal_id, post_url, source_url, link_text, first_seen_at,
-                             last_seen_at, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')
-                            ON CONFLICT(journal_id, post_url) DO UPDATE SET
-                            last_seen_at=excluded.last_seen_at""",
-                            (journal.id, post_url, source_url, label, timestamp, timestamp),
+                        candidate, created = _store_candidate(
+                            db, journal.id, post_url, source_url, label, timestamp,
                         )
+                        if created:
+                            new_candidates.append(candidate)
                     db.execute(
                         "UPDATE wechat_link_scans SET status=?, links_found=?, error=? "
                         "WHERE scan_id=?",
                         (status, len(links), error, scan_id),
                     )
                 results.append({"journal": journal.id, "status": status,
-                                "links_found": len(links), "error": error})
+                                "links_found": len(links), "error": error,
+                                "new_candidates": new_candidates})
     finally:
         if client is None:
             active.close()
@@ -320,12 +434,17 @@ def discover_publisher_links(
 def review_candidate_issue(
     db_path: Path, issue: OfficialIssue, *, note: str | None = None,
     confirmed: bool = False, catalog_path: Path = CATALOG_PATH,
+    account_display_name: str | None = None, toc_complete: bool = False,
 ) -> dict:
     """Promote a confirmed original post and its queue row in one transaction."""
     if not confirmed:
         raise ValueError("reviewed candidate requires original-post confirmation")
     if issue.evidence_kind != "official-wechat" or issue.status != "reviewed":
         raise ValueError("candidate review requires a reviewed official WeChat issue")
+    if not account_display_name or not account_display_name.strip():
+        raise ValueError("candidate review requires the original post's account display name")
+    if toc_complete is not True or not issue.announcement_on:
+        raise ValueError("candidate review requires a complete TOC and stated announcement date")
     _validate_issue(issue, load_catalog(catalog_path))
     with closing(_connect(db_path)) as db, db:
         db.execute("BEGIN IMMEDIATE")
@@ -336,46 +455,55 @@ def review_candidate_issue(
         if candidate is None or candidate["status"] not in {"pending", "blocked"}:
             raise ValueError("wechat-review requires an existing pending or blocked candidate")
         _write_issue(db, issue)
+        reviewed_at = datetime.now(UTC).isoformat(timespec="seconds")
         db.execute(
-            "UPDATE wechat_link_candidates SET status='reviewed', review_note=? "
+            "UPDATE wechat_link_candidates SET status='reviewed', review_note=?, "
+            "reviewed_account_name=?, reviewed_announcement_on=?, reviewed_toc_complete=1, "
+            "reviewed_at=?, last_checked_at=? "
             "WHERE journal_id=? AND post_url=?",
             (note or "original post and account identity inspected in session",
+             account_display_name.strip(), issue.announcement_on, reviewed_at, reviewed_at,
              issue.journal_id, issue.evidence_url),
         )
         reviewed = db.execute(
             "SELECT * FROM wechat_link_candidates WHERE journal_id=? AND post_url=?",
             (issue.journal_id, issue.evidence_url),
         ).fetchone()
-    return dict(reviewed)
+    return _candidate_dict(reviewed)
 
 
 def mark_candidate(
     db_path: Path, journal_id: str, post_url: str, *, status: str,
-    note: str | None = None, confirmed: bool = False,
+    note: str | None = None,
 ) -> dict:
-    if status not in {"blocked", "dismissed", "reviewed"}:
+    if status not in {"blocked", "dismissed"}:
         raise ValueError("invalid candidate status")
-    if status == "reviewed" and not confirmed:
-        raise ValueError("reviewed candidate requires original-post confirmation")
+    if not note or not note.strip():
+        raise ValueError("blocked or dismissed candidate requires a reason")
     normalized = normalize_post_url(post_url)
     if normalized is None:
         raise ValueError("invalid WeChat post URL")
-    with _connect(db_path) as db:
+    with closing(_connect(db_path)) as db, db:
+        db.execute("BEGIN IMMEDIATE")
         row = db.execute(
             "SELECT * FROM wechat_link_candidates WHERE journal_id=? AND post_url=?",
             (journal_id, normalized),
         ).fetchone()
         if row is None:
             raise ValueError("unknown WeChat candidate")
-        if row["status"] == "reviewed" and status != "reviewed":
+        if row["status"] == "reviewed":
             raise ValueError("reviewed candidate cannot be downgraded")
+        checked_at = datetime.now(UTC).isoformat(timespec="seconds")
+        blocked_since = row["blocked_since"]
+        if status == "blocked" and (row["status"] != "blocked" or blocked_since is None):
+            blocked_since = checked_at
         db.execute(
-            "UPDATE wechat_link_candidates SET status=?, review_note=? "
-            "WHERE journal_id=? AND post_url=?", (status, note, journal_id, normalized),
+            "UPDATE wechat_link_candidates SET status=?, review_note=?, blocked_since=?, "
+            "last_checked_at=? WHERE journal_id=? AND post_url=?",
+            (status, note.strip(), blocked_since, checked_at, journal_id, normalized),
         )
-        db.commit()
         updated = db.execute(
             "SELECT * FROM wechat_link_candidates WHERE journal_id=? AND post_url=?",
             (journal_id, normalized),
         ).fetchone()
-    return dict(updated)
+    return _candidate_dict(updated)

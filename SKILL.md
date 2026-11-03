@@ -62,13 +62,22 @@ discovery command reserves a journal's user-local daily scan in the Git-ignored
 database before requesting
 its one registered publisher HTTPS page; an interrupted or concurrent call
 cannot trigger another request that day. It adds direct WeChat links to a
-candidate queue. For relevant journals, search public pages in the session for
+candidate queue. Read `new_candidates` and state counts from the discovery
+output first; repeated links are not new candidates. Then use the default
+`wechat-candidates` active worklist (20 rows) and `--journal`, `--queue-status`,
+`--limit`, and `--offset` as needed. Long-blocked posts and legacy blocks with
+unknown start dates appear before pending posts; preserve their reasons and
+discovery sources. Reviewed and dismissed posts require an explicit status
+filter to appear. For relevant journals, search public pages in the session for
 posts the publisher page did not link, queue an
 exact post with `wechat-add-candidate` and its source URL, then inspect the
 original post in the browser. Use `wechat-review` only after checking account
-identity, full visible text, issue and stated date; an account marked `candidate`
-also needs `--confirm-account-identity`. Confirmed issue evidence and queue status
-are written in one transaction. Blocked and incorrect links retain their
+identity, full visible text, issue and stated date. Supply the observed
+`--account-name`, `--announcement-on`, `--toc-complete`, and `--confirm-evidence`;
+an account marked `candidate` also needs `--confirm-account-identity`. The
+structured review details, issue evidence, and queue status are written in one
+transaction. Missing details in old reviewed rows remain unknown. Blocking or
+dismissing requires a nonempty `--reason`. Blocked and incorrect links retain their
 queue status. Do not ask the user for a post URL as a prerequisite. Then run the
 requested mode. If discovery or full-text review is blocked, continue and report
 the coverage gap. A local scheduled CLI run may discover publisher-page links,

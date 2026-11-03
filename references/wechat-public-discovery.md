@@ -18,6 +18,35 @@ pfm journal-watch wechat-candidates
 
 对于未覆盖的刊物，Codex 可在同一会话中用公开网页搜索或交互式浏览器，按账号名称、刊名、年份、期号和“目录”寻找确切原帖。检索时每刊保持有界，记下 URL、来源页面和失败状态。搜索结果不能直接标为 reviewed；只有登记刊方页面抽到的链接自动进入队列。会话检索获得的确切原帖可用 `pfm journal-watch wechat-add-candidate --journal ID --evidence-url URL --source-url HTTPS_SOURCE` 入队；队列明确保留发现来源，不能把搜索摘要伪装为刊方外链。
 
+## 日常待办与新增候选
+
+`wechat-discover` 输出本次命令实际插入的 `new_candidates`、`new_candidates_count`、
+各刊扫描结果和 `candidate_summary` 状态计数，不再随每轮扫描输出整个历史队列。
+新增由同一数据库事务内的插入结果判断；重复发现、当天已扫描或同一秒内已有的记录
+均不会被重复计为新增。每条候选保留首次发现的 `source_url`、链接文字和首次时间；
+重复发现只更新最后观察时间，保留待核、受阻、排除或已复核的原状态与备注。
+会话手动入队的输出用 `newly_added` 标出是否首次加入。
+
+日常先看本轮新增，再读取有界待办：
+
+```powershell
+pfm journal-watch wechat-candidates
+pfm journal-watch wechat-candidates --journal xiandai-zhexue --queue-status pending
+pfm journal-watch wechat-candidates --queue-status blocked --limit 20 --offset 20
+pfm journal-watch wechat-candidates --queue-status all --limit 20
+```
+
+默认 `--queue-status active` 只列待核和受阻项，每页 20 条；`--limit` 允许 1 至 100，
+`--offset` 从 0 开始。`matched_count` 是筛选后的总数，`has_more` 提示是否还有下一页；
+`summary` 统计所选刊物的全部状态，已复核与已排除项保留但不占默认待办页。
+连续受阻满七个完整日（7×24 小时）的候选和受阻起点未知的旧记录优先显示，
+其后是新近入队的待核项及其他受阻项。`attention_reason` 分别标为
+`long_blocked`、`blocked_age_unknown`、`pending` 或 `blocked`。
+受阻时长按已记录的 `blocked_since` 计算，重复标为受阻保留连续起点并更新
+`last_checked_at`；旧库没有起点时留空，不用首次发现时间伪造受阻时间。
+这只是候选处理顺序，不是期刊等级、论文相关性评分或发表新近性判断。
+列队列、筛选和分页均不发起网络请求，也不增加每日扫描额度。
+
 ## 会话内核验
 
 逐一打开候选原帖，核实 HTTPS 主机、显示账号、原帖日期、刊名、年份与期号、正文目录的完整可读性，并与刊方身份来源交叉核对。候选账号还须额外核实账号与该刊编辑部的关系。遇到验证页、登录、正文残缺或错刊，保留状态与理由：
@@ -31,10 +60,25 @@ pfm journal-watch wechat-dismiss --journal ID --evidence-url URL --reason "错�
 
 ```powershell
 pfm journal-watch wechat-review --journal ID --year 2026 --issue 5 `
-  --evidence-url URL --announcement-on 2026-10-09 --confirm-evidence
+  --evidence-url URL --announcement-on 2026-10-09 `
+  --account-name "原帖显示的账号名" --toc-complete --confirm-evidence
 ```
 
-`wechat-review` 必须引用队列内候选；对 `candidate` 身份，还要显式提供 `--confirm-account-identity`。确认时，已复核期次与候选的 `reviewed` 状态在同一数据库事务中写入；任一步失败都不会留下只更新一侧的记录。`--confirm-evidence` 是会话核验的人工声明，命令本身不能证明原帖已读。原帖日期只记作公告日。只有原帖明确标出月份才传 `--label-month`；不可按期号推算。逐篇题名须逐项阅读，未读目录不能形成逐篇分母。已复核期次可按首次本地核实时间进入周报与即时拉取的刊方期次栏，历史检索按年份读取；公告日和刊期月份照原证据显示，不据此认定逐篇论文于本窗口发表。
+新执行的 `wechat-review` 必须引用待核或受阻候选，并明确提供原帖账号显示名、公告日和
+完整目录声明；对 `candidate` 身份，还要显式提供 `--confirm-account-identity`。
+账号名应按原帖显示填写并与刊方身份来源核对，命令不会根据名称相同自动证明账号身份。
+账号名、公告日、目录完整性、UTC 复核时间和备注，与已复核期次及候选 `reviewed` 状态
+在同一事务内保存；任一步失败全部撤回。`--confirm-evidence` 和 `--toc-complete` 是
+人工阅读声明，命令本身不能证明正文已读，也不会自动导入逐篇题名。
+旧库已复核记录保留原状态，缺少的结构化复核细节保持空值；不要补写未经复读的信息。
+受阻或排除操作必须提供非空理由；队列清理不能把已复核候选降级，也不能直接把候选
+标成已复核而绕过期次的事务写入。分享链接中的跟踪参数会规范化后再匹配队列原帖。
+
+原帖日期只记作公告日。只有原帖明确标出月份才传 `--label-month`；不可按期号推算。
+逐篇题名须逐项阅读，未读目录不能形成逐篇分母。周报、即时拉取和历史检索继续只读取
+已复核的刊方期次证据，不把新增候选数、处理优先顺序或目录完整声明当成逐篇发表证明。
+已复核期次可按首次本地核实时间进入周报与即时拉取的刊方期次栏，历史检索按年份读取；
+公告日和刊期月份照原证据显示，不据此认定逐篇论文于本窗口发表。
 
 ## 无人值守边界
 
