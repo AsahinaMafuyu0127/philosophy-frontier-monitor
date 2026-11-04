@@ -1236,6 +1236,8 @@ def test_weekly_pipeline_resolves_only_records_new_since_baseline(monkeypatch):
     assert notification_saved is True
     assert result.stats["new_source_records"] == 1
     assert result.stats["notified"] == 1
+    assert result.started_at == result.completed_at == RUN_TIME
+    assert result.window_end <= result.started_at
     assert "Knowledge in Plato's Theaetetus" in result.report_markdown
     assert run_context is not None
     assert run_context["taxonomy_snapshot_id"] == "philpapers-fixture:2026-09-05"
@@ -1804,3 +1806,22 @@ def test_completed_week_cannot_be_committed_twice(monkeypatch):
             )
 
     assert len(calls) == call_count
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_future_weekly_window_rejected_before_runtime_sources_or_state(monkeypatch, dry_run):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("future windows must fail before runtime, sources, or writes")
+
+    monkeypatch.setattr(pipeline, "_load_runtime", forbidden)
+    with StateStore(":memory:") as state:
+        before = tuple(state.connection.iterdump())
+        with pytest.raises(PipelineError, match="weekly window has not ended"):
+            run_weekly(
+                CONFIG, state, now=RUN_TIME,
+                window_start=WINDOW_START,
+                window_end=datetime(2026, 9, 14, tzinfo=UTC),
+                dry_run=dry_run, feed_loader=forbidden, oai_loader=forbidden,
+                report_writer=forbidden,
+            )
+        assert tuple(state.connection.iterdump()) == before

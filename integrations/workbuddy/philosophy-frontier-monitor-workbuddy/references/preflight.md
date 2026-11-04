@@ -4,7 +4,7 @@ Run the packaged `scripts/preflight.py` with the project's installed Python befo
 
 ```powershell
 cd D:\philosophy-frontier-monitor
-.\.venv\Scripts\python.exe var\workbuddy-pilot-0.2.9\philosophy-frontier-monitor-workbuddy\scripts\preflight.py
+.\.venv\Scripts\python.exe var\workbuddy-pilot-0.2.10\philosophy-frontier-monitor-workbuddy\scripts\preflight.py
 ```
 
 The helper performs local reads only. It checks the package's public hashes against the intended project, invokes read-only `pfm doctor` and `pfm onboarding-status`, loads the **configured** taxonomy with the project's validation code, and reads configured-feed baseline presence through a read-only SQLite connection. It returns only counts, booleans, and safe error codes; it does not print the research description, category names, feed URLs, credentials, or database contents.

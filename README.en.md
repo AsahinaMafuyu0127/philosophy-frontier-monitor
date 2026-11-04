@@ -253,7 +253,15 @@ data through GitHub Private Vulnerability Reporting as described in [SECURITY.md
 
 ## Technical update
 
-### 4 November 2026: reproducible result summaries for the WorkBuddy pilot
+### 4 November 2026: completed weekly windows and WorkBuddy result audits
+
+Weekly previews and commits now reject unfinished windows before source reads.
+If the latest completed week already succeeded, inspect its report or verify
+duplicate rejection, then wait for the next complete week. OAI caching rejects
+future coverage and only reuses the prefix of legacy intervals that existed at
+harvest time. Pilot package 0.2.10 audits execution timestamps; missing timestamps
+remain unverified. Formal results are not paired with preview queues, and
+acceptance compares logical database contents rather than row counts alone.
 
 Pilot package 0.2.9 adds a read-only audit shared by search, on-demand pulls, and
 weekly reports. Saved results and review queues produce record locators, exact
@@ -265,13 +273,13 @@ summary. Work identity still requires inspecting the sources. The reproducible
 builder includes allowlisted tracked public files and verifies their SHA-256
 manifest. See the [pilot and audit guide](references/workbuddy-local-pilot.md).
 
-All 11 direct regressions and 540 offline tests, Ruff, skill validation, and the
-read-only release audit passed.
-Coverage includes links, mixed-run rejection, exact counts, failed sources, missing
-fields in all three modes, and public packaging boundaries. Existing local run
-artifacts were also audited against their original data.
-This adapter and documentation update created no version tag or GitHub Release,
-made no live paper-source requests, and advanced no official weekly-report state.
+The 0.2.9 audit passed its 11 direct regressions and 540 offline tests.
+Version 0.2.10 adds nine time-boundary and state-protection cases; all 549 offline
+tests, Ruff, skill validation, and the read-only release audit passed. Coverage
+includes rejection before source reads, legacy cache coverage, execution-time
+evidence, and existing behavior in all three modes. The core fix and adapter
+package are delivered together. Premature submissions do not count as valid
+production-weekly acceptance. No version tag or GitHub Release was created.
 
 <details>
 <summary>Show earlier technical updates</summary>

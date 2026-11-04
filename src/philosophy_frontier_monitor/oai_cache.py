@@ -235,6 +235,8 @@ class OAIHarvestCache:
         """Return one exact window, fetching only cache gaps from the network."""
 
         start, end = _normalize_window(window_start, window_end)
+        if end > datetime.now(UTC):
+            raise OAIError("OAI window has not ended; future coverage cannot be cached")
         endpoint_hash = _endpoint_hash(endpoint)
         initial_coverage = self._coverage(endpoint_hash)
         network_snapshots: list[OAIWindowSnapshot] = []
@@ -628,6 +630,8 @@ class OAIHarvestCache:
             (session_id,),
         ).fetchall()
         checked_at = datetime.fromisoformat(session["updated_at"])
+        if end > checked_at:
+            raise OAIError("OAI coverage end exceeds harvest completion time")
         try:
             with self.connection:
                 self.connection.executemany(
@@ -816,6 +820,8 @@ class OAIHarvestCache:
     ) -> int:
         """Atomically store a complete snapshot and then extend cache coverage."""
 
+        if snapshot.checked_at.tzinfo is None or snapshot.window_end > snapshot.checked_at:
+            raise OAIError("OAI coverage end exceeds harvest completion time")
         cached_at = snapshot.checked_at.astimezone(UTC).isoformat()
         events = snapshot.record_events or tuple(snapshot.records_by_key.values())
         rows = []
@@ -889,6 +895,9 @@ class OAIHarvestCache:
             start = datetime.fromisoformat(row["window_start"])
             end = datetime.fromisoformat(row["window_end"])
             checked_at = datetime.fromisoformat(row["checked_at"])
+            end = min(end, checked_at)
+            if start >= end:
+                continue
             if not merged or start > merged[-1][1]:
                 merged.append((start, end, checked_at))
                 continue
@@ -916,17 +925,26 @@ class OAIHarvestCache:
     def _coverage(self, endpoint_hash: str) -> tuple[tuple[datetime, datetime], ...]:
         rows = self.connection.execute(
             """
-            SELECT window_start, window_end
+            SELECT window_start, window_end, checked_at
             FROM oai_coverage
             WHERE endpoint_hash = ?
             ORDER BY window_start, window_end
             """,
             (endpoint_hash,),
         ).fetchall()
-        return tuple(
-            (datetime.fromisoformat(row["window_start"]), datetime.fromisoformat(row["window_end"]))
+        # Legacy caches may have claimed future coverage. Only trust the prefix
+        # that existed at harvest time, even after the wall clock passes its end.
+        intervals = (
+            (
+                datetime.fromisoformat(row["window_start"]),
+                min(
+                    datetime.fromisoformat(row["window_end"]),
+                    datetime.fromisoformat(row["checked_at"]),
+                ),
+            )
             for row in rows
         )
+        return tuple((start, end) for start, end in intervals if start < end)
 
     def _snapshot_from_cache(
         self,

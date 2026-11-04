@@ -309,6 +309,8 @@ def load_recent_window(
     end = window_end.astimezone(UTC)
     if start >= end:
         raise OAIError("OAI window start must be earlier than its end")
+    if end > datetime.now(UTC):
+        raise OAIError("OAI window has not ended; future coverage cannot be harvested")
 
     harvested = 0
     in_window = 0

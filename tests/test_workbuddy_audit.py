@@ -310,6 +310,48 @@ def test_builder_public_allowlist_hashes_and_reproducibility(tmp_path):
         assert not any("private" in name or "watchlist" in name for name in archive.namelist())
         prefix = "philosophy-frontier-monitor-workbuddy/"
         manifest = json.loads(archive.read(prefix + "references/package-manifest.json"))
-        assert manifest["package_version"] == "0.2.9"
+        assert manifest["package_version"] == "0.2.10"
         for member, expected in {**manifest["snapshot_files"], **manifest["package_files"]}.items():
             assert builder.digest(archive.read(member)) == expected
+
+
+def test_weekly_audit_rejects_future_and_historically_premature_results(helper):
+    result = {
+        "ok": True,
+        "operation": "weekly-run",
+        "dry_run": False,
+        "stats": {},
+        "window_start": "2026-01-01T00:00:00Z",
+        "window_end": "2999-01-08T00:00:00Z",
+    }
+    with pytest.raises(ValueError, match="window has not ended"):
+        helper.audit(result, None, [])
+    result.update(
+        window_end="2026-01-08T00:00:00Z",
+        started_at="2026-01-04T00:00:00Z",
+        completed_at="2026-01-04T00:01:00Z",
+    )
+    with pytest.raises(ValueError, match="timestamps are inconsistent"):
+        helper.audit(result, None, [])
+    result.update(started_at="2026-01-08T08:00:00+08:00", completed_at="2026-01-08T00:01:00Z")
+    assert helper.audit(result, None, [])["weekly_timing"]["status"] == "completed_window_verified"
+    del result["started_at"]
+    assert helper.audit(result, None, [])["weekly_timing"]["status"] == "execution_time_unverified"
+
+
+@pytest.mark.parametrize("command", ["pull-now", "catch-up"])
+def test_monitoring_cli_rejects_future_as_of_before_cache_or_state(monkeypatch, capsys, command):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    import philosophy_frontier_monitor.cli as cli
+
+    config = SimpleNamespace(storage=SimpleNamespace(state_database=Mock(is_file=lambda: True)))
+    monkeypatch.setattr(cli, "load_watchlist", lambda path: config)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("future as-of must not open state or cache")
+
+    monkeypatch.setattr(cli, "_oai_cache_path", forbidden)
+    assert cli.main([command, "--as-of", "2999-01-01T00:00:00Z"]) == 1
+    assert "--as-of cannot be in the future" in capsys.readouterr().out

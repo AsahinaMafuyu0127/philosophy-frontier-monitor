@@ -8,7 +8,7 @@ import json
 import re
 import sys
 from collections import Counter
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -179,12 +179,35 @@ def display_sections(result: dict) -> dict:
     return output
 
 
+def weekly_timing(result: dict) -> dict:
+    if result.get("operation") != "weekly-run":
+        return {"status": "not_applicable"}
+    start, end = (instant(result.get(key)) for key in ("window_start", "window_end"))
+    observed = datetime.now(UTC)
+    if start >= end:
+        raise ValueError("weekly window start must precede its end")
+    if end > observed:
+        raise ValueError("weekly window has not ended at audit time")
+    evidence = {key: field(result, key, "result") for key in ("started_at", "completed_at")}
+    if any(item["state"] != "value" for item in evidence.values()):
+        return {
+            "status": "execution_time_unverified",
+            "evidence": evidence,
+            "note": "A past window today does not prove it had ended when the run started.",
+        }
+    started, completed = (instant(result[key]) for key in ("started_at", "completed_at"))
+    if end > started or completed < started or completed > observed:
+        raise ValueError("weekly window or execution timestamps are inconsistent")
+    return {"status": "completed_window_verified", "evidence": evidence}
+
+
 def audit(
     result: dict, queue: dict | None, targets: list[str], reviews: dict | None = None
 ) -> dict:
     mode = result.get("operation")
     if mode not in MODES or result.get("ok") is not True:
         raise ValueError("expected a successful search, pull-now, or weekly-run result")
+    timing = weekly_timing(result)
     binding = bind_queue(result, queue, mode)
     groups = {key: object_list(result, key) for key in SEARCH_LISTS} if mode == "search" else {}
     if mode == "search" and type(result.get("total_matches")) is not int:
@@ -296,6 +319,7 @@ def audit(
         "operation": "pfm-result-audit",
         "mode": mode,
         "queue_binding": binding,
+        "weekly_timing": timing,
         "run": {
             key: field(result, key, "result")
             for key in (
@@ -304,6 +328,8 @@ def audit(
                 "window_end",
                 "request_id",
                 "run_id",
+                "started_at",
+                "completed_at",
                 "dry_run",
             )
         },
@@ -396,6 +422,7 @@ def markdown(summary: dict) -> str:
     for key, value in summary["run"].items():
         if value["state"] != "absent":
             lines.append(f"- {key}：{field_text(value)}（`{value['locator']}`）。")
+    lines.append(f"- 周窗口时间核对：{summary['weekly_timing']['status']}。")
     lines += ["", "## 原始计数", "", "| 字段 | 值 | 依据 |", "|---|---|---|"]
     for key, value in summary["reported_counts"].items():
         lines.append(f"| {key} | {field_text(value)} | `{value['locator']}` |")

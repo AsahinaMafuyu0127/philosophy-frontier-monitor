@@ -270,6 +270,8 @@ class WeeklyRunResult:
     report_path: Path | None
     report_markdown: str
     stats: dict[str, int]
+    started_at: datetime
+    completed_at: datetime
     human_review_items: tuple[HumanReviewItem, ...] = ()
 
 
@@ -3442,12 +3444,6 @@ def run_weekly(
     started_at = now or datetime.now(UTC)
     if started_at.tzinfo is None:
         raise PipelineError("run time must be timezone-aware")
-    snapshot, profile = _load_runtime(
-        config,
-        now=started_at,
-        allow_development_fixture=dry_run,
-    )
-    profile_snapshot = None if dry_run else _profile_state_snapshot(config, snapshot, profile)
     if (window_start is None) != (window_end is None):
         raise PipelineError("window_start and window_end must be provided together")
     if window_start is None or window_end is None:
@@ -3462,7 +3458,15 @@ def run_weekly(
     window_end = window_end.astimezone(UTC)
     if window_start >= window_end:
         raise PipelineError("window_start must be earlier than window_end")
+    if window_end > started_at:
+        raise PipelineError("weekly window has not ended; use the latest completed week")
 
+    snapshot, profile = _load_runtime(
+        config,
+        now=started_at,
+        allow_development_fixture=dry_run,
+    )
+    profile_snapshot = None if dry_run else _profile_state_snapshot(config, snapshot, profile)
     feed_keys = {feed.feed_key for feed in config.feeds}
     missing_baselines = state.missing_feed_baselines(feed_keys)
     if missing_baselines:
@@ -3956,6 +3960,7 @@ def run_weekly(
 
     run_id = f"pfm:run:{uuid.uuid4()}"
     report_path: Path | None = None
+    completed_at = started_at if fixed_now else datetime.now(UTC)
     if not dry_run:
         local_start = window_start.astimezone(config.timezone).date().isoformat()
         local_end = window_end.astimezone(config.timezone).date().isoformat()
@@ -4018,6 +4023,8 @@ def run_weekly(
         report_path=report_path,
         report_markdown=report_markdown,
         stats=stats,
+        started_at=started_at,
+        completed_at=completed_at,
         human_review_items=tuple(human_review_items),
     )
 
