@@ -3,7 +3,7 @@ name: philosophy-frontier-monitor-workbuddy
 description: Use the locally installed Philosophy Frontier Monitor to search philosophy papers, pull recent records, and preview weekly reports with source evidence.
 description_zh: 在 WorkBuddy 中调用本机哲学论文监测项目，依来源证据检索、即时拉取和预览周报。
 description_en: Use a local Philosophy Frontier Monitor installation for evidence-based paper search and reports.
-version: 0.2.9
+version: 0.2.10
 author: Asahina Mafuyu
 ---
 
@@ -16,6 +16,16 @@ Read @references/package-manifest.json. Compare the project root `SKILL.md` SHA-
 Run `.venv\Scripts\pfm.exe` from the verified project root on Windows. Before a monitoring mode, use the read-only `scripts/preflight.py` as described in @references/preflight.md. It checks the taxonomy actually configured in the private watchlist and the baseline without printing research text or feed URLs. `pfm doctor` uses an offline taxonomy fixture for its own check; that fixture is not the configured taxonomy. Check the selected CLI command's `--help`. An unrecorded optional PhilPapers account decision does not block historical search.
 
 For historical search use `pfm search` with the user's category and year scope. For recent records use `pfm pull-now`. For weekly reports start with `pfm weekly-run --dry-run` and inspect the private review queue before a committed run. Do not silently broaden scope, increase fallback budgets, or treat feed inventory as a complete historical index.
+
+Weekly previews and committed runs must use an already completed window.
+The default selects the latest completed week, not the next missing window.
+If it already succeeded, inspect that report and test duplicate rejection;
+wait for the next complete week rather than requesting an unfinished window.
+For acceptance, compare logical SQLite contents, not only table counts.
+A formal run cannot take `--review-queue-file`; audit its result without the
+preview queue. Check the result's execution timestamps against the window.
+Missing execution-time evidence stays unverified. A zero-result commit does
+not test nonzero notification writes.
 
 Before explaining any mode's results, follow @references/audit-output.md and run the bundled `scripts/audit_result.py` against the saved final result JSON and corresponding private queue. Include `--record` for named PhilPapers works and `--identity-reviews` only for the decision file actually supplied to that run. Save its audit JSON and Markdown summary in new private files. Use those exact counts, source statuses, and original-field locators when composing the report; do not estimate them or invent alternative field names. Preserve absent, null, false, and zero as different states. Keep confirmed-result supporting queue entries separate from unresolved work. The helper does not decide work identity or publication status. If it rejects mismatched files or malformed JSON, correct the inputs before presenting a final report.
 

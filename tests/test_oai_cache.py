@@ -589,3 +589,57 @@ def test_oai_cache_cli_status_and_confirmed_prune(workspace_tmp_path, capsys):
     pruned = json.loads(capsys.readouterr().out)
     assert pruned["record_events_deleted"] == 1
     assert pruned["weekly_state_advanced"] is False
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_future_oai_window_rejected_before_network_even_with_legacy_hit(cached):
+    from philosophy_frontier_monitor.sources.philarchive_oai import load_recent_window
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("future windows must never reach the network")
+
+    future = datetime(2999, 1, 1, tzinfo=UTC)
+    with OAIHarvestCache(":memory:", network_loader=forbidden) as cache:
+        if cached:
+            cache.connection.execute(
+                "INSERT INTO oai_coverage VALUES (?, ?, ?, ?)",
+                (_endpoint_hash(ENDPOINT), START.isoformat(), future.isoformat(), END.isoformat()),
+            )
+            cache.connection.commit()
+        before = tuple(cache.connection.iterdump())
+        with pytest.raises(OAIError, match="window has not ended"):
+            cache.load_window(START, future, ENDPOINT)
+        assert tuple(cache.connection.iterdump()) == before
+    with pytest.raises(OAIError, match="window has not ended"):
+        load_recent_window(START, future)
+
+
+def test_legacy_oai_coverage_only_reuses_prefix_existing_at_harvest_time():
+    calls = []
+    observed = START + timedelta(days=2)
+
+    def loader(start, end, endpoint):
+        calls.append((start, end))
+        return snapshot(start, end)
+
+    with OAIHarvestCache(":memory:", network_loader=loader) as cache:
+        cache.connection.execute(
+            "INSERT INTO oai_coverage VALUES (?, ?, ?, ?)",
+            (_endpoint_hash(ENDPOINT), START.isoformat(), END.isoformat(), observed.isoformat()),
+        )
+        cache.connection.commit()
+        result = cache.load_window(START, END, ENDPOINT)
+        assert calls == [(observed, END)]
+        assert result.retrieval_mode == "incremental_refresh"
+        assert cache._coverage(_endpoint_hash(ENDPOINT)) == ((START, END),)
+
+
+def test_oai_snapshot_cannot_store_coverage_beyond_its_completion():
+    from dataclasses import replace
+
+    bad = replace(snapshot(START, END), checked_at=START)
+    with OAIHarvestCache(":memory:") as cache:
+        before = tuple(cache.connection.iterdump())
+        with pytest.raises(OAIError, match="coverage end exceeds"):
+            cache._commit_snapshot(_endpoint_hash(ENDPOINT), bad)
+        assert tuple(cache.connection.iterdump()) == before

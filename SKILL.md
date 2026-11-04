@@ -224,6 +224,23 @@ does not establish a first publication date or confirmed interest-category match
 For an explicit search, do not execute the monitoring workflow's automatic
 catch-up instruction. Search does not change subscriptions, weekly state, or caches.
 
+## Completed weekly windows
+
+Both a weekly preview and a committed weekly run require a window that has ended
+at execution time. The default selects the latest completed week; it does not
+search for an uncommitted window. If that week already succeeded, inspect the
+existing report or verify duplicate rejection. Wait for the next complete week;
+never move the boundary into the future to obtain a fresh acceptance run.
+`pull-now` keeps its rolling window ending at the request instant; historical
+search keeps its independent bibliography-year filters.
+
+For weekly acceptance, save execution timestamps, report bytes, and logical
+SQLite content summaries before and after submission and duplicate rejection.
+Equal table counts do not prove unchanged records. Formal runs cannot use
+`--review-queue-file`; generate a preview queue with `--dry-run`, and audit the
+formal result without attaching that earlier queue. A zero-result run tests
+window submission, but does not exercise nonzero notification writes.
+
 ## Installation and runtime root
 
 For installation, environment setup, or first deployment, read

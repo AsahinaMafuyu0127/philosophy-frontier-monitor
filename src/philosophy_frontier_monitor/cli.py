@@ -753,6 +753,8 @@ def _weekly_run(args: argparse.Namespace) -> int:
         "operation": "weekly-run",
         "dry_run": result.dry_run,
         "run_id": result.run_id,
+        "started_at": result.started_at,
+        "completed_at": result.completed_at,
         "window_start": result.window_start,
         "window_end": result.window_end,
         "report_path": str(result.report_path) if result.report_path else None,
@@ -810,6 +812,8 @@ def _deliver_on_demand_report(
 def _pull_now(args: argparse.Namespace) -> int:
     config = load_watchlist(args.config)
     as_of = _parse_instant(args.as_of, "--as-of")
+    if as_of is not None and as_of > datetime.now(UTC):
+        raise ValueError("--as-of cannot be in the future")
     review_queue_path = (
         _review_queue_path(args.review_queue_file, config) if args.review_queue_file else None
     )
@@ -1380,6 +1384,8 @@ def _catch_up(args: argparse.Namespace) -> int:
     if not config.storage.state_database.is_file():
         raise ValueError(f"状态库不存在：{config.storage.state_database}；请先运行 pfm baseline。")
     as_of = _parse_instant(args.as_of, "--as-of")
+    if as_of is not None and as_of > datetime.now(UTC):
+        raise ValueError("--as-of cannot be in the future")
     cache_path = _oai_cache_path(config)
     with collect_request_telemetry() as events, ExitStack() as stack:
         state = stack.enter_context(StateStore(config.storage.state_database))

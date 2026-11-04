@@ -4,10 +4,10 @@ WorkBuddy 包提供项目 Skill、公开政策、预检和结果审计脚本；�
 项目中的 `pfm` 执行。包版本与 Python 应用版本分别记录。项目路径、来源提交和文件摘要
 写入包内 manifest，预检会核对包与实际项目，避免指令快照与程序错配。
 
-从项目目录构建0.2.9适配包：
+从项目目录构建0.2.10适配包：
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\build_workbuddy_skill.py --source-root <实际项目目录> --output var\workbuddy-0.2.9.zip --stage var\workbuddy-0.2.9
+.\.venv\Scripts\python.exe scripts\build_workbuddy_skill.py --source-root <实际项目目录> --output var\workbuddy-0.2.10.zip --stage var\workbuddy-0.2.10
 ```
 
 打包器只读取项目中已跟踪的 `SKILL.md`、`references/*.md` 和公开期刊目录，以及列明的
@@ -36,3 +36,8 @@ WorkBuddy 包提供项目 Skill、公开政策、预检和结果审计脚本；�
 日期、类型、分类与各模式窗口继续各自核验。审计成功证明输入可按这些规则核对，不保证
 来源完整或智能体的后续说明永远正确。回归使用合成夹具；本地私人运行文件可以用于私下
 比对，但不得复制进公开仓库或测试夹具。
+
+
+正式周报验收只选择已结束窗口；默认最近完整周已提交时验证重复拒绝或等待下一完整周。
+0.2.10 审计增加执行时间核对，旧结果没有执行时间时明确未验证。正式命令不接受输出复核
+队列参数，审计时也不配入预览队列。状态前后比较使用逻辑内容摘要，不能只看行数。
