@@ -171,6 +171,7 @@ CLI 生成 Markdown 报告；在具备文档或演示文稿生成能力的 Codex
 | 新论文判定、监测窗口与报告收录 | [监测政策](references/monitoring-policy.md) · [时间与版本语义](references/date-and-version-semantics.md) |
 | 来源分工与中文期刊覆盖 | [来源目录](references/source-catalog.md) · [中文来源扩展](references/chinese-source-expansion.md) |
 | 逐篇核查与裁定回填 | [作品类型复核](references/work-type-policy.md) · [书目同一性复核](references/identity-review-policy.md) |
+| WorkBuddy本地使用、打包和结果审计 | [试点包与审计](references/workbuddy-local-pilot.md) |
 | 英文命令指南 | [English user guide](references/usage.en.md) |
 
 PhilPapers 分类 feed 提供分类成员关系，PhilArchive OAI 提供来源记录变化，Crossref／OpenAlex
@@ -220,6 +221,23 @@ OAI 缓存保存恢复所需的最小记录证据和分页令牌；状态命令�
 涉及凭据或私人数据泄露的漏洞，请按 [SECURITY.md](SECURITY.md) 使用 GitHub Private Vulnerability Reporting。
 
 ## 技术更新
+
+### 2026-11-04：WorkBuddy 试点包生成可核对的结果摘要
+
+试点包0.2.9增加三模式共用的只读审计脚本。它从已保存的结果和复核队列直接生成作品
+字段定位、队列与比较的准确计数、来源状态及状态写入字段，输出审计JSON和Markdown，
+供WorkBuddy据此说明结果。字段不存在、null和实际值分别记录；已确认结果的辅助队列项
+不当作未决冲突，万方跨源核对与发现分别呈现。各项计数保留原始位置，具体作品关系仍须
+阅读来源后裁定。构建器按公开已跟踪文件打包，核对清单与SHA-256；详见
+[本地试点与审计用法](references/workbuddy-local-pilot.md)。
+
+11项直接回归及540项完整离线测试、Ruff、Skill校验和只读发布检查通过，覆盖链接字段、混用轮次拒绝、
+准确计数、来源失败、三模式字段缺失及公开打包边界；已有本地运行文件也完成审计比对。
+本次为适配器与文档更新，未创建版本标签或GitHub Release；未为验证重新采集论文来源
+或推进正式周报状态。
+
+<details>
+<summary>查看此前技术更新</summary>
 
 ### 2026-11-03：公众号候选队列支持日常处理
 
@@ -884,6 +902,8 @@ OAI、但同时缺少 feed 时间、书目年份、DOI 和明确手稿／预印�
 页面或逐篇 PhilPapers 抓取。`pull-now` 自 `v0.3.0` 起属于稳定
 功能；它与每周监测共享证据标准，但仍是用户主动调用、只读且不推进通知历史的独立模式。完整规则见 [CHANGELOG.md](CHANGELOG.md)、
 [监测政策](references/monitoring-policy.md)与[结构化作品类型政策](references/work-type-policy.md)。
+
+</details>
 
 </details>
 

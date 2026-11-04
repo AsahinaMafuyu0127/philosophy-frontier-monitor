@@ -54,6 +54,7 @@ only-include = [
   "config/watchlist.example.yaml",
   "config/official-journals.yaml",
   "examples",
+  "integrations",
   "references",
   "scripts",
   "src",

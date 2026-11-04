@@ -253,6 +253,29 @@ data through GitHub Private Vulnerability Reporting as described in [SECURITY.md
 
 ## Technical update
 
+### 4 November 2026: reproducible result summaries for the WorkBuddy pilot
+
+Pilot package 0.2.9 adds a read-only audit shared by search, on-demand pulls, and
+weekly reports. Saved results and review queues produce record locators, exact
+queue and comparison counts, source statuses, and state fields in audit JSON and
+Markdown. Absent fields, nulls, and values remain distinct. Supporting queue entries
+for confirmed results are separated from unresolved records; Wanfang cross-checks
+and discovery retain their own statuses. Original field locations accompany the
+summary. Work identity still requires inspecting the sources. The reproducible
+builder includes allowlisted tracked public files and verifies their SHA-256
+manifest. See the [pilot and audit guide](references/workbuddy-local-pilot.md).
+
+All 11 direct regressions and 540 offline tests, Ruff, skill validation, and the
+read-only release audit passed.
+Coverage includes links, mixed-run rejection, exact counts, failed sources, missing
+fields in all three modes, and public packaging boundaries. Existing local run
+artifacts were also audited against their original data.
+This adapter and documentation update created no version tag or GitHub Release,
+made no live paper-source requests, and advanced no official weekly-report state.
+
+<details>
+<summary>Show earlier technical updates</summary>
+
 ### 3 November 2026: a daily worklist for public WeChat candidates
 
 Publisher-page discovery now returns the candidates actually added by that
@@ -1064,6 +1087,8 @@ an upstream `badResumptionToken` response restarts only that original gap.
 It uses the same evidence rules as weekly monitoring and never advances weekly notification
 history. Stability means bounded requests, recoverable interruption, state isolation, and honest
 coverage reporting; it does not promise a fixed runtime.
+
+</details>
 
 </details>
 
