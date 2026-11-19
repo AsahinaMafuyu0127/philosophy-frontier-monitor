@@ -18,12 +18,18 @@
 .\.venv\Scripts\pfm.exe search --config config/watchlist.yaml --year-from 2000 --limit 30
 .\.venv\Scripts\pfm.exe search --config config/watchlist.yaml --category 74924 --work-type article
 .\.venv\Scripts\pfm.exe search --config config/watchlist.yaml --category 74924 --category 74915 --match all
+.\.venv\Scripts\pfm.exe search --config config/watchlist.yaml --publisher-keyword "文本解释"
 ```
 
 分类 ID 仅为语法示例，不能假定用户已经选择它们。先在当前配置和 taxonomy 中核验用户所说的
 标签，再传入相应 ID。命令默认读取全部已确认兴趣；`--category` 可重复，只对本次选择配置范围
 内的分类。超出当前兴趣范围的分类需要先准备另一个经用户确认、feed 已核验的检索配置文件，
 通过 `--config` 指定；不要改写长期订阅配置来完成临时查找。
+
+`--publisher-keyword` 可重复指定本次刊方检索词，任一词命中题名、刊方关键词或摘要即列出论文线索。
+省略该选项时使用已配置的中文检索词。历史检索按所选年份读取已有完整目录，缺少刊期日期的结果
+也可查看。输出保留刊方来源和命中字段，便于发现尚无知网题录的论文。
+详见[刊方逐篇检索](publisher-article-observation.md#刊方逐篇检索)。
 
 ## 匹配、范围和论文类型
 

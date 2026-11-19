@@ -63,6 +63,7 @@ from .pipeline import (
     run_weekly_catch_up,
     write_report_atomic,
 )
+from .publisher_search import publisher_keywords
 from .release_check import audit_release
 from .review_feed_snapshots import load_review_feed_snapshots, serialize_feed_snapshots
 from .scope_estimate import estimate_interest_scope
@@ -706,6 +707,8 @@ def _write_review_queue(path: Path, result: OnDemandRunResult | WeeklyRunResult)
 
 def _weekly_run(args: argparse.Namespace) -> int:
     config = load_watchlist(args.config)
+    publisher_terms = tuple(args.publisher_keyword or ())
+    publisher_keywords(config, publisher_terms)
     if args.review_queue_file and not args.dry_run:
         raise ValueError("weekly review queue requires --dry-run before a committed run")
     review_queue_path = (
@@ -727,7 +730,7 @@ def _weekly_run(args: argparse.Namespace) -> int:
     window_end = _parse_instant(args.window_end, "--window-end")
     cache_path = _oai_cache_path(config)
     with collect_request_telemetry() as events, ExitStack() as stack:
-        state = stack.enter_context(StateStore(config.storage.state_database))
+        state = stack.enter_context(StateStore(config.storage.state_database, preview=args.dry_run))
         oai_cache = (
             None
             if args.no_oai_cache
@@ -742,6 +745,7 @@ def _weekly_run(args: argparse.Namespace) -> int:
             window_end=window_end,
             dry_run=args.dry_run,
             show_recently_changed=args.show_recently_changed,
+            publisher_terms=publisher_terms,
             type_reviews=type_reviews,
             identity_reviews=identity_reviews,
             **({"oai_loader": oai_cache.load_window} if oai_cache is not None else {}),
@@ -768,7 +772,7 @@ def _weekly_run(args: argparse.Namespace) -> int:
     }
     if result.dry_run:
         payload["report_markdown"] = result.report_markdown
-        payload["state_warning"] = "dry-run 未写周报文件，也未修改数据库或检查点。"
+        payload["state_warning"] = "dry-run 未写周报文件或周报状态库。"
     _emit(payload)
     return 0
 
@@ -885,6 +889,7 @@ def _pull_now(args: argparse.Namespace) -> int:
             allow_development_fixture=args.allow_development_fixture,
             progress=_emit_pull_now_progress,
             show_recently_changed=args.show_recently_changed,
+            publisher_terms=tuple(args.publisher_keyword or ()),
             type_reviews=type_reviews,
             identity_reviews=identity_reviews,
             reviewed_feed_snapshots=reviewed_feed_snapshots,
@@ -976,6 +981,7 @@ def _search(args: argparse.Namespace) -> int:
         offset=args.offset,
         max_candidates=args.max_candidates,
         max_fallbacks=args.max_fallbacks,
+        publisher_terms=tuple(args.publisher_keyword or ()),
     )
     with collect_request_telemetry() as events:
         result = run_paper_search(
@@ -1386,9 +1392,11 @@ def _catch_up(args: argparse.Namespace) -> int:
     as_of = _parse_instant(args.as_of, "--as-of")
     if as_of is not None and as_of > datetime.now(UTC):
         raise ValueError("--as-of cannot be in the future")
+    publisher_terms = tuple(args.publisher_keyword or ())
+    publisher_keywords(config, publisher_terms)
     cache_path = _oai_cache_path(config)
     with collect_request_telemetry() as events, ExitStack() as stack:
-        state = stack.enter_context(StateStore(config.storage.state_database))
+        state = stack.enter_context(StateStore(config.storage.state_database, preview=args.dry_run))
         oai_cache = (
             None
             if args.no_oai_cache
@@ -1405,6 +1413,7 @@ def _catch_up(args: argparse.Namespace) -> int:
                 dry_run=args.dry_run,
                 max_windows=args.max_windows,
                 show_recently_changed=args.show_recently_changed,
+                publisher_terms=publisher_terms,
                 **({"oai_loader": oai_cache.load_window} if oai_cache is not None else {}),
             )
         except CatchUpError as error:
@@ -1926,6 +1935,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="render the recently-changed section expanded instead of collapsed by default",
     )
     catch_up.set_defaults(handler=_catch_up)
+    for mode in (weekly, pull_now, search, catch_up):
+        mode.add_argument(
+            "--publisher-keyword",
+            action="append",
+            help="search publisher titles, keywords and abstracts; repeat for alternatives",
+        )
     return parser
 
 

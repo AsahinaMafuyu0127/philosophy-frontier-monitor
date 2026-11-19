@@ -6,7 +6,7 @@ import hashlib
 import json
 import sqlite3
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,7 +14,7 @@ from pathlib import Path
 from .models import Notification
 from .sources.cnki_space import CnkiIssue
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,39 +115,68 @@ class InterestProfileSnapshot:
 class StateStore:
     """Small local state store; private research text is not stored here."""
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: str | Path, *, preview: bool = False) -> None:
         self.last_schema_backup: Path | None = None
         if str(path) == ":memory:":
             self.path: Path | None = None
             self.connection = sqlite3.connect(":memory:")
         else:
             self.path = Path(path)
+            if preview:
+                self._open_preview(self.path)
+                return
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self.connection = sqlite3.connect(self.path)
         self.connection.row_factory = sqlite3.Row
         self._backup_before_schema_upgrade()
         self._initialize()
 
+    @staticmethod
+    def _schema_version(connection: sqlite3.Connection) -> int | None:
+        table = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'"
+        ).fetchone()
+        if table is None:
+            return None
+        row = connection.execute(
+            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            return int(row[0])
+        except (TypeError, ValueError) as error:
+            raise RuntimeError("state database has an invalid schema version") from error
+
+    def _open_preview(self, path: Path) -> None:
+        """Open the state read-only, migrating a transient copy only for older schemas."""
+
+        with ExitStack() as source_cleanup:
+            source = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
+            source_cleanup.callback(source.close)
+            if (self._schema_version(source) or 0) >= SCHEMA_VERSION:
+                source.row_factory = sqlite3.Row
+                self.connection = source
+                source_cleanup.pop_all()
+                return
+
+            self.connection = sqlite3.connect(":memory:")
+            try:
+                source.backup(self.connection)
+                self.connection.row_factory = sqlite3.Row
+                self._initialize()
+                self.connection.execute("PRAGMA query_only = ON")
+            except BaseException:
+                self.connection.close()
+                raise
+
     def _backup_before_schema_upgrade(self) -> None:
         """Create and verify a recoverable copy before changing an existing schema."""
 
         if self.path is None or not self.path.is_file() or self.path.stat().st_size == 0:
             return
-        table = self.connection.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'"
-        ).fetchone()
-        if table is None:
-            return
-        row = self.connection.execute(
-            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
-        ).fetchone()
-        if row is None:
-            return
-        try:
-            existing_version = int(row[0])
-        except (TypeError, ValueError) as error:
-            raise RuntimeError("state database has an invalid schema version") from error
-        if existing_version >= SCHEMA_VERSION:
+        existing_version = self._schema_version(self.connection)
+        if existing_version is None or existing_version >= SCHEMA_VERSION:
             return
 
         backup_directory = self.path.parent / "backups"
@@ -242,6 +271,10 @@ class StateStore:
                     record_id TEXT PRIMARY KEY,
                     first_seen_at TEXT NOT NULL,
                     last_seen_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS publisher_article_reports (
+                    article_key TEXT PRIMARY KEY,
+                    first_reported_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS unresolved_records (
                     source TEXT NOT NULL,
@@ -394,6 +427,13 @@ class StateStore:
             ).fetchone():
                 known.add(record_id)
         return known
+
+    def reported_publisher_articles(self, keys: set[str]) -> set[str]:
+        return {
+            key for key in keys if self.connection.execute(
+                "SELECT 1 FROM publisher_article_reports WHERE article_key = ?", (key,)
+            ).fetchone()
+        }
 
     def _upsert_cnki_issue(self, issue: CnkiIssue) -> None:
         self.connection.execute(
@@ -929,6 +969,7 @@ class StateStore:
         interest_profile_snapshot: InterestProfileSnapshot | None = None,
         cnki_issues: tuple[CnkiIssue, ...] = (),
         cnki_scan_completed: bool = False,
+        publisher_article_keys: tuple[str, ...] = (),
         wanfang_discovery_ids: tuple[str, ...] = (),
         wanfang_discovery_completed: bool = False,
     ) -> None:
@@ -938,6 +979,10 @@ class StateStore:
         with self.transaction():
             for issue in cnki_issues:
                 self._upsert_cnki_issue(issue)
+            self.connection.executemany(
+                "INSERT OR IGNORE INTO publisher_article_reports VALUES (?, ?)",
+                ((key, completed_at.isoformat()) for key in publisher_article_keys),
+            )
             for record_id in wanfang_discovery_ids:
                 self.connection.execute(
                     """

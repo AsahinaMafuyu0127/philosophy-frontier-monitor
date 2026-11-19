@@ -22,6 +22,7 @@ from .models import (
     WorkTypeStatus,
 )
 from .official_journals import OfficialIssue, render_issue_leads
+from .publisher_search import PublisherSearchResult
 from .sources.cnki_space import CnkiIssue
 from .sources.wanfang import WanfangCheck, WanfangRecord, publication_month
 
@@ -157,9 +158,12 @@ def _safe_text(value: str) -> str:
 
 def _chinese_sources_first(lines: list[str], *, english: bool) -> None:
     headings = (
-        ("## Publisher issue leads", "## Chinese journal issue observations", "## Wanfang ")
+        ("## Publisher issue leads", "## Publisher article leads",
+         "## Chinese journal issue observations",
+         "## Chinese journal leads in the on-demand window", "## Wanfang ")
         if english
-        else ("## 期刊官方发布渠道", "## 中文期刊新期次观察", "## 万方中文期刊")
+        else ("## 期刊官方发布渠道", "## 刊方论文线索", "## 中文期刊新期次观察",
+              "## 即时窗口内中文期刊论文线索", "## 万方中文期刊")
     )
     start = next((i for i, line in enumerate(lines) if line.startswith(headings)), None)
     if start is None:
@@ -169,6 +173,76 @@ def _chinese_sources_first(lines: list[str], *, english: bool) -> None:
     block = lines[start:]
     del lines[start:]
     lines[insert_at:insert_at] = block
+
+
+def publisher_article_lines(result: PublisherSearchResult, *, english: bool = False) -> list[str]:
+    count = len(result.papers)
+    heading = f"## Publisher article leads ({count})" if english else f"## 刊方论文线索（{count}）"
+    lines = [heading, ""]
+    if result.status == "failed":
+        message = ("The local publisher catalogue could not be read." if english else
+                   "本地刊方目录读取失败，检索覆盖待核。")
+        return [*lines, message, ""]
+    if result.status == "not_collected":
+        message = ("No collected publisher catalogue was available for this search." if english
+                   else "本次可用的本地刊方目录尚未采集。")
+        return [*lines, message, ""]
+    lines += [
+        (f"Searched {result.searched_articles} titles from {result.searched_issues} locally "
+         f"recorded issues. {result.with_article_text} have publisher keywords or abstracts. "
+         "These publisher records are available for individual verification."
+         if english else
+         f"检索了本地已采集的 {result.searched_issues} 期、{result.searched_articles} 条题名，"
+         f"其中 {result.with_article_text} 条可检索刊方关键词或摘要。"
+         "这些题录直接来自刊方，供逐篇复核。"),
+        "",
+    ]
+    if result.journals:
+        names = ", ".join(_safe_text(name) for name in result.journals)
+        lines += [(f"Journals searched · {names}" if english else f"已检索刊物 · {names}"), ""]
+    if result.missing_or_conflicting_dates or result.outside_window or result.already_reported:
+        lines += [
+            (f"Matching entries with missing or conflicting publication dates: "
+             f"{result.missing_or_conflicting_dates}. Outside the window: {result.outside_window}. "
+             f"Previously reported: {result.already_reported}." if english else
+             f"命中条目中，出版时间待核 {result.missing_or_conflicting_dates} 条，"
+             f"窗外 {result.outside_window} 条，先前周报已列 {result.already_reported} 条。"),
+            "",
+        ]
+    if result.incomplete_issues:
+        lines += [(f"Unverified catalogue snapshots: {result.incomplete_issues}." if english else
+                   f"目录完整性待核 {result.incomplete_issues} 期。"), ""]
+    labels = {"title": "title", "keywords": "keywords", "abstract": "abstract"} if english else {
+        "title": "题名", "keywords": "关键词", "abstract": "摘要",
+    }
+    for lead in result.papers:
+        article = lead.article
+        fields = " / ".join(labels[field] for field in lead.matched_fields)
+        issue = (f"{article.year}, no. {_safe_text(article.issue)}" if english else
+                 f"{article.year} 年第 {_safe_text(article.issue)} 期")
+        author = (_safe_text(article.author) if article.author else
+                  "author unknown" if english else "作者待核")
+        lines.append(f"- [{_safe_text(article.title)}](<{article.url}>) · {author} · "
+                     f"{_safe_text(lead.journal)} · {issue} · {fields}")
+        if lead.date_conflict:
+            dates = "Conflicting issue dates" if english else "刊期日期有冲突"
+        elif lead.issue_published_on:
+            dates = (f"Issue publication date {lead.issue_published_on}" if english else
+                     f"期次刊出日 {lead.issue_published_on}")
+        elif lead.label_month:
+            dates = (f"Labelled issue month {lead.label_month}" if english else
+                     f"标示刊期 {lead.label_month}")
+        else:
+            dates = "Issue publication date unverified" if english else "刊期出版时间待核"
+        evidence_label = "date evidence" if english else "刊期证据"
+        evidence = " · ".join(f"[{evidence_label} {i}](<{url}>)"
+                              for i, url in enumerate(lead.date_evidence_urls, 1))
+        lines.append(f"  - {dates}" + (f" · {evidence}" if evidence else ""))
+        if article.abstract:
+            excerpt = article.abstract[:180] + ("…" if len(article.abstract) > 180 else "")
+            label = "Publisher abstract excerpt" if english else "刊方摘要节选"
+            lines.append(f"  - {label} · {_safe_text(excerpt)}")
+    return [*lines, ""]
 
 
 def _cnki_issue_lines(
@@ -674,6 +748,7 @@ def render_weekly_report(
     include_english: bool = True,
     show_recently_changed: bool = False,
     official_issues: tuple[OfficialIssue, ...] = (),
+    publisher_papers: PublisherSearchResult | None = None,
     cnki_issues: tuple[CnkiIssue, ...] | None = None,
     cnki_baseline: bool = False,
     cnki_on_demand_window: bool = False,
@@ -780,6 +855,8 @@ def render_weekly_report(
     ):
         context = "on_demand" if cnki_on_demand_window else "weekly"
         lines.extend([render_issue_leads(official_issues, context=context).rstrip(), ""])
+    if publisher_papers is not None:
+        lines.extend(publisher_article_lines(publisher_papers))
     if cnki_issues is not None:
         lines.extend(
             _cnki_issue_lines(
@@ -801,7 +878,7 @@ def render_weekly_report(
                 on_demand_window=cnki_on_demand_window,
             )
         )
-    if not cnki_on_demand_window:
+    if not cnki_on_demand_window or publisher_papers is not None:
         _chinese_sources_first(lines, english=False)
     lines.extend(["## 数据源覆盖", ""])
     if not coverage:
@@ -888,6 +965,7 @@ def render_weekly_report(
         human_review_items=human_review_items,
         show_recently_changed=show_recently_changed,
         official_issues=official_issues,
+        publisher_papers=publisher_papers,
         cnki_issues=cnki_issues,
         cnki_baseline=cnki_baseline,
         cnki_on_demand_window=cnki_on_demand_window,
@@ -915,6 +993,7 @@ def _render_weekly_report_en(
     human_review_items: tuple[HumanReviewItem, ...] = (),
     show_recently_changed: bool = False,
     official_issues: tuple[OfficialIssue, ...] = (),
+    publisher_papers: PublisherSearchResult | None = None,
     cnki_issues: tuple[CnkiIssue, ...] | None = None,
     cnki_baseline: bool = False,
     cnki_on_demand_window: bool = False,
@@ -1027,6 +1106,8 @@ def _render_weekly_report_en(
         lines.extend([
             render_issue_leads(official_issues, english=True, context=context).rstrip(), ""
         ])
+    if publisher_papers is not None:
+        lines.extend(publisher_article_lines(publisher_papers, english=True))
     if cnki_issues is not None:
         lines.extend(
             _cnki_issue_lines(
@@ -1048,7 +1129,7 @@ def _render_weekly_report_en(
                 on_demand_window=cnki_on_demand_window,
             )
         )
-    if not cnki_on_demand_window:
+    if not cnki_on_demand_window or publisher_papers is not None:
         _chinese_sources_first(lines, english=True)
     lines.extend(["## Source coverage", ""])
     if not coverage:
@@ -1172,6 +1253,7 @@ def render_on_demand_report(
     matched_confirmed_source_arrivals: int = 0,
     show_recently_changed: bool = False,
     official_issues: tuple[OfficialIssue, ...] = (),
+    publisher_papers: PublisherSearchResult | None = None,
     cnki_issues: tuple[CnkiIssue, ...] | None = None,
     cnki_assessments: tuple[CnkiAssessment, ...] = (),
     cnki_overlaps: tuple[CnkiOverlap, ...] = (),
@@ -1192,6 +1274,7 @@ def render_on_demand_report(
         include_english=False,
         show_recently_changed=show_recently_changed,
         official_issues=official_issues,
+        publisher_papers=publisher_papers,
         cnki_issues=cnki_issues,
         cnki_on_demand_window=True,
         cnki_assessments=cnki_assessments,
@@ -1320,6 +1403,7 @@ def render_on_demand_report(
         matched_confirmed_source_arrivals=matched_confirmed_source_arrivals,
         show_recently_changed=show_recently_changed,
         official_issues=official_issues,
+        publisher_papers=publisher_papers,
         cnki_issues=cnki_issues,
         cnki_assessments=cnki_assessments,
         cnki_overlaps=cnki_overlaps,
@@ -1349,6 +1433,7 @@ def _render_on_demand_report_en(
     matched_confirmed_source_arrivals: int = 0,
     show_recently_changed: bool = False,
     official_issues: tuple[OfficialIssue, ...] = (),
+    publisher_papers: PublisherSearchResult | None = None,
     cnki_issues: tuple[CnkiIssue, ...] | None = None,
     cnki_assessments: tuple[CnkiAssessment, ...] = (),
     cnki_overlaps: tuple[CnkiOverlap, ...] = (),
@@ -1368,6 +1453,7 @@ def _render_on_demand_report_en(
         unresolved_count=0,
         show_recently_changed=show_recently_changed,
         official_issues=official_issues,
+        publisher_papers=publisher_papers,
         cnki_issues=cnki_issues,
         cnki_on_demand_window=True,
         cnki_assessments=cnki_assessments,

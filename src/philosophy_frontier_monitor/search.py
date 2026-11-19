@@ -49,6 +49,7 @@ from .pipeline import (
     load_philpapers_feed,
     merge_feed_snapshots,
 )
+from .publisher_search import PublisherSearchResult, publisher_keywords, search_publisher_papers
 from .sources.cnki_space import CnkiRecord, CnkiScan, scan_cnki_space
 from .sources.crossref import CrossrefError, CrossrefWork
 from .sources.crossref import find_exact_work as find_crossref_work
@@ -94,6 +95,7 @@ class SearchOptions:
     offset: int = 0
     max_candidates: int = 1000
     max_fallbacks: int = 100
+    publisher_terms: tuple[str, ...] = ()
 
     def validate(self) -> None:
         if self.match not in {"any", "all"}:
@@ -180,6 +182,7 @@ class PaperSearchResult:
     cnki_overlaps: tuple[CnkiOverlap, ...] = ()
     wanfang_scan: WanfangScan | None = None
     wanfang_discovery: WanfangDiscoveryScan | None = None
+    publisher_papers: PublisherSearchResult | None = None
 
 
 def _identity(candidate: MergedCandidate, work: OpenAlexWork | CrossrefWork) -> IdentityMatchLevel:
@@ -359,6 +362,7 @@ def run_paper_search(
     """Search configured interests; dependencies may be injected for offline tests."""
     options = options or SearchOptions()
     options.validate()
+    publisher_query = publisher_keywords(config, options.publisher_terms)
     now = now or datetime.now(UTC)
     if now.tzinfo is None:
         raise ValueError("search time must include a timezone")
@@ -936,6 +940,9 @@ def run_paper_search(
                 wanfang_discovery = WanfangDiscoveryScan(
                     (), now, "failed", 0, 0, 0, (f"adapter:{type(error).__name__}",)
                 )
+    publisher_papers = search_publisher_papers(
+        config, publisher_query, year_from=options.year_from, year_to=options.year_to,
+    )
     return PaperSearchResult(
         queried_at=now,
         profile_id=config.profile_id,
@@ -959,6 +966,7 @@ def run_paper_search(
         cnki_overlaps=cnki_overlaps,
         wanfang_scan=wanfang_scan,
         wanfang_discovery=wanfang_discovery,
+        publisher_papers=publisher_papers,
         unconfirmed_records=tuple(unconfirmed),
         year_review_candidates=tuple(year_review_candidates),
         limitations=(

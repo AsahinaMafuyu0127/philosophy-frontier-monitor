@@ -84,6 +84,16 @@ the coverage gap. A local scheduled CLI run may discover publisher-page links,
 but cannot perform browser-assisted original-post review.
 `pfm journal-watch catalog` lists the monitored
 channels; `pfm journal-watch list` shows locally recorded issue evidence.
+All three report modes also search the complete publisher catalogues already in
+the local observation store. For a request with explicit keywords or a topic, pass
+each requested term with `--publisher-keyword`. Regular runs reuse the configured
+Chinese terms. Report the text field that matched and the source link. The same
+catalogue entry remains findable without a CNKI result. Follow the publication
+date rules in [publisher-article-observation.md](references/publisher-article-observation.md).
+The date-preparation script also exposes `publisher_date_reviews`, including
+when CNKI returns no record. Pass the same `--publisher-keyword` options to it.
+Use the exact publisher article or catalogue link to review its issue date, then
+run the requested mode once.
 The bounded Chinese metadata and reviewed-issue leads workflow is a stable,
 explicitly enabled capability in search, pull-now, and weekly-run. It does not
 confirm that individual Chinese papers are newly published or establish complete
@@ -140,8 +150,9 @@ Record the issue with `journal-watch observe --evidence-kind official-wechat`
 and the separately verified `--label-month` / `--announcement-on` fields.
 For a complete browser-reviewed TOC, keep a minimal JSON file outside Git with
 `journal`, `year`, `issue`, `source_url`, matching date fields,
-`complete_toc: true`, `article_count`, and `articles` containing only `title`
-and `author`; then use `journal-watch import-toc --input <file>
+`complete_toc: true`, `article_count`, and `articles` containing `title`
+and `author`. Each entry may include `abstract` and `keywords` explicitly read for
+that paper in the original post. Then use `journal-watch import-toc --input <file>
 --confirm-evidence`. The importer requires an already reviewed issue with the
 same URL and date evidence. It saves local publisher leads and a complete-TOC
 audit denominator, but does not classify paper type, interest, institutional

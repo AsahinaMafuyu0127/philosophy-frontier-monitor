@@ -11,7 +11,7 @@ import re
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from hashlib import sha256
 from html.parser import HTMLParser
@@ -36,6 +36,8 @@ MAX_HTML_BYTES = 750_000
 MAX_PDF_BYTES = 2_000_000
 MAX_ARTICLES = 30
 MAX_CHECKS = 10
+MAX_ABSTRACT_CHARS = 3_000
+MAX_KEYWORDS_CHARS = 300
 CBPT_IDS = {
     "zhexue-yanjiu",
     "zhexue-dongtai",
@@ -58,6 +60,8 @@ class PublisherArticle:
     url: str
     issue_url: str
     first_observed_at: str
+    abstract: str | None = None
+    keywords: str | None = None
 
 
 class _Links(HTMLParser):
@@ -266,6 +270,29 @@ def _kongzi_title_key(title: str) -> str:
     return re.sub(r"[\s：:]", "", title)
 
 
+_FIELD_LABEL = re.compile(r"(摘\s*要|关\s*键\s*词|作\s*者)\s*[：:]")
+
+
+def _article_text(paragraphs: list[str]) -> tuple[str | None, str | None]:
+    """Read only explicit labels in the article's own paragraph block."""
+    values: dict[str, list[str]] = {"摘要": [], "关键词": []}
+    for paragraph in paragraphs:
+        labels = list(_FIELD_LABEL.finditer(paragraph))
+        if not labels or labels[0].start() != 0:
+            continue
+        for index, label in enumerate(labels):
+            field = "".join(label[1].split())
+            if field not in values:
+                continue
+            stop = labels[index + 1].start() if index + 1 < len(labels) else len(paragraph)
+            values[field].append(paragraph[label.end():stop].strip())
+    abstracts, keywords = values["摘要"], values["关键词"]
+    abstract = abstracts[0] if len(abstracts) == 1 else ""
+    keyword_text = keywords[0] if len(keywords) == 1 else ""
+    return (abstract or None if len(abstract) <= MAX_ABSTRACT_CHARS else None,
+            keyword_text or None if len(keyword_text) <= MAX_KEYWORDS_CHARS else None)
+
+
 def _kongzi_toc(
     html: str, year: int, issue: str, url: str, observed: str,
 ) -> tuple[str, list[PublisherArticle]]:
@@ -307,10 +334,32 @@ def _kongzi_toc(
                 raise ValueError("kongzi_articles_exceed_bound")
     if end is None or len(articles) < 5:
         raise ValueError("kongzi_toc_end_or_articles_missing")
-    echoed = {_kongzi_title_key(paragraph) for paragraph in paragraphs[end:]}
-    if any(_kongzi_title_key(article.title) not in echoed for article in articles):
+    article_keys = {_kongzi_title_key(article.title) for article in articles}
+    headings = [
+        (index, key) for index in range(end, len(paragraphs))
+        if (key := _kongzi_title_key(paragraphs[index])) in article_keys
+    ]
+    if {key for _, key in headings} != article_keys:
         raise ValueError("kongzi_toc_abstract_crosscheck_failed")
-    return announced[1], articles
+    blocks: dict[str, list[list[str]]] = {}
+    for index, (start, key) in enumerate(headings):
+        stop = headings[index + 1][0] if index + 1 < len(headings) else len(paragraphs)
+        blocks.setdefault(key, []).append([p for p in paragraphs[start + 1:stop] if p])
+    enriched = []
+    for article in articles:
+        candidates = blocks[_kongzi_title_key(article.title)]
+        if len(candidates) != 1 or not candidates[0]:
+            enriched.append(article)
+            continue
+        first, *rest = candidates[0]
+        label = _FIELD_LABEL.search(first)
+        author = first[:label.start()] if label else first
+        if _kongzi_title_key(author) != _kongzi_title_key(article.author or ""):
+            enriched.append(article)
+            continue
+        abstract, keywords = _article_text(([first[label.start():]] if label else []) + rest)
+        enriched.append(replace(article, abstract=abstract, keywords=keywords))
+    return announced[1], enriched
 
 
 def _jdn_toc(html: str, url: str, observed: str) -> tuple[str, list[PublisherArticle]]:
@@ -357,17 +406,23 @@ def _sdu_toc(
     if len(content) != 2:
         raise ValueError("sdu_toc_missing")
     articles: list[PublisherArticle] = []
-    sections = re.findall(
+    sections = list(re.finditer(
         r'<section\s+style="text-align:\s*center;\s*line-height:\s*2[^>]*>(.*?)</section>',
         content[1], re.S,
-    )
-    for section in sections:
-        paragraphs = [_text(p) for p in re.findall(r"<p\b[^>]*>(.*?)</p>", section, re.S)]
+    ))
+    for index, section in enumerate(sections):
+        paragraphs = [_text(p) for p in re.findall(r"<p\b[^>]*>(.*?)</p>", section[1], re.S)]
         paragraphs = [p for p in paragraphs if p]
         if len(paragraphs) < 2 or not 5 <= len(paragraphs[0]) <= 250:
             continue
+        stop = sections[index + 1].start() if index + 1 < len(sections) else len(content[1])
+        following = [_text(p) for p in re.findall(
+            r"<p\b[^>]*>(.*?)</p>", content[1][section.end():stop], re.S,
+        )]
+        abstract, keywords = _article_text([p for p in following if p][:2])
         articles.append(PublisherArticle(
             "zhouyi-yanjiu", year, issue, paragraphs[0], paragraphs[1], url, url, observed,
+            abstract=abstract, keywords=keywords,
         ))
     if not articles or len(articles) > MAX_ARTICLES:
         raise ValueError("sdu_articles_missing_or_excessive")
@@ -429,6 +484,11 @@ def _connect(db_path: Path) -> Iterator[sqlite3.Connection]:
             first_observed_at TEXT NOT NULL, last_observed_at TEXT NOT NULL,
             PRIMARY KEY (journal_id, year, issue, title)
         );
+        CREATE TABLE IF NOT EXISTS publisher_article_text (
+            journal_id TEXT NOT NULL, year INTEGER NOT NULL, issue TEXT NOT NULL,
+            title TEXT NOT NULL, abstract TEXT, keywords TEXT,
+            PRIMARY KEY (journal_id, year, issue, title)
+        );
         CREATE TABLE IF NOT EXISTS publisher_article_checks (
             journal_id TEXT NOT NULL, year INTEGER NOT NULL, issue TEXT NOT NULL,
             title TEXT NOT NULL, source TEXT NOT NULL, checked_at TEXT NOT NULL,
@@ -465,12 +525,23 @@ def _connect(db_path: Path) -> Iterator[sqlite3.Connection]:
 
 def _save_articles(db: sqlite3.Connection, articles: list[PublisherArticle], observed: str) -> None:
     for article in articles:
+        key = (article.journal_id, article.year, article.issue, article.title)
         db.execute("""INSERT INTO publisher_articles VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(journal_id, year, issue, title) DO UPDATE SET
                 author=excluded.author, url=excluded.url, issue_url=excluded.issue_url,
                 last_observed_at=excluded.last_observed_at""",
-            (*asdict(article).values(), observed),
+            (*key, article.author, article.url, article.issue_url,
+             article.first_observed_at, observed),
         )
+        if article.abstract or article.keywords:
+            db.execute("""INSERT INTO publisher_article_text VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(journal_id, year, issue, title) DO UPDATE SET
+                    abstract=excluded.abstract, keywords=excluded.keywords""",
+                (*key, article.abstract, article.keywords),
+            )
+        else:
+            db.execute("""DELETE FROM publisher_article_text
+                WHERE journal_id=? AND year=? AND issue=? AND title=?""", key)
 
 
 def _title_digest(titles: list[str]) -> str:
@@ -485,7 +556,7 @@ def import_reviewed_toc(
     A browser-readable WeChat post may be unavailable to the HTTP collector. The
     exact issue URL must already have been reviewed in the private issue store.
     """
-    if input_path.stat().st_size > 50_000:
+    if input_path.stat().st_size > 450_000:
         raise ValueError("toc_input_too_large")
     try:
         payload = json.loads(input_path.read_text(encoding="utf-8"))
@@ -518,7 +589,7 @@ def import_reviewed_toc(
             or type(payload.get("article_count")) is not int
             or payload["article_count"] != len(raw_articles)):
         raise ValueError("toc_article_count_invalid")
-    observed = datetime.now().astimezone().isoformat(timespec="seconds")
+    observed = datetime.now().astimezone().isoformat(timespec="microseconds")
     articles: list[PublisherArticle] = []
     for item in raw_articles:
         if not isinstance(item, dict):
@@ -529,8 +600,16 @@ def import_reviewed_toc(
                 or not isinstance(author, str) or author != author.strip()
                 or not 1 <= len(author) <= 200 or "\n" in author):
             raise ValueError("toc_article_invalid")
+        abstract, keywords = item.get("abstract"), item.get("keywords")
+        for value, bound in ((abstract, MAX_ABSTRACT_CHARS), (keywords, MAX_KEYWORDS_CHARS)):
+            if value is not None and (
+                not isinstance(value, str) or not 0 < len(value.strip()) <= bound
+            ):
+                raise ValueError("toc_article_text_invalid")
         articles.append(PublisherArticle(
             journal_id, year, issue, title, author, source_url, source_url, observed,
+            abstract=" ".join(abstract.split()) if abstract is not None else None,
+            keywords=" ".join(keywords.split()) if keywords is not None else None,
         ))
     if len({article.title for article in articles}) != len(articles):
         raise ValueError("toc_duplicate_titles")

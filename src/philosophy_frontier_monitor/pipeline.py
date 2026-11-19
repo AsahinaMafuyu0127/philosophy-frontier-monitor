@@ -72,6 +72,7 @@ from .models import (
 )
 from .normalize import normalize_doi, normalize_title
 from .official_journals import list_issues
+from .publisher_search import publisher_keywords, search_publisher_papers
 from .report import (
     HUMAN_REVIEW_REASON_CODES,
     HumanReviewItem,
@@ -2529,6 +2530,7 @@ def run_on_demand(
     allow_development_fixture: bool = False,
     progress: ProgressReporter | None = None,
     show_recently_changed: bool = False,
+    publisher_terms: tuple[str, ...] = (),
     type_reviews: dict[str, ReviewedWorkType] | None = None,
     identity_reviews: dict[tuple[str, str, str], ReviewedIdentity] | None = None,
     reviewed_feed_snapshots: tuple[FeedSnapshot, ...] | None = None,
@@ -2544,6 +2546,7 @@ def run_on_demand(
     """
 
     requested_at = now or datetime.now(UTC)
+    publisher_query = publisher_keywords(config, publisher_terms)
     cache_stats_before = (
         bibliography_cache.stats
         if bibliography_cache is not None
@@ -3219,6 +3222,9 @@ def run_on_demand(
         )
     else:
         recent_wanfang = ()
+    publisher_papers = search_publisher_papers(
+        config, publisher_query, window=(window_start, window_end),
+    )
     report_markdown = render_on_demand_report(
         profile=profile,
         snapshot=snapshot,
@@ -3238,6 +3244,7 @@ def run_on_demand(
         matched_confirmed_source_arrivals=matched_confirmed_source_arrivals,
         show_recently_changed=show_recently_changed,
         official_issues=official_issues,
+        publisher_papers=publisher_papers,
         cnki_issues=recent_issues if cnki_scan is not None else None,
         cnki_assessments=cnki_assessments,
         cnki_overlaps=cnki_overlaps,
@@ -3248,6 +3255,7 @@ def run_on_demand(
         unresolved_reason_counts
     )
     stats = {
+        "publisher_article_leads": len(publisher_papers.papers) if publisher_papers else 0,
         "cnki_issue_candidates": len(cnki_scan.issues) if cnki_scan is not None else 0,
         "cnki_recent_issue_candidates": len(recent_issues),
         "cnki_issue_month_unknown": missing_month,
@@ -3432,6 +3440,7 @@ def run_weekly(
     before_commit: Callable[[], None] | None = None,
     defer_uncertain_until_later_window: bool = False,
     show_recently_changed: bool = False,
+    publisher_terms: tuple[str, ...] = (),
     type_reviews: dict[str, ReviewedWorkType] | None = None,
     identity_reviews: dict[tuple[str, str, str], ReviewedIdentity] | None = None,
     cnki_loader: Callable[..., CnkiScan] = scan_cnki_space,
@@ -3442,6 +3451,7 @@ def run_weekly(
 
     fixed_now = now is not None
     started_at = now or datetime.now(UTC)
+    publisher_query = publisher_keywords(config, publisher_terms)
     if started_at.tzinfo is None:
         raise PipelineError("run time must be timezone-aware")
     if (window_start is None) != (window_end is None):
@@ -3891,6 +3901,16 @@ def run_weekly(
     else:
         wanfang_window = ()
         wanfang_report_records = None
+    publisher_papers = search_publisher_papers(
+        config, publisher_query, window=(window_start, window_end),
+    )
+    if publisher_papers and publisher_papers.papers:
+        reported = state.reported_publisher_articles({lead.key for lead in publisher_papers.papers})
+        publisher_papers = replace(
+            publisher_papers,
+            papers=tuple(lead for lead in publisher_papers.papers if lead.key not in reported),
+            already_reported=len(reported),
+        )
     report_markdown = render_weekly_report(
         profile=profile,
         snapshot=snapshot,
@@ -3904,6 +3924,7 @@ def run_weekly(
         human_review_items=tuple(human_review_items),
         show_recently_changed=show_recently_changed,
         official_issues=official_issues,
+        publisher_papers=publisher_papers,
         cnki_issues=cnki_report_issues,
         cnki_baseline=cnki_baseline,
         cnki_assessments=cnki_assessments,
@@ -3913,6 +3934,7 @@ def run_weekly(
         wanfang_discovery_baseline=wanfang_baseline,
     )
     stats = {
+        "publisher_article_leads": len(publisher_papers.papers) if publisher_papers else 0,
         "cnki_issue_candidates": len(cnki_scan.issues) if cnki_scan is not None else 0,
         "cnki_new_issue_observations": 0 if cnki_baseline else len(cnki_report_issues or ()),
         "cnki_window_issue_candidates": len(cnki_window),
@@ -4007,6 +4029,9 @@ def run_weekly(
                 else ()
             ),
             cnki_scan_completed=(cnki_scan is not None and not cnki_scan.failures),
+            publisher_article_keys=(
+                tuple(lead.key for lead in publisher_papers.papers) if publisher_papers else ()
+            ),
             wanfang_discovery_ids=tuple(record.record_id for record in wanfang_window),
             wanfang_discovery_completed=(
                 wanfang_discovery is not None
@@ -4041,9 +4066,11 @@ def run_weekly_catch_up(
     oai_loader: OAIWindowLoader = load_philarchive_oai_window,
     report_writer: ReportWriter = write_report_atomic,
     show_recently_changed: bool = False,
+    publisher_terms: tuple[str, ...] = (),
 ) -> CatchUpResult:
     """Run all due gaps chronologically without consuming later-week records early."""
 
+    publisher_keywords(config, publisher_terms)
     if max_windows < 1:
         raise PipelineError("max_windows must be a positive integer")
     as_of = now or datetime.now(UTC)
@@ -4118,6 +4145,7 @@ def run_weekly_catch_up(
                 report_writer=report_writer,
                 defer_uncertain_until_later_window=index < len(plan.missing_windows) - 1,
                 show_recently_changed=show_recently_changed,
+                publisher_terms=publisher_terms,
             )
         except Exception as error:
             raise CatchUpError(
