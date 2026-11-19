@@ -645,6 +645,11 @@ schema 4 使 `pfm catch-up` 能在跨兴趣版本的多个缺口中逐周选择�
 个漏跑周的交付时刻仍有效，而新版在第二个漏跑周前生效，则两次运行分别记录旧、新版本；不会
 把新版标签追溯应用到第一周。文件型状态库从旧 schema 打开时，程序先使用 SQLite backup API
 在状态库同级 `backups/` 目录建立副本并执行 `PRAGMA integrity_check`，验证通过后才迁移。
+周报和补跑预览在内存副本中升级旧结构。
+
+schema 7 增加 `publisher_article_reports`。该表保存由刊物 ID、年、期、题名生成的摘要键及首次
+列入正式周报的时间，与周报运行状态一并提交。刊方明确标出的摘要和关键词随目录快照保存于同级
+私人观察库 `official-journals.sqlite3` 的 `publisher_article_text` 表，供三个报告入口只读检索。
 
 当前状态库不保存 RSS description、摘要、全文、原始 XML／JSON、用户研究方向原文、待确认
 候选理由或 API 凭据。它会保存已确认活动分类与 feed，因为这是重建历史匹配的必要私人状态。

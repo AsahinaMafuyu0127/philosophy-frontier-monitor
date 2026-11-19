@@ -55,6 +55,8 @@ def test_browser_reviewed_toc_import_requires_matching_official_issue(tmp_path) 
         ],
     }
     source = tmp_path / "toc.json"
+    payload["articles"][0]["abstract"] = "可核对的刊方摘要。"
+    payload["articles"][0]["keywords"] = "史料，文本"
     source.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     with pytest.raises(ValueError, match="not_reviewed"):
         import_reviewed_toc(source, db)
@@ -67,6 +69,8 @@ def test_browser_reviewed_toc_import_requires_matching_official_issue(tmp_path) 
     assert issue_coverage_summary(db)[0]["reference_denominator"] == 5
     with _connect(db) as saved:
         assert saved.execute("SELECT COUNT(*) FROM publisher_articles").fetchone()[0] == 5
+        text = saved.execute("SELECT abstract, keywords FROM publisher_article_text").fetchone()
+        assert tuple(text) == ("可核对的刊方摘要。", "史料，文本")
     payload["label_month"] = "2026-10"
     source.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     with pytest.raises(ValueError, match="date_evidence_mismatch"):
@@ -102,12 +106,15 @@ def test_sdu_toc_uses_announcement_day_only() -> None:
         "<h2>《周易研究》2026年第4期</h2><span>日期：2026-08-21</span>"
         '<div id="vsb_content">'
         '<section style="text-align: center; line-height: 2; font-size: 12px;">'
-        "<p>易学中的形而上问题</p><p>李乙</p></section></div>"
+        "<p>易学中的形而上问题</p><p>李乙</p></section>"
+        "<p>摘要: 这一期刊方给出的内容。</p><p>关键词: 文献；易学</p></div>"
     )
     announced, articles = _sdu_toc(page, year, issue, url, "2026-09-27T10:00:00+08:00")
     assert announced == "2026-08-21"
     assert len(articles) == 1
     assert articles[0].title == "易学中的形而上问题"
+    assert articles[0].abstract == "这一期刊方给出的内容。"
+    assert articles[0].keywords == "文献；易学"
 
 
 def test_kongzi_site_toc_checks_every_title_against_abstract_section(tmp_path) -> None:
@@ -125,7 +132,12 @@ def test_kongzi_site_toc_checks_every_title_against_abstract_section(tmp_path) -
         "<h6>2026-08-13 11:07:53</h6>"
         '<div id="page-content"><p>●中国哲学●</p>'
         + "".join(f"<p>{row}</p>" for row in rows)
-        + "".join(f"<p><strong>儒学问题研究之{i}</strong></p>" for i in range(1, 6))
+        + "".join(
+            f"<p><strong>儒学问题研究之{i}</strong></p>"
+            f"<p>{f'作者{i}' if i != 2 else '异名'}摘要：原刊摘要{i}</p>"
+            f"<p>关键词：孔学{i}作者：作者{i}，机构文字。</p>"
+            for i in range(1, 6)
+        )
         + "</div>"
     )
     announced, articles = _kongzi_toc(
@@ -134,6 +146,9 @@ def test_kongzi_site_toc_checks_every_title_against_abstract_section(tmp_path) -
     assert announced == "2026-08-13"
     assert len(articles) == 5
     assert articles[0].author == "作者1"
+    assert articles[0].abstract == "原刊摘要1"
+    assert articles[0].keywords == "孔学1"
+    assert articles[1].abstract is None and articles[1].keywords is None
     assert all(article.url == issue_url for article in articles)
     with pytest.raises(ValueError, match="abstract_crosscheck"):
         _kongzi_toc(

@@ -8,6 +8,7 @@ import pytest
 import philosophy_frontier_monitor.state as state_module
 from philosophy_frontier_monitor.models import Notification
 from philosophy_frontier_monitor.state import (
+    SCHEMA_VERSION,
     FeedStateUpdate,
     InterestProfileSnapshot,
     ProcessingOutcome,
@@ -88,7 +89,7 @@ def test_completed_checkpoint_round_trips():
         store.save_completed_checkpoint("philpapers:test", cursor="page-9", window_end=END)
         checkpoint = store.get_checkpoint("philpapers:test")
 
-    assert schema_version == "6"
+    assert schema_version == str(SCHEMA_VERSION)
     assert checkpoint is not None
     assert checkpoint.cursor == "page-9"
     assert checkpoint.window_end == END
@@ -128,10 +129,10 @@ def test_schema_two_run_table_is_migrated_without_rebuilding_database(monkeypatc
         "pipeline_version",
         "matching_rule_version",
     }.issubset(columns)
-    assert schema_version == "6"
+    assert schema_version == str(SCHEMA_VERSION)
 
 
-@pytest.mark.parametrize("original_schema", ["4", "5"])
+@pytest.mark.parametrize("original_schema", ["4", "5", "6"])
 def test_file_schema_upgrade_creates_verified_backup(original_schema):
     database = Path("var") / f"test-state-upgrade-{uuid.uuid4().hex}.sqlite3"
     backup = None
@@ -183,7 +184,7 @@ def test_file_schema_upgrade_creates_verified_backup(original_schema):
                 "SELECT COUNT(*) FROM notifications WHERE notification_id = 'notice-1'"
             ).fetchone()[0]
 
-        assert schema_version == "6"
+        assert schema_version == str(SCHEMA_VERSION)
         assert checkpoint is not None and checkpoint.cursor == "page-9"
         assert notification_count == 1
         assert backup is not None and backup.is_file()

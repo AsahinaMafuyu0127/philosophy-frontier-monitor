@@ -5,7 +5,7 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from .official_journals import OfficialIssue, render_issue_leads
-from .report import _safe_text
+from .report import _safe_text, publisher_article_lines
 from .search import PaperSearchResult
 
 
@@ -79,6 +79,8 @@ def render_paper_search(
     ]
     if official_issues:
         lines += [render_issue_leads(official_issues).rstrip(), ""]
+    if result.publisher_papers is not None:
+        lines += publisher_article_lines(result.publisher_papers)
     if result.cnki_coverage is not None:
         lines += ["## 知网空间补充候选", ""]
         lines += [

@@ -253,6 +253,25 @@ data through GitHub Private Vulnerability Reporting as described in [SECURITY.md
 
 ## Technical update
 
+### 19 November 2026 · Search publisher catalogues and abstracts directly
+
+Weekly reports, on-demand pulls, and historical searches now search complete publisher catalogues
+collected locally. Regular runs use the configured Chinese search terms. Repeat `--publisher-keyword`
+for a one-off query. Each lead shows the matching title, keyword, or abstract field, the journal
+and issue, and a publisher link for verification even when CNKI returns no record. Historical
+searches use the requested years. Recent reports check whether a reviewed issue publication day
+or labelled month overlaps the window. Committed weekly reports record leads for deduplication.
+
+The official catalogues for *Zhouyi Studies* (2026, no. 5) and *Confucius Studies* (2026, no. 4)
+yielded 11 and 15 records with both abstracts and keywords, respectively. Coverage at other
+sources follows the fields collected. An image-only WeChat catalogue requires access to the image
+and verification of each entry before it can be searched.
+[Publisher article search](references/publisher-article-observation.md#刊方逐篇检索)
+
+This is a code branch update. All 554 offline tests passed, including coverage of the three modes,
+missing and conflicting dates, incomplete catalogue snapshots, weekly deduplication, and previews
+using an older state database. Ruff, Skill validation, and the read-only release audit passed.
+
 ### 4 November 2026: completed weekly windows and WorkBuddy result audits
 
 Weekly previews and commits now reject unfinished windows before source reads.
