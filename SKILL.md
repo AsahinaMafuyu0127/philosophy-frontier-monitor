@@ -1,6 +1,6 @@
 ---
 name: philosophy-frontier-monitor
-description: Map philosophy research interests to verified PhilPapers categories, search existing papers from the confirmed interest configuration with available citation counts, and maintain weekly or on-demand new-paper reports. Use for interest-based paper search, monitoring, configuration, and scheduling. Do not use for judging scholarly quality or searching books, chapters, or general bibliographies.
+description: Map philosophy research interests to verified PhilPapers categories, search existing papers with available citation counts, and maintain bilingual weekly or on-demand reports with Chinese journal discovery. Use for interest-based philosophy paper search, monitoring, configuration, and scheduling. Do not use for judging scholarly quality or searching books, chapters, or general bibliographies.
 ---
 
 # Philosophy Frontier Monitor
@@ -51,10 +51,32 @@ publisher-origin issue evidence; use journal-specific timing comparisons to deci
 which channel to check first, while continuing the publisher-site scan. Do not infer
 universal WeChat priority from one journal or treat a search snippet or verification
 page as an inspected post. See the [same-issue timing comparison](references/chinese-journal-wechat-timing.md).
+CNKI Space discovery is on by default. During setup or a confirmed feed change,
+derive conventional Chinese topic, author, or work names from each verified
+feed label. Record them as `chinese_terms` on that feed in the private watchlist.
+The query planner gives active feeds a seed term before adding variants and legacy
+whole-profile terms. A feed without a Chinese term falls back to its public
+category label. Explain gaps when only the label is available or the term budget
+omits part of the scope. These search terms discover candidates and do not add
+new categories, transmit the research description, or establish relevance by themselves.
+
+Before each scheduled or requested weekly report through this Skill, run
+`pfm journal-watch run --config config/watchlist.yaml` to refresh the supported
+publisher catalogues. Keep the normal zero per-article database-check budget.
+Check the per-site outcomes and use `journal-watch pending` with the same
+configuration to review exact new source pages for dates. Then check the official
+WeChat channel as below and prepare the CNKI and catalogue date review before
+submitting the weekly report once. Look up relevant current issues or topics
+in public search for accounts with no useful linked candidate. A missing link
+or a blocked source is a coverage gap. Include the site and WeChat results in
+the coverage summary accompanying both languages. The `pfm` report commands
+read the collected and reviewed publisher evidence from the local observation store.
+
 For `search`, `pull-now`, or a weekly report invoked **through this Skill**, read
 [wechat-public-discovery.md](references/wechat-public-discovery.md) and run
 `pfm journal-watch wechat-discovery-plan`, `wechat-discover`, and
-`wechat-candidates` before the requested mode. Pass an explicitly selected user
+`wechat-candidates` before the requested mode. Use the same `--config` for the
+discovery, candidate review, and catalogue import. Pass an explicitly selected user
 timezone to `wechat-discover --timezone IANA_ZONE`; otherwise, if the session
 supplies the user's current timezone, pass that. If neither is available, use
 the user's configured watchlist timezone, then the local OS timezone. The
@@ -86,18 +108,18 @@ but cannot perform browser-assisted original-post review.
 channels; `pfm journal-watch list` shows locally recorded issue evidence.
 All three report modes also search the complete publisher catalogues already in
 the local observation store. For a request with explicit keywords or a topic, pass
-each requested term with `--publisher-keyword`. Regular runs reuse the configured
-Chinese terms. Report the text field that matched and the source link. The same
+each requested term with `--publisher-keyword`. Regular runs use the same
+feed-based query terms as CNKI Space. Report the matched field and the source link. The same
 catalogue entry remains findable without a CNKI result. Follow the publication
 date rules in [publisher-article-observation.md](references/publisher-article-observation.md).
 The date-preparation script also exposes `publisher_date_reviews`, including
 when CNKI returns no record. Pass the same `--publisher-keyword` options to it.
 Use the exact publisher article or catalogue link to review its issue date, then
 run the requested mode once.
-The bounded Chinese metadata and reviewed-issue leads workflow is a stable,
-explicitly enabled capability in search, pull-now, and weekly-run. It does not
-confirm that individual Chinese papers are newly published or establish complete
-coverage of Chinese philosophy journals.
+CNKI Space and publisher catalogue discovery report Chinese leads in their own
+sections. Review promising hits against the title, abstract, or original text
+for topic and work type, and verify the date evidence before describing recent
+publication. Explain coverage in terms of the sources and records actually read.
 `pfm journal-watch run` scans all currently verified publisher
 directories without article cross-checks by default. An explicit
 `--max-total-checks` above zero starts bounded repeat checks;
@@ -132,10 +154,9 @@ article URL and a manually checked type/interest decision in the ignored
 local store; never infer these from a journal title or keyword. A complete
 publisher TOC count is not a count of research papers or interested papers,
 and a small sample of CNKI hits does not prove database-wide recall.
-This publisher observation is an optional maintainer evaluation of directory
-stability and database search visibility, not a prerequisite for another user's
-`search`, `pull-now`, or `weekly-run`. Those modes do not require a multiweek
-observation baseline. `journal-watch check` and `run` check CNKI by default;
+Multiweek source-arrival measurements are optional maintainer work. Ordinary
+discovery uses the current catalogues without waiting for a measurement baseline.
+`journal-watch check` or a `run` with a per-article budget checks CNKI.
 Wanfang article cross-checks require explicit `--with-wanfang`. The ordinary
 watchlist's `sources.wanfang.enabled` also defaults to false and is independent
 of the journal-watch option. A private opt-in must not be copied into public
@@ -165,7 +186,7 @@ that window; retain the announcement date and issue month separately. A month
 label alone must not repeat the same issue in every week of that month.
 Treat an official WeChat posting date as an announcement date, not a journal
 publication date, and never infer a month from monthly frequency plus issue number.
-CNKI Space and Wanfang remain supplementary discovery and bibliography checks.
+CNKI Space and Wanfang supplement publisher discovery and bibliography checks.
 When the
 private watchlist enables `sources.cnki_space`, `search`, `pull-now`, and
 `weekly-run` perform bounded CNKI Space metadata discovery using the public
@@ -187,9 +208,9 @@ PhilPapers paper sections in both language versions. All three modes share the
 same publisher-date evidence. Before weekly, immediate, or historical discovery
 with CNKI enabled, use `.venv/Scripts/python.exe scripts/prepare_weekly_cnki.py
 --config config/watchlist.yaml` for a bounded, read-only candidate list. Weekly is
-the default; add `--mode pull-now --days N` for the same immediate window, or
-`--mode search --year-from YYYY --year-to YYYY` for the historical year scope
-(omit year flags when unrestricted). Keep those options aligned with the final
+the default. Use `--mode pull-now --days N` for the same immediate window, or
+`--mode search` with the same `--year-from`, `--year-to`, and repeated
+`--category` options as the final historical search. Keep the scope aligned with the final
 command. When CNKI
 lacks dates, follow the article to its publisher's official article or issue page
 and verify the same title, authors, journal, year, and issue. Save explicit

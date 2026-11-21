@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime, time
 from pathlib import Path
@@ -56,6 +57,7 @@ class FeedConfig:
     category_name: str
     url: str
     official_rss_url: str | None = None
+    chinese_terms: tuple[str, ...] = ()
 
     @property
     def feed_key(self) -> str:
@@ -135,6 +137,57 @@ class WatchlistConfig:
     unresolved_retry_days: int
     storage: StorageConfig
     wanfang: WanfangConfig = WanfangConfig()
+
+
+MAX_CHINESE_SEARCH_TERMS = 12
+MAX_CHINESE_TERM_CHARS = 80
+
+
+@dataclass(frozen=True, slots=True)
+class ChineseQueryPlan:
+    terms: tuple[CnkiSearchTerm, ...]
+    selected_feeds: int
+    planned_feeds: int
+    public_label_fallbacks: int
+    terms_outside_budget: int
+
+
+def plan_chinese_queries(
+    config: WatchlistConfig, category_ids: Collection[str] | None = None,
+) -> ChineseQueryPlan:
+    """Use the requested feeds to plan discovery, independent of proof of relevance."""
+    active = tuple(
+        feed for feed in config.feeds if feed.category_id not in config.excluded_category_ids
+    )
+    scoped = tuple(
+        feed for feed in active if category_ids is None or feed.category_id in category_ids
+    )
+    seeds = []
+    extra = []
+    for feed in scoped:
+        queries = feed.chinese_terms
+        fallback = False
+        if not queries and config.cnki_space.enabled:
+            label = " ".join(feed.category_name.split())
+            if 0 < len(label) <= MAX_CHINESE_TERM_CHARS:
+                queries = (label,)
+                fallback = True
+        if queries:
+            seeds.append((CnkiSearchTerm(queries[0], "theme"), fallback))
+            extra.extend(CnkiSearchTerm(query, "theme") for query in queries[1:])
+    # Legacy query terms have no feed association. They apply to the whole profile only.
+    legacy = config.cnki_space.terms if scoped and scoped == active else ()
+    preferred = tuple(term for term, _ in seeds)
+    ordered = tuple(dict.fromkeys((*preferred, *legacy, *extra)))
+    terms = ordered[:MAX_CHINESE_SEARCH_TERMS]
+    selected_terms = set(terms)
+    return ChineseQueryPlan(
+        terms=terms,
+        selected_feeds=len(scoped),
+        planned_feeds=sum(term in selected_terms for term, _ in seeds),
+        public_label_fallbacks=sum(fallback and term in selected_terms for term, fallback in seeds),
+        terms_outside_budget=len(ordered) - len(terms),
+    )
 
 
 WEEKDAYS = {
@@ -487,6 +540,20 @@ def load_watchlist(path: str | Path) -> WatchlistConfig:
                 raise ConfigError(
                     f"feed[{index}].official_rss_url: {error}"
                 ) from error
+        raw_chinese_terms = item.get("chinese_terms", [])
+        if (
+            not isinstance(raw_chinese_terms, list)
+            or len(raw_chinese_terms) > MAX_CHINESE_SEARCH_TERMS
+            or not all(
+                isinstance(term, str) and 0 < len(" ".join(term.split())) <= MAX_CHINESE_TERM_CHARS
+                for term in raw_chinese_terms
+            )
+        ):
+            raise ConfigError(
+                f"feed[{index}].chinese_terms must contain at most "
+                f"{MAX_CHINESE_SEARCH_TERMS} non-empty terms of {MAX_CHINESE_TERM_CHARS} characters"
+            )
+        chinese_terms = tuple(dict.fromkeys(" ".join(term.split()) for term in raw_chinese_terms))
         feeds.append(
             FeedConfig(
                 category_id=category_id,
@@ -495,6 +562,7 @@ def load_watchlist(path: str | Path) -> WatchlistConfig:
                 ),
                 url=category_url,
                 official_rss_url=official_rss_url,
+                chinese_terms=chinese_terms,
             )
         )
 
@@ -502,22 +570,23 @@ def load_watchlist(path: str | Path) -> WatchlistConfig:
         sources.get("philarchive_oai", {}), "sources.philarchive_oai"
     )
     cnki_payload = _require_mapping(sources.get("cnki_space", {}), "sources.cnki_space")
-    cnki_enabled = cnki_payload.get("enabled", False)
+    cnki_enabled = cnki_payload.get("enabled", True)
     if not isinstance(cnki_enabled, bool):
         raise ConfigError("sources.cnki_space.enabled must be a boolean")
     cnki_terms_payload = cnki_payload.get("terms", [])
-    if not isinstance(cnki_terms_payload, list) or len(cnki_terms_payload) > 12:
+    if (
+        not isinstance(cnki_terms_payload, list)
+        or len(cnki_terms_payload) > MAX_CHINESE_SEARCH_TERMS
+    ):
         raise ConfigError("sources.cnki_space.terms must be a list of at most 12 terms")
     cnki_terms = []
     for index, raw_term in enumerate(cnki_terms_payload):
         term = _require_mapping(raw_term, f"sources.cnki_space.terms[{index}]")
         query = _require_text(term.get("query"), f"sources.cnki_space.terms[{index}].query")
         field = str(term.get("field", "title"))
-        if field not in {"title", "theme"} or len(query) > 80:
+        if field not in {"title", "theme"} or len(query) > MAX_CHINESE_TERM_CHARS:
             raise ConfigError("CNKI terms need title/theme fields and queries up to 80 characters")
         cnki_terms.append(CnkiSearchTerm(query=query, field=field))
-    if cnki_enabled and not cnki_terms:
-        raise ConfigError("enabled CNKI Space search requires at least one term")
     cnki_max_pages = cnki_payload.get("max_pages", 1)
     if isinstance(cnki_max_pages, bool) or not isinstance(cnki_max_pages, int):
         raise ConfigError("sources.cnki_space.max_pages must be an integer")

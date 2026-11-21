@@ -693,7 +693,9 @@ def test_catch_up_reconstructs_the_profile_effective_for_each_missed_window(monk
         CONFIG,
         profile_version=4,
         profile_effective_from=datetime(2026, 9, 20, 12, tzinfo=UTC),
-        feeds=(replace(CONFIG.feeds[0], official_rss_url=official_rss_url),),
+        feeds=(replace(
+            CONFIG.feeds[0], official_rss_url=official_rss_url, chinese_terms=("泰阿泰德",),
+        ),),
     )
     with StateStore(":memory:") as state:
         establish_baseline(
@@ -715,6 +717,11 @@ def test_catch_up_reconstructs_the_profile_effective_for_each_missed_window(monk
             different_page, stored_profile, taxonomy_path=CONFIG.taxonomy_path
         )
         assert reconstructed.feeds[0].official_rss_url is None
+        assert reconstructed.feeds[0].chinese_terms == ()
+        reconstructed = pipeline._config_for_stored_profile(
+            changed_config, stored_profile, taxonomy_path=CONFIG.taxonomy_path,
+        )
+        assert reconstructed.feeds[0].chinese_terms == ("泰阿泰德",)
         run_weekly(
             CONFIG,
             state,

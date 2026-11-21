@@ -35,7 +35,13 @@ from .cnki_review import (
     assess_cnki_records,
     load_reviewed_evidence,
 )
-from .config import ConfirmedCategoryConfig, FeedConfig, WatchlistConfig
+from .config import (
+    ChineseQueryPlan,
+    ConfirmedCategoryConfig,
+    FeedConfig,
+    WatchlistConfig,
+    plan_chinese_queries,
+)
 from .freshness import assess_freshness
 from .http_retry import BoundedRequestError
 from .identity import (
@@ -620,9 +626,18 @@ def _config_for_stored_profile(
     # The official RSS URL is a private access path, not part of the immutable
     # interest profile. Reuse it only for the exact category page saved in the
     # historical profile; never apply a current link to a different page.
-    current_feed_access = {
-        (feed.category_id, feed.url): feed.official_rss_url for feed in current.feeds
-    }
+    current_feeds = {(feed.category_id, feed.url): feed for feed in current.feeds}
+    stored_feed_keys = {(feed.category_id, feed.url) for feed in stored.feeds}
+    historical_feeds = []
+    for item in stored.feeds:
+        live = current_feeds.get((item.category_id, item.url))
+        historical_feeds.append(FeedConfig(
+            category_id=item.category_id,
+            category_name=item.category_name,
+            url=item.url,
+            official_rss_url=live.official_rss_url if live else None,
+            chinese_terms=live.chinese_terms if live else (),
+        ))
     return replace(
         current,
         profile_id=stored.profile_id,
@@ -641,14 +656,12 @@ def _config_for_stored_profile(
         inference_mode=stored.inference_mode,
         excluded_category_ids=stored.excluded_category_ids,
         taxonomy_path=taxonomy_path,
-        feeds=tuple(
-            FeedConfig(
-                category_id=item.category_id,
-                category_name=item.category_name,
-                url=item.url,
-                official_rss_url=current_feed_access.get((item.category_id, item.url)),
-            )
-            for item in stored.feeds
+        feeds=tuple(historical_feeds),
+        cnki_space=(
+            current.cnki_space
+            if current_feeds.keys() == stored_feed_keys
+            and current.excluded_category_ids == stored.excluded_category_ids
+            else replace(current.cnki_space, terms=())
         ),
     )
 
@@ -2125,15 +2138,32 @@ def _load_cnki_issues(
     window_end: datetime,
     checked_at: datetime,
     loader: Callable[..., CnkiScan],
+    query_plan: ChineseQueryPlan | None = None,
 ) -> CnkiScan | None:
     if not config.cnki_space.enabled:
         return None
     first_year = window_start.astimezone(config.timezone).year
     last_year = (window_end - timedelta(microseconds=1)).astimezone(config.timezone).year
     years = tuple(range(first_year, last_year + 1))
+    return _scan_cnki(
+        config, query_plan or plan_chinese_queries(config),
+        years=years, checked_at=checked_at, loader=loader,
+    )
+
+
+def _scan_cnki(
+    config: WatchlistConfig,
+    query_plan: ChineseQueryPlan,
+    *,
+    years: tuple[int | None, ...],
+    checked_at: datetime,
+    loader: Callable[..., CnkiScan],
+) -> CnkiScan:
+    if not query_plan.terms:
+        return CnkiScan((), (), checked_at, "failed", 0, 0, (), ("no_usable_feed_terms",))
     try:
         return loader(
-            config.cnki_space.terms,
+            query_plan.terms,
             years=years,
             max_pages=config.cnki_space.max_pages,
             checked_at=checked_at,
@@ -2159,6 +2189,7 @@ def _cnki_coverage(
     outside_window: int = 0,
     weekly: bool = False,
     previously_seen: int = 0,
+    query_plan: ChineseQueryPlan,
 ) -> SourceCoverage:
     recent_detail = (
         f"{'周报' if weekly else '即时'}窗口显示 {len(recent_issues)} 项；"
@@ -2181,12 +2212,18 @@ def _cnki_coverage(
         detail=(
             f"有限题录检索：完成 {scan.result_pages}/{scan.requested_pages} 页；"
             f"期次线索 {len(scan.issues)}；截断 {len(scan.incomplete_queries)} 项；"
-            f"失败 {len(scan.failures)} 项。{recent_detail}未验证知网全库覆盖。"
+            f"失败 {len(scan.failures)} 项。{recent_detail}"
+            f"检索词计划覆盖 {query_plan.planned_feeds}/{query_plan.selected_feeds} 个 feed，"
+            f"其中 {query_plan.public_label_fallbacks} 个使用公开分类原名。"
+            f"预算外检索词 {query_plan.terms_outside_budget} 项。未验证知网全库覆盖。"
         ),
         detail_en=(
             f"bounded metadata search: {scan.result_pages}/{scan.requested_pages} pages; "
             f"{len(scan.issues)} issue leads; {len(scan.incomplete_queries)} truncated scopes; "
             f"{len(scan.failures)} failed scopes. {recent_detail_en}"
+            f"The query plan covers {query_plan.planned_feeds}/{query_plan.selected_feeds} feeds. "
+            f"{query_plan.public_label_fallbacks} use the public category label. "
+            f"{query_plan.terms_outside_budget} queries are outside the budget. "
             "Full CNKI coverage is unverified."
         ),
     )
@@ -2288,6 +2325,7 @@ def _load_wanfang_discovery(
     window_end: datetime | None,
     checked_at: datetime,
     loader: Callable[..., WanfangDiscoveryScan],
+    query_plan: ChineseQueryPlan,
 ) -> WanfangDiscoveryScan | None:
     if not config.wanfang.discover:
         return None
@@ -2298,7 +2336,7 @@ def _load_wanfang_discovery(
         years = tuple(range(first_year, last_year + 1))
     try:
         return loader(
-            config.cnki_space.terms,
+            query_plan.terms,
             years=years,
             max_terms=config.wanfang.max_discovery_terms,
             max_pages=config.wanfang.max_discovery_pages,
@@ -3148,21 +3186,23 @@ def run_on_demand(
                 status="local_only",
                 checked_at=requested_at,
                 detail=(
-                    f"读取本窗口首次核实的本地期次 {len(official_issues)} 条；"
-                    "本次未逐站巡查期刊官网或公众号。"
+                    f"从本地观察库读取本窗口首次核实的期次 {len(official_issues)} 条。"
+                    "官网和公众号的访问范围见独立巡检结果。"
                 ),
                 detail_en=(
-                    f"Read {len(official_issues)} issue leads first reviewed in this window; "
-                    "journal sites and official WeChat were not checked live."
+                    f"Read {len(official_issues)} locally stored issues first reviewed in this "
+                    "window. Live site and official WeChat coverage comes from the separate scan."
                 ),
             ),
         )
+    cnki_query_plan = plan_chinese_queries(config)
     cnki_scan = _load_cnki_issues(
         config,
         window_start=window_start,
         window_end=window_end,
         checked_at=requested_at,
         loader=cnki_loader,
+        query_plan=cnki_query_plan,
     )
     if cnki_scan is not None:
         cnki_scan = _cnki_scan_with_dates(config, cnki_scan)
@@ -3180,6 +3220,7 @@ def run_on_demand(
                 recent_issues=recent_issues,
                 missing_month=missing_month,
                 outside_window=outside_window,
+                query_plan=cnki_query_plan,
             ),
         )
         cnki_assessments, review_coverage = _cnki_review_assessments(config, recent_scan)
@@ -3204,6 +3245,7 @@ def run_on_demand(
         window_end=window_end,
         checked_at=requested_at,
         loader=wanfang_discovery_loader,
+        query_plan=cnki_query_plan,
     )
     if wanfang_discovery is not None:
         recent_wanfang, wanfang_missing_month, wanfang_outside_window = _wanfang_records_in_window(
@@ -3790,21 +3832,23 @@ def run_weekly(
                 status="local_only",
                 checked_at=started_at,
                 detail=(
-                    f"读取本地本周首次核实期次 {len(official_issues)} 条；"
-                    "本次未逐站巡查期刊官网或公众号。"
+                    f"从本地观察库读取本周首次核实期次 {len(official_issues)} 条。"
+                    "官网和公众号的访问范围见周报前的独立巡检结果。"
                 ),
                 detail_en=(
-                    f"Read {len(official_issues)} issues first reviewed this week; "
-                    "journal sites and official WeChat were not checked live."
+                    f"Read {len(official_issues)} locally stored issues first reviewed this week. "
+                    "Live site and official WeChat coverage comes from the separate scan."
                 ),
             ),
         )
+    cnki_query_plan = plan_chinese_queries(config)
     cnki_scan = _load_cnki_issues(
         config,
         window_start=window_start,
         window_end=window_end,
         checked_at=started_at,
         loader=cnki_loader,
+        query_plan=cnki_query_plan,
     )
     cnki_baseline = cnki_scan is not None and state.get_checkpoint("cnki-space-issues") is None
     cnki_window = ()
@@ -3842,6 +3886,7 @@ def run_weekly(
                 outside_window=outside_window,
                 weekly=True,
                 previously_seen=len(cnki_window) - len(cnki_report_issues or ()),
+                query_plan=cnki_query_plan,
             ),
         )
         cnki_assessments, review_coverage = _cnki_review_assessments(config, report_scan)
@@ -3866,6 +3911,7 @@ def run_weekly(
         window_end=window_end,
         checked_at=started_at,
         loader=wanfang_discovery_loader,
+        query_plan=cnki_query_plan,
     )
     wanfang_baseline = (
         wanfang_discovery is not None

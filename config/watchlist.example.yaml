@@ -56,12 +56,14 @@ sources:
     - category_id: "74924"
       category_name: "Plato: Theaetetus"
       url: "https://philpapers.org/browse/plato-theaetetus"
+      chinese_terms: ["泰阿泰德", "泰阿泰德篇"]
       # If the category page is challenged, use its own RSS feed control in a
       # normal browser and put the generated link in the Git-ignored private
       # watchlist as official_rss_url. Do not commit or share the opaque link.
     - category_id: "74844"
       category_name: "Plato: Knowledge and Belief"
       url: "https://philpapers.org/browse/plato-knowledge-and-belief"
+      chinese_terms: ["柏拉图知识与信念"]
   philarchive_oai:
     # Optional completeness aid for records that have no RSS timestamp or year.
     # Its datestamp means "metadata record created or updated", not publication date.
@@ -69,11 +71,12 @@ sources:
     enabled: true
     endpoint: "https://philarchive.org/oai.pl"
   cnki_space:
-    # Optional bounded CNKI Space metadata discovery. Keep actual research terms
-    # in the private watchlist only. Issue numbers are not calendar months.
+    # Bounded CNKI Space discovery is on by default. Each active feed uses its
+    # Chinese terms or its public category name. "terms" can add whole-profile
+    # queries. Keep actual research terms in the private watchlist.
     # Optional reviewed_evidence points to a Git-ignored YAML file under var/;
     # its article-level facts must be checked against the linked source page.
-    enabled: false
+    enabled: true
     max_pages: 1
     terms: []
     reviewed_evidence: null
