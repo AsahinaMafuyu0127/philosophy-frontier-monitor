@@ -29,7 +29,7 @@ One confirmed research scope supports three workflows:
 - **Start with your own words:** map research interests to real PhilPapers categories, then accept, reject, or defer each proposal.
 - **Keep the evidence for each work:** merge multiple sources, show date and work-type evidence, and route conflicting records to individual review.
 - **Read bilingual reports:** follow matching works, source coverage, and records awaiting review in Chinese and English.
-- **Optionally include Chinese sources:** show bounded CNKI Space and Wanfang metadata and reviewed publisher issue leads in separate sections.
+- **Discover Chinese journal leads by default:** search CNKI Space and publisher catalogues from the same confirmed feeds. Weekly preparation also checks journal sites and official WeChat candidates.
 
 Historical search covers the records actually returned by the category feeds in that run.
 Weekly monitoring and on-demand pulls also apply their respective time windows.
@@ -126,7 +126,7 @@ Keep my confirmed research scope and let me confirm the final time before creati
 the scheduled task.
 ```
 
-Scheduling uses your local timezone. Research scope, delivery time, and optional Chinese sources
+Scheduling uses your local timezone. Research scope, delivery time, and the CNKI search setting
 can each be adjusted independently.
 
 ## Real report
@@ -197,9 +197,9 @@ also typeset a report as **Word (.docx)** or **PowerPoint (.pptx)**. Add
 
 PhilPapers category feeds establish category membership; PhilArchive OAI supplies source-record changes;
 Crossref and OpenAlex support bibliographic, work-type, and date checks. Reports distinguish an OAI record
-timestamp from a work's publication date. When enabled, publisher, CNKI, and Wanfang leads appear separately
-with their sources and date precision. Publisher directories for nine journals can be scanned automatically;
-the other registered journals need manual review. Each report describes the scope actually read and
+timestamp from a work's publication date. Publisher, CNKI Space, and opt-in Wanfang leads appear separately
+with their sources and date precision. Publisher directories for nine journals can be scanned automatically.
+The other registered journals need manual review. Each report describes the scope actually read and
 records still awaiting review.
 
 ## Current version
@@ -213,7 +213,7 @@ evidence-pipeline version is `0.6.2`.
 | Interest mapping, category confirmation, baseline, and weekly monitoring | Stable |
 | On-demand pulls, existing-paper search, and bilingual reports | Stable |
 | Cross-run OAI caching, pagination recovery, and incremental refresh | Stable |
-| Bounded Chinese metadata and reviewed issue leads | Optional since `v0.4.0` |
+| Bounded Chinese metadata and reviewed issue leads | CNKI Space on by default in the current code branch |
 
 Chinese leads appear separately with their source and month evidence. Publisher directories for
 nine journals can be scanned separately; the other registered journals still require manual
@@ -252,6 +252,20 @@ databases, and complete reports local. Report vulnerabilities involving credenti
 data through GitHub Private Vulnerability Reporting as described in [SECURITY.md](SECURITY.md).
 
 ## Technical update
+
+### 21 November 2026 · Search Chinese sources from confirmed feeds by default
+
+CNKI Space is on by default and shares its query terms with the local publisher catalogues.
+Each feed can provide Chinese names for its topics, authors, or works. The public category
+name is the fallback. A historical search with a category filter uses the selected feeds.
+Weekly preparation through the Skill refreshes supported journal sites, looks for official
+WeChat posts, and reviews accessible originals before applying the existing reporting window.
+Both languages describe the sources checked, evidence gaps, and query limits.
+[Chinese sources and query configuration](references/chinese-source-expansion.md#22-知网空间的探索性候选通道)
+
+This is a code branch update. All 558 offline tests passed, along with Ruff, Skill validation,
+and the read-only release audit. Live spot checks used one public CNKI query and the official
+Zhouyi Studies catalogue. The journal page yielded no directly extractable WeChat article link.
 
 ### 19 November 2026 · Search publisher catalogues and abstracts directly
 

@@ -34,6 +34,8 @@ taxonomy:
   allow_fixture_for_dry_run: true
 
 sources:
+  cnki_space:
+    enabled: false
   philpapers_category_pages:
     - category_id: "74924"
       category_name: "Plato: Theaetetus"

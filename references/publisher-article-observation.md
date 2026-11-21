@@ -63,7 +63,7 @@ pfm journal-watch review --journal zhouyi-yanjiu --year 2026 --issue 4 `
 ## 刊方逐篇检索
 
 `weekly-run`、`catch-up`、`pull-now` 和 `search` 都在本地完整目录中检索题名、原文关键词和摘要。
-平时复用私人配置的中文检索词。同一次临时检索可重复传入 `--publisher-keyword`，命中任一给定词
+平时复用当前 feed 的知网检索词计划。同一次临时检索可重复传入 `--publisher-keyword`，命中任一给定词
 即可形成刊方线索。每条结果保留刊名、年期、作者、命中字段和刊方链接。题录即使尚未进入知网，
 也可在刊方来源中查到。刊方线索的类型、兴趣标签和逐篇发表时间仍待独立核实。
 
@@ -80,7 +80,8 @@ pfm journal-watch review --journal zhouyi-yanjiu --year 2026 --issue 4 `
 和[《孔子研究》2026 年第 4 期目录](https://www.chinakongzi.org/content/6147_589032.html)。
 
 只读预检脚本 `scripts/prepare_weekly_cnki.py` 的 `publisher_date_reviews` 列出尚待补证的刊方命中。
-临时检索所用的 `--publisher-keyword` 同样传给预检。近期模式列出窗口内首次采集的待定题录，
+临时检索所用的 `--publisher-keyword` 同样传给预检。近期模式列出自窗口开始到预检时首次采集的
+待定题录，其中包含周报当天刷新目录后新取得的记录。正式报告仍按原有窗口判断，
 沿候选的逐篇链接或完整目录回到同一期的刊方来源。核对后按原有期次复核流程录入出版证据。
 
 ## 按刊物与期次核算样本

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from calendar import monthrange
+from collections.abc import Collection
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
@@ -12,7 +13,7 @@ from hashlib import sha256
 from itertools import groupby
 from unicodedata import normalize
 
-from .config import WatchlistConfig
+from .config import WatchlistConfig, plan_chinese_queries
 from .journal_collection import PublisherArticle, _title_digest
 from .official_journals import load_catalog
 
@@ -52,9 +53,14 @@ def _term(value: str) -> str:
     return "".join(normalize("NFKC", value).casefold().split())
 
 
-def publisher_keywords(config: WatchlistConfig, keywords: tuple[str, ...]) -> tuple[str, ...]:
-    """An explicit one-run query takes precedence over the configured Chinese terms."""
-    selected = keywords or tuple(term.query for term in config.cnki_space.terms)
+def publisher_keywords(
+    config: WatchlistConfig, keywords: tuple[str, ...], *,
+    category_ids: Collection[str] | None = None,
+) -> tuple[str, ...]:
+    """Use the same feed terms as CNKI unless there is an explicit publisher query."""
+    selected = keywords or tuple(
+        term.query for term in plan_chinese_queries(config, category_ids).terms
+    )
     if len(selected) > 12 or any(not _term(value) or len(value) > 80 for value in selected):
         raise ValueError("publisher search accepts up to 12 keywords of 1 to 80 characters")
     return tuple(dict.fromkeys(_term(value) for value in selected))

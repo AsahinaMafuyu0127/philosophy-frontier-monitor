@@ -22,7 +22,7 @@ from .cnki_review import (
     CnkiOverlap,
     assess_cnki_overlaps,
 )
-from .config import WatchlistConfig
+from .config import WatchlistConfig, plan_chinese_queries
 from .identity import (
     IdentityComparison,
     IdentityMatchLevel,
@@ -35,7 +35,7 @@ from .identity_reviews import (
     identity_evidence_fingerprint,
     resolve_identity_review,
 )
-from .models import DateValue, WorkTypeEvidence
+from .models import DateValue, InterestProfile, TaxonomySnapshot, WorkTypeEvidence
 from .pipeline import (
     EXPLICIT_UNSUPPORTED_TITLE_HINTS,
     FeedLoader,
@@ -341,6 +341,27 @@ def _merge_items(items: list[PaperSearchItem], stats: Counter) -> list[PaperSear
     return list(groups.values())
 
 
+def search_category_groups(
+    config: WatchlistConfig,
+    taxonomy: TaxonomySnapshot,
+    profile: InterestProfile,
+    category_ids: tuple[str, ...],
+) -> tuple[tuple[str, ...], tuple[frozenset[str], ...]]:
+    selected_ids = category_ids or tuple(c.category_id for c in config.confirmed_categories)
+    if not selected_ids:
+        raise ValueError("search needs confirmed interest categories")
+    if set(selected_ids).difference(profile.expanded_category_ids):
+        raise ValueError("temporary categories must belong to the configured interest scope")
+    flags = {c.category_id: c.include_descendants for c in config.confirmed_categories}
+    groups = tuple(
+        expand_selected_categories(
+            taxonomy, {category_id: flags.get(category_id, False)}
+        ).intersection(profile.expanded_category_ids)
+        for category_id in dict.fromkeys(selected_ids)
+    )
+    return selected_ids, groups
+
+
 def run_paper_search(
     config: WatchlistConfig,
     *,
@@ -362,7 +383,6 @@ def run_paper_search(
     """Search configured interests; dependencies may be injected for offline tests."""
     options = options or SearchOptions()
     options.validate()
-    publisher_query = publisher_keywords(config, options.publisher_terms)
     now = now or datetime.now(UTC)
     if now.tzinfo is None:
         raise ValueError("search time must include a timezone")
@@ -371,19 +391,10 @@ def run_paper_search(
     taxonomy, profile = _load_runtime(
         config, now=now, allow_development_fixture=allow_development_fixture
     )
-    selected_ids = options.category_ids or tuple(c.category_id for c in config.confirmed_categories)
-    if not selected_ids:
-        raise ValueError("search needs confirmed interest categories")
-    if set(selected_ids).difference(profile.expanded_category_ids):
-        raise ValueError("temporary categories must belong to the configured interest scope")
-    flags = {c.category_id: c.include_descendants for c in config.confirmed_categories}
-    groups = tuple(
-        expand_selected_categories(
-            taxonomy, {category_id: flags.get(category_id, False)}
-        ).intersection(profile.expanded_category_ids)
-        for category_id in dict.fromkeys(selected_ids)
-    )
+    selected_ids, groups = search_category_groups(config, taxonomy, profile, options.category_ids)
     scope = frozenset().union(*groups)
+    cnki_query_plan = plan_chinese_queries(config, scope)
+    publisher_query = publisher_keywords(config, options.publisher_terms, category_ids=scope)
     # Read the configured membership feeds, including known exclusions, before
     # narrowing the candidates. A remote feed is not an exhaustive category set.
     feeds = _load_all_feeds(
@@ -821,7 +832,9 @@ def run_paper_search(
     cnki_overlaps: tuple[CnkiOverlap, ...] = ()
     wanfang_scan: WanfangScan | None = None
     wanfang_discovery: WanfangDiscoveryScan | None = None
-    if config.cnki_space.enabled:
+    if config.cnki_space.enabled and not cnki_query_plan.terms:
+        cnki_coverage = "本次 feed 范围内没有可用检索词，知网空间尚未检索。"
+    elif config.cnki_space.enabled:
         if (
             options.year_from is not None
             and options.year_to is not None
@@ -834,7 +847,7 @@ def run_paper_search(
             cnki_years = (None,)
         try:
             cnki_scan = cnki_loader(
-                config.cnki_space.terms,
+                cnki_query_plan.terms,
                 years=cnki_years,
                 max_pages=config.cnki_space.max_pages,
                 checked_at=now,
@@ -912,7 +925,7 @@ def run_paper_search(
         if config.wanfang.discover:
             try:
                 wanfang_discovery = wanfang_discovery_loader(
-                    config.cnki_space.terms,
+                    cnki_query_plan.terms,
                     years=cnki_years,
                     max_terms=config.wanfang.max_discovery_terms,
                     max_pages=config.wanfang.max_discovery_pages,
@@ -940,6 +953,12 @@ def run_paper_search(
                 wanfang_discovery = WanfangDiscoveryScan(
                     (), now, "failed", 0, 0, 0, (f"adapter:{type(error).__name__}",)
                 )
+    if cnki_coverage is not None:
+        cnki_coverage += (
+            f" 检索词计划覆盖 {cnki_query_plan.planned_feeds}/{cnki_query_plan.selected_feeds} 个 "
+            f"feed，其中 {cnki_query_plan.public_label_fallbacks} 个使用公开分类原名。"
+            f"预算外检索词 {cnki_query_plan.terms_outside_budget} 项。"
+        )
     publisher_papers = search_publisher_papers(
         config, publisher_query, year_from=options.year_from, year_to=options.year_to,
     )

@@ -134,6 +134,30 @@ def test_historical_papers_sorted_and_missing_is_not_zero():
     assert result.state_mutated is False
 
 
+def test_historical_cnki_query_excludes_terms_outside_explicit_feed_scope():
+    original = two_category_config()
+    config = replace(
+        original,
+        feeds=(
+            replace(original.feeds[0], chinese_terms=("泰阿泰德",)),
+            replace(original.feeds[1], chinese_terms=("巴门尼德篇",)),
+        ),
+        cnki_space=CnkiSpaceConfig(True, (CnkiSearchTerm("整份画像的通用词"),), 1),
+    )
+    queries = []
+
+    def scan(terms, *, checked_at, **_):
+        queries.extend(terms)
+        return CnkiScan((), (), checked_at, "success", 1, 1, (), ())
+
+    result = run(
+        (), config=config, cnki_loader=scan,
+        options=SearchOptions(category_ids=("74915",)),
+    )
+    assert queries == [CnkiSearchTerm("巴门尼德篇", "theme")]
+    assert "1/1 个 feed" in result.cnki_coverage
+
+
 def test_cnki_candidates_are_visible_but_not_counted_as_verified_search_matches():
     record = CnkiRecord(
         title="概念与论证",

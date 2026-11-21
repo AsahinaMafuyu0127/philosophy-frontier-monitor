@@ -1,9 +1,17 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 import yaml
 
-from philosophy_frontier_monitor.config import ConfigError, load_watchlist
+from philosophy_frontier_monitor.config import (
+    MAX_CHINESE_SEARCH_TERMS,
+    ConfigError,
+    FeedConfig,
+    load_watchlist,
+    plan_chinese_queries,
+)
+from philosophy_frontier_monitor.sources.cnki_space import CnkiSearchTerm
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
 
@@ -58,6 +66,42 @@ def test_public_schema_five_example_records_onboarding_without_account_access():
     assert config.onboarding.philpapers_account_decision == "deferred"
     assert config.onboarding.authorized_scopes == ()
     assert config.onboarding.public_profile_url is None
+
+
+def test_chinese_search_defaults_on_and_uses_feed_terms_or_public_label(workspace_tmp_path):
+    source = FIXTURE_DIR / "watchlist_minimal.yaml"
+    payload = yaml.safe_load(source.read_text(encoding="utf-8"))
+    payload["sources"].pop("cnki_space")
+    path = workspace_tmp_path / "watchlist.yaml"
+    path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+    config = load_watchlist(path)
+
+    assert config.cnki_space.enabled
+    assert plan_chinese_queries(config).terms == (CnkiSearchTerm("Plato: Theaetetus", "theme"),)
+    assert plan_chinese_queries(config).public_label_fallbacks == 1
+
+    payload["sources"]["philpapers_category_pages"][0]["chinese_terms"] = [" 泰阿泰德 ", "对话录"]
+    path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+    plan = plan_chinese_queries(load_watchlist(path))
+    assert plan.terms == (
+        CnkiSearchTerm("泰阿泰德", "theme"), CnkiSearchTerm("对话录", "theme"),
+    )
+    assert plan.public_label_fallbacks == 0
+
+
+def test_chinese_query_plan_prioritizes_distinct_feeds_under_existing_budget():
+    original = load_watchlist(FIXTURE_DIR.parents[1] / "config" / "watchlist.example.yaml")
+    extra_feeds = tuple(
+        FeedConfig(str(i), f"Public category {i}", f"https://philpapers.org/browse/example-{i}")
+        for i in range(MAX_CHINESE_SEARCH_TERMS)
+    )
+    config = replace(original, feeds=(*original.feeds, *extra_feeds))
+    plan = plan_chinese_queries(config)
+
+    assert len(plan.terms) == MAX_CHINESE_SEARCH_TERMS
+    assert plan.planned_feeds == MAX_CHINESE_SEARCH_TERMS
+    assert plan.selected_feeds == MAX_CHINESE_SEARCH_TERMS + 2
+    assert plan.terms_outside_budget > 0
 
 
 def test_private_watchlist_accepts_only_matching_official_rss_link(workspace_tmp_path):

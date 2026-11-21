@@ -1092,7 +1092,6 @@ def _wechat_user_timezone(args: argparse.Namespace) -> ZoneInfo | None:
 
 def _journal_watch(args: argparse.Namespace) -> int:
     catalog_path = Path(args.catalog)
-    db_path = Path(args.db)
     if args.action == "wechat-discovery-plan":
         _emit({
             "ok": True, "operation": "journal-watch",
@@ -1101,6 +1100,13 @@ def _journal_watch(args: argparse.Namespace) -> int:
             "evidence_status": "unverified_until_original_post_review",
         })
         return 0
+    config_path = Path(args.config)
+    if args.db is not None:
+        db_path = Path(args.db)
+    elif args.action != "catalog" and config_path.is_file():
+        db_path = load_watchlist(config_path).storage.state_database.parent / DEFAULT_DB_PATH.name
+    else:
+        db_path = DEFAULT_DB_PATH
     if args.action == "wechat-discover":
         user_timezone = _wechat_user_timezone(args)
         scans = discover_publisher_links(
@@ -1519,7 +1525,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     journal_watch.add_argument("--catalog", default=str(CATALOG_PATH))
-    journal_watch.add_argument("--db", default=str(DEFAULT_DB_PATH))
+    journal_watch.add_argument("--db", help="override the observation database beside weekly state")
     journal_watch.add_argument("--input", help="reviewed complete TOC JSON")
     journal_watch.add_argument("--journal")
     journal_watch.add_argument("--year", type=int)

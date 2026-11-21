@@ -144,7 +144,8 @@ def test_publisher_abstract_finds_article_without_cnki_in_all_modes(
     original = load_watchlist(FIXTURES / "watchlist_minimal.yaml")
     config = replace(
         original,
-        cnki_space=CnkiSpaceConfig(True, (CnkiSearchTerm("合成专题", "theme"),), 1),
+        cnki_space=CnkiSpaceConfig(True, (), 1),
+        feeds=(replace(original.feeds[0], chinese_terms=("合成专题", "比较解释")),),
         storage=replace(
             original.storage,
             state_database=workspace_tmp_path / "state.sqlite3",
@@ -172,7 +173,8 @@ def test_publisher_abstract_finds_article_without_cnki_in_all_modes(
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         issue = collect_publisher("zhouyi-yanjiu", db, client=client)
 
-    def empty_cnki(*_args, **kwargs):
+    def empty_cnki(terms, **kwargs):
+        assert terms == (CnkiSearchTerm("合成专题", "theme"), CnkiSearchTerm("比较解释", "theme"))
         return CnkiScan((), (), kwargs["checked_at"], "success", 1, 1, (), ())
 
     offline = {"feed_loader": _empty_feed, "cnki_loader": empty_cnki}
@@ -206,6 +208,15 @@ def test_publisher_abstract_finds_article_without_cnki_in_all_modes(
     assert prepared["state_mutated"] is False and prepared["issues"] == []
     assert prepared["publisher_date_reviews"][0]["title"] == title
     assert prepared["publisher_date_reviews"][0]["issue_url"] == issue["issue_url"]
+    past_end = datetime.now(UTC) - timedelta(hours=1)
+    monkeypatch.setitem(
+        prepare.__globals__, "latest_due_week",
+        lambda **_: (past_end - timedelta(days=7), past_end),
+    )
+    monkeypatch.setattr(sys, "argv", [str(prepare_path)])
+    assert prepare() == 0
+    # A catalogue collected after the completed window can still supply evidence for it.
+    assert json.loads(capsys.readouterr().out)["publisher_date_reviews"][0]["title"] == title
     review_observed_issue(db, "zhouyi-yanjiu", year, "3", issue["issue_url"],
                           label_month=f"{year}-{month:02d}")
     immutable_pub = db.read_bytes()

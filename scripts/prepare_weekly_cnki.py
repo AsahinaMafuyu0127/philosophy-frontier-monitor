@@ -4,19 +4,22 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
 from philosophy_frontier_monitor.cnki_dates import enrich_cnki_scan_with_dates
-from philosophy_frontier_monitor.config import load_watchlist
+from philosophy_frontier_monitor.config import load_watchlist, plan_chinese_queries
 from philosophy_frontier_monitor.pipeline import (
     _load_cnki_issues,
+    _load_runtime,
+    _scan_cnki,
     latest_due_week,
     on_demand_window,
 )
 from philosophy_frontier_monitor.publisher_search import publisher_keywords, search_publisher_papers
-from philosophy_frontier_monitor.search import SearchOptions
-from philosophy_frontier_monitor.sources.cnki_space import CnkiScan, scan_cnki_space
+from philosophy_frontier_monitor.search import SearchOptions, search_category_groups
+from philosophy_frontier_monitor.sources.cnki_space import scan_cnki_space
 
 
 def main() -> int:
@@ -26,18 +29,32 @@ def main() -> int:
     parser.add_argument("--days", type=int, default=7)
     parser.add_argument("--year-from", type=int)
     parser.add_argument("--year-to", type=int)
+    parser.add_argument("--category", action="append", default=[])
     parser.add_argument("--publisher-keyword", action="append", default=[])
     args = parser.parse_args()
     config = load_watchlist(Path(args.config))
-    try:
-        terms = publisher_keywords(config, tuple(args.publisher_keyword))
-    except ValueError as error:
-        parser.error(str(error))
     now = datetime.now(UTC)
     if args.mode != "pull-now" and args.days != 7:
         parser.error("--days requires --mode pull-now")
-    if args.mode != "search" and (args.year_from is not None or args.year_to is not None):
-        parser.error("year filters require --mode search")
+    if args.mode != "search" and (
+        args.year_from is not None or args.year_to is not None or args.category
+    ):
+        parser.error("year and category filters require --mode search")
+    taxonomy, profile = _load_runtime(
+        config, now=now, allow_development_fixture=config.allow_fixture_for_dry_run,
+    )
+    scope = profile.expanded_category_ids
+    if args.category:
+        try:
+            _, groups = search_category_groups(config, taxonomy, profile, tuple(args.category))
+        except ValueError as error:
+            parser.error(str(error))
+        scope = frozenset().union(*groups)
+    query_plan = plan_chinese_queries(config, scope)
+    try:
+        terms = publisher_keywords(config, tuple(args.publisher_keyword), category_ids=scope)
+    except ValueError as error:
+        parser.error(str(error))
     start = end = None
     scan = None
     if args.mode == "search":
@@ -52,12 +69,9 @@ def main() -> int:
             and args.year_to - args.year_from <= 1 else (None,)
         )
         if config.cnki_space.enabled:
-            try:
-                scan = scan_cnki_space(config.cnki_space.terms, years=years,
-                                       max_pages=config.cnki_space.max_pages, checked_at=now)
-            except Exception as error:
-                scan = CnkiScan((), (), now, "failed", 0, 0, (),
-                                (f"adapter:{type(error).__name__}",))
+            scan = _scan_cnki(
+                config, query_plan, years=years, checked_at=now, loader=scan_cnki_space,
+            )
     else:
         if args.mode == "weekly":
             start, end = latest_due_week(
@@ -68,6 +82,7 @@ def main() -> int:
             start, end = on_demand_window(config, now=now, lookback_days=args.days)
         scan = _load_cnki_issues(
             config, window_start=start, window_end=end, checked_at=now, loader=scan_cnki_space,
+            query_plan=query_plan,
         )
     scan = enrich_cnki_scan_with_dates(config, scan) if scan else None
     issues = scan.issues if scan else ()
@@ -88,7 +103,8 @@ def main() -> int:
                 observed = datetime.fromisoformat(article.first_observed_at)
             except ValueError:
                 continue
-            if observed.tzinfo is None or not start <= observed < end:
+            # The fresh site scan runs at report time, after the completed weekly window.
+            if observed.tzinfo is None or not start <= observed <= now:
                 continue
         publisher_date_reviews.append({
             "journal": lead.journal, "journal_id": article.journal_id,
@@ -103,6 +119,9 @@ def main() -> int:
         "window_end": end.isoformat() if end else None,
         "year_from": args.year_from, "year_to": args.year_to,
         "source_status": scan.status if scan else "disabled",
+        "query_plan": {
+            key: value for key, value in asdict(query_plan).items() if key != "terms"
+        },
         "state_mutated": False,
         "publisher_status": publisher.status if publisher else "not_requested",
         "publisher_date_reviews": publisher_date_reviews,

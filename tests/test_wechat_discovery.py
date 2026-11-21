@@ -301,6 +301,36 @@ def test_cli_prefers_explicit_zone_then_configured_zone_then_os_local(
     assert selected == [BEIJING, NEW_YORK, None]
 
 
+def test_cli_site_and_wechat_discovery_share_the_configured_observation_store(
+    workspace_tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys,
+) -> None:
+    config = Path(__file__).parent / "fixtures" / "watchlist_minimal.yaml"
+    private = workspace_tmp_path / "watchlist.yaml"
+    private.write_text(
+        config.read_text(encoding="utf-8").replace('"state.sqlite3"', '"data/state.sqlite3"'),
+        encoding="utf-8",
+    )
+    calls = []
+
+    def sites(db_path, **_):
+        calls.append(("sites", db_path))
+        return {}
+
+    def wechat(db_path, **_):
+        calls.append(("wechat", db_path))
+        return []
+
+    monkeypatch.setattr(cli, "run_publisher_cycle", sites)
+    monkeypatch.setattr(cli, "discover_publisher_links", wechat)
+    monkeypatch.setattr(cli, "candidate_summary", lambda *_: {})
+    assert cli.main(["journal-watch", "run", "--config", str(private)]) == 0
+    assert cli.main(["journal-watch", "wechat-discover", "--config", str(private)]) == 0
+    expected = private.parent / "data" / "official-journals.sqlite3"
+    assert calls == [("sites", expected), ("wechat", expected)]
+    assert not expected.exists()
+    assert len(capsys.readouterr().out.split('"ok": true')) == 3
+
+
 def test_naive_observation_is_rejected_before_a_request(tmp_path: Path) -> None:
     with (
         httpx.Client(transport=httpx.MockTransport(

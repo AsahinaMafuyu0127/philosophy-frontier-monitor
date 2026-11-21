@@ -209,5 +209,7 @@ For a formal upgrade, first back up the existing private configuration, database
 Review the Git changes in the known installation path, install the selected version with
 `uv sync --locked`, and check schema, backup, checkpoints, and notification history on an isolated
 copy before using the new code for scheduled runs. Do not rerun a successful historical window
-solely to correct report wording. Chinese sources still require explicit enablement in the private
-configuration; upgrading the application does not turn them on.
+solely to correct report wording. The tagged v0.4.0 requires explicit CNKI enablement.
+The current code branch enables bounded CNKI Space searches by default and preserves a configured
+`sources.cnki_space.enabled: false`. Set `chinese_terms` on each confirmed feed to add conventional
+Chinese search names. See [Chinese source configuration](chinese-source-expansion.md#22-知网空间的探索性候选通道).
